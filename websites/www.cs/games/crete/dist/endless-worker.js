@@ -1,19 +1,19 @@
-"use strict";(()=>{var _=["up","down","left","right"],K={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]},Ge=["red","blue","yellow","green"],hr=["flippers","fire-boots","skates","suction"],Lt={mirror:{name:"Medusa's mirror",key:"Z",desc:"Turns the Minotaur to stone for the turn you raise it and the 3 turns after; stone blocks everyone."},cake:{name:"Honey cake",key:"X",desc:"Adds one heart, with no limit; extra hearts last until the level ends."},cow:{name:"Daedalus's cow",key:"C",desc:"Set down where you stand; the Minotaur goes for it first."}},U=(e,t,r,n={},s,l=t)=>({char:e,minotaur:t,block:r,hazard:l,...n,sprites:s??[]}),G={floor:U(".",!0,!0,{},["floor"]),wall:U("#",!1,!1,{},["wall"]),exit:U("E",!1,!1,{},["exit"]),gate:U("|",!1,!1,{},["gate-closed","gate-open"]),water:U("~",!1,!0,{needs:"flippers"},["water"]),fire:U("F",!1,!1,{needs:"fire-boots"},["fire"]),ice:U("=",!0,!0,{slides:"skates"},["ice"]),"force-up":U("^",!0,!0,{carries:"up"},["force-up"]),"force-down":U("v",!0,!0,{carries:"down"},["force-down"]),"force-left":U("<",!0,!0,{carries:"left"},["force-left"]),"force-right":U(">",!0,!0,{carries:"right"},["force-right"]),dirt:U("%",!0,!0,{},["dirt"]),safe:U("S",!1,!1,{},["safe"]),button:U("_",!0,!0,{},["button"]),"toggle-open":U("t",!0,!1,{},["toggle-open"]),"toggle-closed":U("T",!1,!1,{},["toggle-closed"]),"door-red":U("R",!1,!1,{door:"red"},["door-red","door-red-sill"]),"door-blue":U("B",!1,!1,{door:"blue"},["door-blue","door-blue-sill"]),"door-yellow":U("Y",!1,!1,{door:"yellow"},["door-yellow","door-yellow-sill"]),"door-green":U("G",!1,!1,{door:"green"},["door-green","door-green-sill"]),trap:U("&",!0,!0,{},["trap"]),"button-brown":U("-",!0,!0,{},["button-brown"]),"button-red":U("+",!0,!0,{},["button-red"]),popup:U(";",!1,!1,{},["popup"]),gravel:U(":",!1,!1,{},["gravel"]),"fake-wall":U("W",!1,!1,{},["wall"]),"invisible-wall":U("I",!1,!1,{},["floor"]),teleport:U("@",!1,!1,{},["teleport"]),thief:U("$",!0,!0,{},["thief"]),bomb:U("!",!1,!0,{},["bomb"],!0),clone:U("C",!1,!1,{},_.map(e=>`clone-${e}`))},se={ball:{char:"o",name:"Bronze ball",sprite:"ball",turns:["back"]},glider:{char:"w",name:"Harpy",sprite:"glider",turns:["left","right","back"],crosses:"water"},fireball:{char:"e",name:"Talos's fire",sprite:"fireball",turns:["right","left","back"],crosses:"fire"}};var st={relic:{char:"*",sprite:"relic",name:"relic"},"key-red":{char:"r",sprite:"key-red",name:"red key"},"key-blue":{char:"b",sprite:"key-blue",name:"blue key"},"key-yellow":{char:"y",sprite:"key-yellow",name:"yellow key"},"key-green":{char:"g",sprite:"key-green",name:"green key"},flippers:{char:"f",sprite:"flippers",name:"flippers"},"fire-boots":{char:"h",sprite:"fire-boots",name:"fire boots"},skates:{char:"k",sprite:"skates",name:"skates"},suction:{char:"u",sprite:"suction",name:"suction boots"},mirror:{char:"z",sprite:"mirror",name:Lt.mirror.name},cake:{char:"x",sprite:"cake",name:Lt.cake.name},cow:{char:"c",sprite:"cow",name:Lt.cow.name},page:{char:"p",sprite:"page",name:"story page"},block:{char:"O",sprite:"block",name:"block"}},eo=["theseus","minotaur","minotaur-stone","cow-standing"],to=["gate-closed-v","gate-open-v","gate-slide","gate-slide-v","door-red-sill-v","door-blue-sill-v","door-yellow-sill-v","door-green-sill-v"],ro=["exit-off","exit-wake"],jl=[...new Set([...Object.values(G).flatMap(e=>e.sprites),...to,...ro,...Object.values(st).map(e=>e.sprite),...eo,...Object.values(se).map(e=>e.sprite)])];var le=class extends Error{line;col;constructor(t,r,n){super(`line ${t}, column ${r}: ${n}`),this.line=t,this.col=r}},no=new Map(Object.entries(G).map(([e,t])=>[t.char,e])),oo=new Map(Object.entries(st).map(([e,t])=>[t.char,e])),lo=/^[a-z0-9-]+$/,so=/^([a-z]+): (.*)$/,io=new Map(Object.entries(se).map(([e,t])=>[t.char,e])),ao=["block","ball","glider","fireball"],uo=["title","intro","hearts","relics","pages","facing","machines"];function co(e,t){let r=e&&e.value!==""?e.value.split(" "):[],n=e??{line:1,col:1},s=new Set;for(let l of r){if(!lo.test(l))throw new le(n.line,n.col,`page id '${l}' must be lower-case letters, digits and hyphens`);if(s.has(l))throw new le(n.line,n.col,`page '${l}' named twice`);s.add(l)}if(r.length>31)throw new le(n.line,n.col,"a level holds at most 31 pages");if(r.length!==t)throw new le(n.line,n.col,`pages: ${r.length} named but the grid has ${t}`);return r}function fr(e,t,r,n,s){let l=t&&t.value!==""?t.value.split(" "):[],o=t??{line:1,col:1};for(let i of l)if(!n(i))throw new le(o.line,o.col,`${e}: '${i}' is not ${s}`);if(l.length!==r)throw new le(o.line,o.col,`${e}: ${l.length} named but the grid has ${r}`);return l}function ho(e){let t={},r=e.indexOf("trap"),n=e.indexOf("clone"),s=-1,l=-1;for(let o=e.length-1;o>=0;o--){let i=e[o];if(i==="button-brown"){let a=s>=0?s:r;a>=0&&(t[o]=a)}else if(i==="button-red"){let a=l>=0?l:n;a>=0&&(t[o]=a)}else i==="trap"?s=o:i==="clone"&&(l=o)}return t}function Q(e){let t=e.replace(/\r\n/g,`
+"use strict";(()=>{var _=["up","down","left","right"],K={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]},$e=["red","blue","yellow","green"],mn=["flippers","fire-boots","skates","suction"],vt={mirror:{name:"Medusa's mirror",key:"Z",desc:"Turns the Minotaur to stone for the turn you raise it and the 3 turns after; stone blocks everyone."},cake:{name:"Honey cake",key:"X",desc:"Adds one heart, with no limit; extra hearts last until the level ends."},cow:{name:"Daedalus's cow",key:"C",desc:"Set down where you stand; the Minotaur goes for it first."}},U=(e,t,n,r={},s,l=t)=>({char:e,minotaur:t,block:n,hazard:l,...r,sprites:s??[]}),H={floor:U(".",!0,!0,{},["floor"]),wall:U("#",!1,!1,{},["wall"]),exit:U("E",!1,!1,{},["exit"]),gate:U("|",!1,!1,{},["gate-closed","gate-open"]),water:U("~",!1,!0,{needs:"flippers"},["water"]),fire:U("F",!1,!1,{needs:"fire-boots"},["fire"]),ice:U("=",!0,!0,{slides:"skates"},["ice"]),"force-up":U("^",!0,!0,{carries:"up"},["force-up"]),"force-down":U("v",!0,!0,{carries:"down"},["force-down"]),"force-left":U("<",!0,!0,{carries:"left"},["force-left"]),"force-right":U(">",!0,!0,{carries:"right"},["force-right"]),dirt:U("%",!0,!0,{},["dirt"]),safe:U("S",!1,!1,{},["safe"]),button:U("_",!0,!0,{},["button"]),"toggle-open":U("t",!0,!1,{},["toggle-open"]),"toggle-closed":U("T",!1,!1,{},["toggle-closed"]),"door-red":U("R",!1,!1,{door:"red"},["door-red","door-red-sill"]),"door-blue":U("B",!1,!1,{door:"blue"},["door-blue","door-blue-sill"]),"door-yellow":U("Y",!1,!1,{door:"yellow"},["door-yellow","door-yellow-sill"]),"door-green":U("G",!1,!1,{door:"green"},["door-green","door-green-sill"]),trap:U("&",!0,!0,{},["trap"]),"button-brown":U("-",!0,!0,{},["button-brown"]),"button-red":U("+",!0,!0,{},["button-red"]),popup:U(";",!1,!1,{},["popup"]),gravel:U(":",!1,!1,{},["gravel"]),"fake-wall":U("W",!1,!1,{},["wall"]),"invisible-wall":U("I",!1,!1,{},["floor"]),teleport:U("@",!1,!1,{},["teleport"]),thief:U("$",!0,!0,{},["thief"]),bomb:U("!",!1,!0,{},["bomb"],!0),clone:U("C",!1,!1,{},_.map(e=>`clone-${e}`))},le={ball:{char:"o",name:"Bronze ball",sprite:"ball",turns:["back"]},glider:{char:"w",name:"Harpy",sprite:"glider",turns:["left","right","back"],crosses:"water"},fireball:{char:"e",name:"Talos's fire",sprite:"fireball",turns:["right","left","back"],crosses:"fire"}};var lt={relic:{char:"*",sprite:"relic",name:"relic"},"key-red":{char:"r",sprite:"key-red",name:"red key"},"key-blue":{char:"b",sprite:"key-blue",name:"blue key"},"key-yellow":{char:"y",sprite:"key-yellow",name:"yellow key"},"key-green":{char:"g",sprite:"key-green",name:"green key"},flippers:{char:"f",sprite:"flippers",name:"flippers"},"fire-boots":{char:"h",sprite:"fire-boots",name:"fire boots"},skates:{char:"k",sprite:"skates",name:"skates"},suction:{char:"u",sprite:"suction",name:"suction boots"},mirror:{char:"z",sprite:"mirror",name:vt.mirror.name},cake:{char:"x",sprite:"cake",name:vt.cake.name},cow:{char:"c",sprite:"cow",name:vt.cow.name},page:{char:"p",sprite:"page",name:"story page"},block:{char:"O",sprite:"block",name:"block"}},io=["theseus","minotaur","minotaur-stone","cow-standing"],ao=["gate-closed-v","gate-open-v","gate-slide","gate-slide-v","door-red-sill-v","door-blue-sill-v","door-yellow-sill-v","door-green-sill-v"],uo=["exit-off","exit-wake"],Ql=[...new Set([...Object.values(H).flatMap(e=>e.sprites),...ao,...uo,...Object.values(lt).map(e=>e.sprite),...io,...Object.values(le).map(e=>e.sprite)])];var oe=class extends Error{line;col;constructor(t,n,r){super(`line ${t}, column ${n}: ${r}`),this.line=t,this.col=n}},co=new Map(Object.entries(H).map(([e,t])=>[t.char,e])),ho=new Map(Object.entries(lt).map(([e,t])=>[t.char,e])),fo=/^[a-z0-9-]+$/,po=/^([a-z]+): (.*)$/,mo=new Map(Object.entries(le).map(([e,t])=>[t.char,e])),bo=["block","ball","glider","fireball"],yo=["title","intro","hearts","relics","pages","facing","machines"];function go(e,t){let n=e&&e.value!==""?e.value.split(" "):[],r=e??{line:1,col:1},s=new Set;for(let l of n){if(!fo.test(l))throw new oe(r.line,r.col,`page id '${l}' must be lower-case letters, digits and hyphens`);if(s.has(l))throw new oe(r.line,r.col,`page '${l}' named twice`);s.add(l)}if(n.length>31)throw new oe(r.line,r.col,"a level holds at most 31 pages");if(n.length!==t)throw new oe(r.line,r.col,`pages: ${n.length} named but the grid has ${t}`);return n}function bn(e,t,n,r,s){let l=t&&t.value!==""?t.value.split(" "):[],o=t??{line:1,col:1};for(let i of l)if(!r(i))throw new oe(o.line,o.col,`${e}: '${i}' is not ${s}`);if(l.length!==n)throw new oe(o.line,o.col,`${e}: ${l.length} named but the grid has ${n}`);return l}function wo(e){let t={},n=e.indexOf("trap"),r=e.indexOf("clone"),s=-1,l=-1;for(let o=e.length-1;o>=0;o--){let i=e[o];if(i==="button-brown"){let a=s>=0?s:n;a>=0&&(t[o]=a)}else if(i==="button-red"){let a=l>=0?l:r;a>=0&&(t[o]=a)}else i==="trap"?s=o:i==="clone"&&(l=o)}return t}function J(e){let t=e.replace(/\r\n/g,`
 `).split(`
-`),r={},n=0;for(;n<t.length;n++){let L=so.exec(t[n]);if(!L)break;if(!uo.includes(L[1]))throw new le(n+1,1,`unknown header '${L[1]}'`);r[L[1]]={value:L[2],line:n+1,col:L[1].length+3}}for(;n<t.length&&t[n]==="";)n++;let s=n,l=[];for(;n<t.length&&t[n]!=="";n++)l.push(t[n]);if(l.length===0)throw new le(s+1,1,"no grid");for(;n<t.length;n++)if(t[n].trim()!=="")throw new le(n+1,1,"text after the grid");let o=l[0].length,i=[],a=[],u=null,d=null,h=0,c=[],p=[],f=[];if(l.forEach((L,v)=>{let D=s+v+1;if(L.length!==o)throw new le(D,1,`row is ${L.length} wide, expected ${o}`);[...L].forEach((C,E)=>{let P=E+1;if(C==="P"||C==="M"){if(C==="P"&&u)throw new le(D,P,"second player");if(C==="M"&&d)throw new le(D,P,"second Minotaur");C==="P"?u={r:v,c:E}:d={r:v,c:E},i.push("floor"),a.push(null);return}let H=io.get(C);if(H){p.push({kind:H,at:{r:v,c:E}}),i.push("floor"),a.push(null);return}let $=no.get(C),A=oo.get(C);if(!$&&!A)throw new le(D,P,`unknown tile '${C}'`);i.push($??"floor"),a.push(A??null),A==="relic"&&h++,$==="clone"&&f.push({r:v,c:E}),A==="page"&&c.push(v*o+E)})}),!u)throw new le(s+1,1,"no player");let m=(L,v,D,C)=>{let E=r[L];if(!E)return v;let P=Number(E.value);if(!Number.isInteger(P)||P<D)throw new le(E.line,E.col,`${L} must be ${D} to ${C}`);if(P>C){let H=L==="relics"?`relics: ${E.value} but the grid has ${C}`:`${L} must be ${D} to ${C}`;throw new le(E.line,E.col,H)}return P},b=m("hearts",3,1,99),g=m("relics",h,0,h),w=co(r.pages,c.length),M=fr("facing",r.facing,p.length,L=>_.includes(L),"a direction"),T=p.map((L,v)=>({...L,dir:M[v],home:v})),z=fr("machines",r.machines,f.length,L=>{let[v,D]=L.split("-");return ao.includes(v)&&_.includes(D)&&L.split("-").length===2},"a template and a direction like block-up"),F=T.length,q=f.map((L,v)=>{let[D,C]=z[v].split("-"),E={at:L,template:D,dir:C};return D==="block"?E:{...E,home:F++}});return{title:r.title?.value??"",intro:r.intro?.value??"",hearts:b,relics:g,pageIds:w,pageCells:c,rows:l.length,cols:o,terrain:i,objects:a,player:u,minotaur:d,hazards:T,machines:q,links:ho(i)}}function Me(e){if(/[\r\n]/.test(e.title)||/[\r\n]/.test(e.intro))throw new Error("title and intro must be one line");let t=e.objects.filter(l=>l==="relic").length,r=[`title: ${e.title}`,`intro: ${e.intro}`];e.hearts!==3&&r.push(`hearts: ${e.hearts}`),e.relics!==t&&r.push(`relics: ${e.relics}`),e.pageIds.length>0&&r.push(`pages: ${e.pageIds.join(" ")}`),e.hazards.length>0&&r.push(`facing: ${e.hazards.map(l=>l.dir).join(" ")}`),e.machines.length>0&&r.push(`machines: ${e.machines.map(l=>`${l.template}-${l.dir}`).join(" ")}`);let n=new Map(e.hazards.map(l=>[l.at.r*e.cols+l.at.c,l.kind])),s=[];for(let l=0;l<e.rows;l++){let o="";for(let i=0;i<e.cols;i++){let a=l*e.cols+i;e.player.r===l&&e.player.c===i?o+="P":e.minotaur&&e.minotaur.r===l&&e.minotaur.c===i?o+="M":n.has(a)?o+=se[n.get(a)].char:o+=e.objects[a]?st[e.objects[a]].char:G[e.terrain[a]].char}s.push(o)}return`${r.join(`
+`),n={},r=0;for(;r<t.length;r++){let v=po.exec(t[r]);if(!v)break;if(!yo.includes(v[1]))throw new oe(r+1,1,`unknown header '${v[1]}'`);n[v[1]]={value:v[2],line:r+1,col:v[1].length+3}}for(;r<t.length&&t[r]==="";)r++;let s=r,l=[];for(;r<t.length&&t[r]!=="";r++)l.push(t[r]);if(l.length===0)throw new oe(s+1,1,"no grid");for(;r<t.length;r++)if(t[r].trim()!=="")throw new oe(r+1,1,"text after the grid");let o=l[0].length,i=[],a=[],u=null,c=null,h=0,d=[],f=[],m=[];if(l.forEach((v,I)=>{let D=s+I+1;if(v.length!==o)throw new oe(D,1,`row is ${v.length} wide, expected ${o}`);[...v].forEach(($,S)=>{let R=S+1;if($==="P"||$==="M"){if($==="P"&&u)throw new oe(D,R,"second player");if($==="M"&&c)throw new oe(D,R,"second Minotaur");$==="P"?u={r:I,c:S}:c={r:I,c:S},i.push("floor"),a.push(null);return}let T=mo.get($);if(T){f.push({kind:T,at:{r:I,c:S}}),i.push("floor"),a.push(null);return}let B=co.get($),A=ho.get($);if(!B&&!A)throw new oe(D,R,`unknown tile '${$}'`);i.push(B??"floor"),a.push(A??null),A==="relic"&&h++,B==="clone"&&m.push({r:I,c:S}),A==="page"&&d.push(I*o+S)})}),!u)throw new oe(s+1,1,"no player");let p=(v,I,D,$)=>{let S=n[v];if(!S)return I;let R=Number(S.value);if(!Number.isInteger(R)||R<D)throw new oe(S.line,S.col,`${v} must be ${D} to ${$}`);if(R>$){let T=v==="relics"?`relics: ${S.value} but the grid has ${$}`:`${v} must be ${D} to ${$}`;throw new oe(S.line,S.col,T)}return R},g=p("hearts",3,1,99),y=p("relics",h,0,h),b=go(n.pages,d.length),w=bn("facing",n.facing,f.length,v=>_.includes(v),"a direction"),E=f.map((v,I)=>({...v,dir:w[I],home:I})),L=bn("machines",n.machines,m.length,v=>{let[I,D]=v.split("-");return bo.includes(I)&&_.includes(D)&&v.split("-").length===2},"a template and a direction like block-up"),P=E.length,O=m.map((v,I)=>{let[D,$]=L[I].split("-"),S={at:v,template:D,dir:$};return D==="block"?S:{...S,home:P++}});return{title:n.title?.value??"",intro:n.intro?.value??"",hearts:g,relics:y,pageIds:b,pageCells:d,rows:l.length,cols:o,terrain:i,objects:a,player:u,minotaur:c,hazards:E,machines:O,links:wo(i)}}function ke(e){if(/[\r\n]/.test(e.title)||/[\r\n]/.test(e.intro))throw new Error("title and intro must be one line");let t=e.objects.filter(l=>l==="relic").length,n=[`title: ${e.title}`,`intro: ${e.intro}`];e.hearts!==3&&n.push(`hearts: ${e.hearts}`),e.relics!==t&&n.push(`relics: ${e.relics}`),e.pageIds.length>0&&n.push(`pages: ${e.pageIds.join(" ")}`),e.hazards.length>0&&n.push(`facing: ${e.hazards.map(l=>l.dir).join(" ")}`),e.machines.length>0&&n.push(`machines: ${e.machines.map(l=>`${l.template}-${l.dir}`).join(" ")}`);let r=new Map(e.hazards.map(l=>[l.at.r*e.cols+l.at.c,l.kind])),s=[];for(let l=0;l<e.rows;l++){let o="";for(let i=0;i<e.cols;i++){let a=l*e.cols+i;e.player.r===l&&e.player.c===i?o+="P":e.minotaur&&e.minotaur.r===l&&e.minotaur.c===i?o+="M":r.has(a)?o+=le[r.get(a)].char:o+=e.objects[a]?lt[e.objects[a]].char:H[e.terrain[a]].char}s.push(o)}return`${n.join(`
 `)}
 
 ${s.join(`
 `)}
-`}function pr(e){let t=0;for(let r of e.objects)r==="cake"&&t++;return e.hearts+t}function te(e){return{level:e,terrain:e.terrain,objects:e.objects,player:e.player,hearts:e.hearts,keys:{red:0,blue:0,yellow:0,green:0},gear:[],tools:{mirror:0,cake:0,cow:0},pages:0,throwBack:e.player,minotaur:e.minotaur,stone:0,cow:null,hazards:[...e.hazards],relicsLeft:e.relics,moves:0,outcome:"playing"}}var ae=(e,t)=>t.r>=0&&t.c>=0&&t.r<e.rows&&t.c<e.cols,O=(e,t)=>t.r*e.level.cols+t.c;var X=(e,t)=>!!t&&e.r===t.r&&e.c===t.c,Pe=66,fo=Array.from({length:Pe*Pe},(e,t)=>({r:Math.floor(t/Pe)-1,c:t%Pe-1})),po=(e,t)=>e>=-1&&t>=-1&&e<Pe-1&&t<Pe-1?fo[(e+1)*Pe+t+1]:{r:e,c:t},oe=(e,t)=>po(e.r+K[t][0],e.c+K[t][1]),Rt=e=>e.relicsLeft===0;var mr=e=>{let t=it(e);return t.terrain=[...e.terrain],t.objects=[...e.objects],t.ownTerrain=t.ownObjects=!0,ze(t),t},it=e=>({level:e.level,terrain:e.terrain,objects:e.objects,ownTerrain:!1,ownObjects:!1,player:e.player,hearts:e.hearts,keys:e.keys,gear:e.gear,tools:e.tools,ownHeld:!1,pages:e.pages,throwBack:e.throwBack,minotaur:e.minotaur,stone:e.stone,cow:e.cow,hazards:e.hazards.length>0?[...e.hazards]:e.hazards,relicsLeft:e.relicsLeft,moves:e.moves,outcome:e.outcome});function ze(e){e.ownHeld||(e.keys={...e.keys},e.tools={...e.tools},e.gear=[...e.gear],e.ownHeld=!0)}function be(e,t,r){e.ownTerrain||(e.terrain=e.terrain.slice(),e.ownTerrain=!0),e.terrain[t]=r}function Le(e,t,r){e.ownObjects||(e.objects=e.objects.slice(),e.ownObjects=!0),e.objects[t]=r}var re=(e,t)=>ae(e.level,t)?e.terrain[O(e,t)]:"wall",ye=(e,t)=>ae(e.level,t)?e.objects[O(e,t)]:null;function Ee(e,t){let r=e.hazards;for(let n=0;n<r.length;n++){let s=r[n].at;if(s.r===t.r&&s.c===t.c)return!0}return!1}function at(e,t){e.terrain=e.terrain.map(r=>r==="toggle-open"?"toggle-closed":r==="toggle-closed"?"toggle-open":r),e.ownTerrain=!0,t.push({kind:"flipped"})}var br=new WeakMap;function gr(e){let t=br.get(e);return t||(t=e.terrain.flatMap((r,n)=>r==="teleport"?[n]:[]),br.set(e,t)),t}var wr=e=>gr(e).length>1;function Ot(e,t,r,n){let{cols:s}=e.level,l=gr(e.level),o=t.r*s+t.c,i=l.findIndex(a=>a>o);for(let a=0;a<l.length;a++){let u=l[((i<0?0:i)+a)%l.length];if(u===o)continue;let d={r:Math.floor(u/s),c:u%s},h=oe(d,r);if(re(e,h)!=="teleport"&&n(h))return{via:d,to:h}}return null}var yr=new WeakMap;function mo(e){let t=yr.get(e);if(!t){let r=new Map;for(let[n,s]of Object.entries(e.links)){if(e.terrain[s]!=="trap")continue;let l=r.get(s);l?l.push(Number(n)):r.set(s,[Number(n)])}t=r,yr.set(e,t)}return t}function bo(e,t){let r=mo(e.level).get(t);if(!r)return!1;let{cols:n}=e.level;return r.some(s=>{let l={r:Math.floor(s/n),c:s%n};return X(l,e.player)||ye(e,l)==="block"||Ee(e,l)})}var ie=(e,t)=>re(e,t)==="trap"&&!bo(e,t.r*e.level.cols+t.c);function xr(e,t,r){if(!ae(e.level,r))return!1;let n=re(e,r);return G[n].hazard||se[t].crosses===n}var ut=(e,t,r)=>xr(e,t,r)&&!ye(e,r)&&!X(r,e.minotaur)&&!X(r,e.cow)&&!Ee(e,r),ct=(e,t,r)=>X(r,e.player)?xr(e,t,r):ut(e,t,r);function Ft(e,t,r,n,s=!1){let l=e.hazards[t],o=re(e,l.at);return o==="bomb"?(be(e,O(e,l.at),"floor"),e.hazards.splice(t,1),r.push({kind:"exploded",who:"hazard",at:l.at}),"gone"):(o==="button"?at(e,r):o==="button-red"&&dt(e,O(e,l.at),r,n,s),ie(e,l.at)&&r.push({kind:"held",who:"hazard",at:l.at}),"on")}function dt(e,t,r,n,s=!1){let l=e.level.links[t];if(l===void 0)return;let o=e.level.machines.find(d=>O(e,d.at)===l),i=oe(o.at,o.dir);if(n&&X(i,n))return;if(o.template==="block"){if(!ht(e,i))return;Le(e,O(e,i),"block"),r.push({kind:"cloned",what:"block",at:i}),Ct(e,i,o.dir,n,r,s);return}if(!ut(e,o.template,i)||X(i,e.player))return;let a={kind:o.template,at:i,dir:o.dir,home:o.home};e.hazards.length===0&&(e.hazards=[]);let u=e.hazards.length;if(!s){let d=O(e,i);for(;u>0&&O(e,e.hazards[u-1].at)>d;)u--}e.hazards.splice(u,0,a),r.push({kind:"cloned",what:o.template,at:i}),Ft(e,u,r,n,s)}function yo(e,t){let r=e.hazards[t];if(r)return r.at;let n=e.machines.find(s=>s.home===t);return oe(n.at,n.dir)}function Dt(e,t,r){re(e,t)==="popup"&&(be(e,O(e,t),"wall"),r.push({kind:"rose",at:t}))}var go=(e,t,r)=>ut(e,t,r)&&re(e,r)!=="bomb"&&!X(r,e.player);function wo(e,t,r){let n=yo(e.level,r),s=new Set([O(e,n)]),l=[n];for(;l.length>0;){let o=l.filter(a=>go(e,t,a)).sort((a,u)=>O(e,a)-O(e,u));if(o.length>0)return o[0];let i=[];for(let a of l)for(let u of _){let d=oe(a,u);!ae(e.level,d)||s.has(O(e,d))||(s.add(O(e,d)),i.push(d))}l=i}return null}function kr(e,t,r){let n=e.hazards.findIndex(o=>X(t,o.at));if(n<0)return;let s=e.hazards[n];e.hazards.splice(n,1);let l=wo(e,s.kind,s.home);l&&(e.hazards.push({...s,at:l}),e.hazards.sort((o,i)=>O(e,o.at)-O(e,i.at))),r.push({kind:"sent-home",from:t,to:l})}function Re(e,t,r,n){if(e.hearts--,t.push(n?{kind:"caught",at:e.player,hearts:e.hearts,by:r,hazard:n}:{kind:"caught",at:e.player,hearts:e.hearts,by:r}),e.hearts<=0){e.outcome="lost",t.push({kind:"lost"});return}Dt(e,e.player,t),e.player=e.throwBack;let s=null;X(e.player,e.minotaur)&&(s=e.level.minotaur,e.minotaur=s,X(s,e.cow)&&(e.cow=null)),kr(e,e.player,t),s&&kr(e,s,t)}function ft(e,t){if(e.outcome!=="playing")return!0;for(let r=0;r<t.length;r++)if(t[r].kind==="caught")return!0;return!1}function It(e,t){return ae(e.level,t)&&G[re(e,t)].minotaur&&ye(e,t)!=="block"&&!Ee(e,t)}function Tr(e,t,r){return e.minotaur=t,ie(e,t)&&r.push({kind:"held",who:"minotaur",at:t}),X(t,e.cow)&&(e.cow=null),X(t,e.player)?(Re(e,r,"minotaur"),!0):!1}function xo(e,t){let r=e.minotaur;if(!r)return!0;if(ie(e,r))return!1;let n=e.cow??e.player,s=null,l=null;if(n.c!==r.c){let a=n.c>r.c?"right":"left",u=oe(r,a);It(e,u)&&(s=a,l=u)}if(!l&&n.r!==r.r){let a=n.r>r.r?"down":"up",u=oe(r,a);It(e,u)&&(s=a,l=u)}if(!s||!l)return!1;if(t.push({kind:"moved",who:"minotaur",from:r,to:l}),Tr(e,l,t))return!0;let o=s,i=null;for(;;){let a=G[re(e,e.minotaur)];if(a.carries)o=a.carries;else if(!a.slides)return!1;i??=new Set([O(e,l)]);let u=oe(e.minotaur,o);if(!It(e,u)||i.has(O(e,u)))return!1;if(t.push({kind:"slid",who:"minotaur",from:e.minotaur,to:u}),i.add(O(e,u)),Tr(e,u,t))return!0}}function Mr(e,t){if(e.minotaur){if(e.stone>0){e.stone--;return}for(let r=0;r<2&&e.outcome==="playing";r++)if(xo(e,t))return}}var ko={ahead:{up:"up",down:"down",left:"left",right:"right"},left:{up:"left",left:"down",down:"right",right:"up"},right:{up:"right",right:"down",down:"left",left:"up"},back:{up:"down",down:"up",left:"right",right:"left"}};function To(e,t,r){return X(e.hazards[t].at,e.player)?(X(e.player,e.cow)&&(e.cow=null),Re(e,r,"hazard",e.hazards[t].kind),"caught"):Ft(e,t,r,void 0,!0)}function Mo(e,t,r){let n=e.hazards[t];if(ie(e,n.at))return"on";let s=n.dir;if(!ct(e,n.kind,oe(n.at,s))){s=void 0;for(let i of se[n.kind].turns){let a=ko[i][n.dir];if(ct(e,n.kind,oe(n.at,a))){s=a;break}}}if(!s)return"on";let l=oe(n.at,s);r.push({kind:"moved",who:"hazard",hazard:n.kind,from:n.at,to:l});let o=null;for(;;){n=e.hazards[t]={kind:n.kind,at:l,dir:s,home:n.home};let i=To(e,t,r);if(i!=="on")return i;let a=G[re(e,l)];if(a.carries)s=a.carries,n.dir!==s&&(n=e.hazards[t]={kind:n.kind,at:n.at,dir:s,home:n.home});else if(!a.slides)return"on";o??=new Set([O(e,l)]);let u=oe(l,s);if(o.has(O(e,u))||!ct(e,n.kind,u))return"on";r.push({kind:"slid",who:"hazard",hazard:n.kind,from:l,to:u}),o.add(O(e,u)),l=u}}function Er(e,t){if(e.hazards.length!==0){for(let r=0,n=e.hazards.length;r<n;){let s=Mo(e,r,t);if(s==="caught")break;s==="gone"?n--:r++}e.hazards.sort((r,n)=>O(e,r.at)-O(e,n.at))}}function ht(e,t){return ae(e.level,t)&&G[re(e,t)].block&&!ye(e,t)&&!X(t,e.player)&&!X(t,e.minotaur)&&!X(t,e.cow)&&!X(t,e.throwBack)&&!X(t,e.level.minotaur)&&!Ee(e,t)}function $t(e,t,r,n){let s=oe(t,r);if(re(e,s)!=="teleport")return ht(e,s)&&n(s)?{entry:s,to:s}:null;if(X(s,e.player))return null;let l=Ot(e,s,r,o=>ht(e,o)&&n(o));return l&&{entry:s,via:l.via,to:l.to}}function Ar(e,t,r,n,s){Le(e,O(e,t),null),Le(e,O(e,r.to),"block"),s.push(n==="pushed"?{kind:"pushed",from:t,to:r.entry}:{kind:"slid",who:"block",from:t,to:r.entry}),r.via&&s.push({kind:"teleported",who:"block",from:r.entry,via:r.via,to:r.to})}function Ct(e,t,r,n,s,l=!1){let o=t,i=r,a=new Set([O(e,o)]);for(n&&a.add(O(e,n));;){let u=re(e,o);if(u==="water"||u==="bomb"){Le(e,O(e,o),null),be(e,O(e,o),u==="water"?"dirt":"floor"),s.push(u==="water"?{kind:"sank",at:o}:{kind:"exploded",who:"block",at:o});return}u==="button"?at(e,s):u==="button-red"&&dt(e,O(e,o),s,n,l),ie(e,o)&&s.push({kind:"held",who:"block",at:o});let d=G[u];if(d.carries)i=d.carries;else if(!d.slides)return;let h=$t(e,o,i,c=>!a.has(O(e,c)));if(!h)return;Ar(e,o,h,"slid",s),a.add(O(e,h.to)),o=h.to}}var Eo=new Set(["wall","toggle-closed","fake-wall","invisible-wall","clone"]);function vr(e,t,r,n){if(!ae(e.level,t)||X(t,e.minotaur))return!1;let s=re(e,t),l=G[s];return Eo.has(s)||s==="teleport"&&!wr(e.level)||s==="gate"&&!Rt(e)||l.needs&&!e.gear.includes(l.needs)||l.door&&e.keys[l.door]<=0?!1:Ee(e,t)||ye(e,t)!=="block"?!0:!n&&!ie(e,t)&&!!$t(e,t,r,()=>!0)}function jt(e,t,r,n,s){if(!vr(e,t,r,n))return!1;if(Ee(e,t))return Re(e,s,"hazard",e.hazards.find(o=>X(o.at,t)).kind),!1;let l=G[re(e,t)];if(l.door&&(l.door!=="green"&&(ze(e),e.keys[l.door]--),be(e,O(e,t),"floor"),s.push({kind:"opened",color:l.door,at:t})),ye(e,t)==="block"){let o=$t(e,t,r,()=>!0);Ar(e,t,o,"pushed",s),Ct(e,o.to,r,t,s)}return!0}function Gt(e,t,r,n,s){Dt(e,e.player,s),e.player=t;let l=re(e,t);if(l==="bomb")return be(e,O(e,t),"floor"),s.push({kind:"exploded",who:"player",at:t}),Re(e,s,"bomb"),!0;let o=ye(e,t);if(o&&o!=="block"&&(Le(e,O(e,t),null),s.push({kind:"took",what:o,at:t}),o==="relic"?e.relicsLeft=Math.max(0,e.relicsLeft-1):o==="page"?e.pages|=1<<e.level.pageCells.indexOf(O(e,t)):o.startsWith("key-")?(ze(e),e.keys[o.slice(4)]++):o==="mirror"||o==="cake"||o==="cow"?(ze(e),e.tools[o]++):e.gear.includes(o)||(ze(e),e.gear.push(o))),l==="thief"&&e.gear.length>0&&(s.push({kind:"robbed",at:t,gear:e.gear}),e.gear=[]),l==="safe"&&(e.throwBack=t),ie(e,t)&&s.push({kind:"held",who:"player",at:t}),l==="button"?at(e,s):l==="button-red"&&dt(e,O(e,t),s),l==="exit"&&Rt(e)&&(e.outcome="won",s.push({kind:"won"})),l==="teleport"){let i=Ot(e,t,r,a=>vr(e,a,r,n));return i?jt(e,i.to,r,n,s)?(s.push({kind:"teleported",who:"player",from:t,via:i.via,to:i.to}),Gt(e,i.to,r,n,s)):!0:!1}return!1}function Ao(e,t,r){let n=t,s=e.player,l=null;for(;e.outcome==="playing";){let o=G[re(e,e.player)];if(o.carries&&!e.gear.includes("suction"))n=o.carries;else if(!o.slides||e.gear.includes(o.slides))return;l??=new Set([O(e,s)]);let i=oe(e.player,n);if(l.has(O(e,i))||!jt(e,i,n,!0,r)||(r.push({kind:"slid",who:"player",from:e.player,to:i}),l.add(O(e,i)),Gt(e,i,n,!0,r)))return;l.add(O(e,e.player))}}function Bt(e,t){if(e.length!==t.length)return!1;for(let r=0;r<e.length;r++)if(e[r]!==t[r])return!1;return!0}function Sr(e,t,r){if(t.kind==="move"){let n=e.player;if(ie(e,n))return!1;let s=oe(n,t.dir),l=re(e,s);if(l==="invisible-wall")return be(e,O(e,s),"wall"),r.push({kind:"revealed",at:s,what:l}),!0;if(l==="fake-wall"&&(be(e,O(e,s),"floor"),r.push({kind:"revealed",at:s,what:l})),jt(e,s,t.dir,!1,r))r.push({kind:"moved",who:"player",from:n,to:s}),Gt(e,s,t.dir,!1,r)||Ao(e,t.dir,r);else if(!ft(e,r))return!1}else if(t.kind==="tool"){if(e.tools[t.tool]<=0)return!1;if(t.tool==="cake")e.hearts++;else if(t.tool==="cow"){if(e.cow)return!1;e.cow=e.player}else e.stone=3,r.push({kind:"stoned",turns:3});ze(e),e.tools[t.tool]--}return!0}function Pr(e,t){return{level:e.level,terrain:!e.ownTerrain||Bt(e.terrain,t.terrain)?t.terrain:e.terrain,objects:!e.ownObjects||Bt(e.objects,t.objects)?t.objects:e.objects,player:e.player,hearts:e.hearts,keys:e.keys,gear:e.gear,tools:e.tools,pages:e.pages,throwBack:e.throwBack,minotaur:e.minotaur,stone:e.stone,cow:e.cow,hazards:Bt(e.hazards,t.hazards)?t.hazards:e.hazards,relicsLeft:e.relicsLeft,moves:e.moves,outcome:e.outcome}}function Ht(e,t){if(e.outcome!=="playing")return{state:e,events:[]};let r=it(e),n=[];return Sr(r,t,n)?{state:Pr(r,e),events:n}:{state:e,events:[]}}function Oe(e,t){if(t.state===e)return!0;let r=t.events[0];return r?.kind==="revealed"&&r.what==="invisible-wall"}function V(e,t){if(e.outcome!=="playing")return{state:e,events:[]};let r=it(e),n=[];if(!Sr(r,t,n))return{state:e,events:[]};let s=t.kind==="tool"&&t.tool==="mirror";return ft(r,n)||Er(r,n),!s&&!ft(r,n)&&Mr(r,n),r.moves++,{state:Pr(r,e),events:n}}var vo=["mirror","cake","cow"],Ae=e=>e<=0?0:32-Math.clz32(e),zr=new WeakMap;function ge(e){let t=zr.get(e);return t||zr.set(e,t=Lo(e)),t}function So(e){let t=new Set,r=[],n=a=>{let u=e.terrain[a];return G[u].block||G[u].door!==void 0||u==="fake-wall"},s=e.minotaur?e.minotaur.r*e.cols+e.minotaur.c:-1,l=(a,u)=>a>=0&&u>=0&&a<e.rows&&u<e.cols,o=a=>{t.has(a)||a===s||!n(a)||(t.add(a),r.push(a))};e.objects.forEach((a,u)=>{a==="block"&&(t.add(u),r.push(u))});for(let a of e.machines){let u=a.at.r+K[a.dir][0],d=a.at.c+K[a.dir][1];a.template==="block"&&l(u,d)&&o(u*e.cols+d)}let i=[];for(e.terrain.forEach((a,u)=>{a==="teleport"&&i.push(u)});r.length;){let a=r.pop(),u=Math.floor(a/e.cols),d=a%e.cols,h=G[e.terrain[a]],c=h.slides!==void 0||h.carries!==void 0;for(let p of _){let[f,m]=K[p],b=u+f,g=d+m;if(!l(b,g))continue;let w=u-f,M=d-m;if(!(l(w,M)&&e.terrain[w*e.cols+M]!=="wall")&&!c)continue;let z=b*e.cols+g;if(e.terrain[z]!=="teleport"){o(z);continue}for(let F of i){let q=Math.floor(F/e.cols)+f,L=F%e.cols+m;l(q,L)&&o(q*e.cols+L)}}}return t}var Po={water:"dirt",popup:"wall","fake-wall":"floor","invisible-wall":"wall",bomb:"floor"},Wt=e=>Po[e]??(G[e].door!==void 0?"floor":void 0);function zo(e,t){let r=new Set(t.map(s=>se[s].crosses)),n=[];return e.terrain.forEach((s,l)=>{let o=Wt(s);(G[s].hazard||r.has(s)||s==="toggle-closed"||o&&G[o].hazard)&&n.push(l)}),n}function Lo(e){let t=A=>e.objects.filter(y=>y===A).length,r=So(e),n=[],s=[],l=[],o=[],i=[];e.terrain.forEach((A,y)=>{Wt(A)?n.push(y):(A==="toggle-open"||A==="toggle-closed")&&s.push(y);let B=e.objects[y];r.has(y)?(B&&B!=="block"?i:o).push(y):B&&l.push(y)});let a=e.rows*e.cols,u=Ge.map(A=>Ae(t(`key-${A}`))),d=vo.map(A=>Ae(t(A))),h=hr.filter(A=>t(A)>0),c=Ae(a),p=t("cow")>0,f=e.minotaur!==null,m=t("mirror")>0?2:0,b=c*(2+(f?1:0)+(p?1:0))+m,g=Ae(pr(e)),w=b+g+Ae(e.relics),M=[],T=w+e.pageIds.length;for(let A of u)M.push(T),T+=A;let z=[];for(let A of d)z.push(T),T+=A;let F=[...e.hazards.map(A=>A.kind)];for(let A of e.machines)A.home!==void 0&&(F[A.home]=A.template);let q=F.length>e.hazards.length,L=q?0:e.hazards.length,v=q?zo(e,F):[],D=q?Ae(4*F.length):0,C=c*(2+(f?1:0)+(p?1:0))+m+g+Ae(e.relics)+e.pageIds.length+u.reduce((A,y)=>A+y,0)+d.reduce((A,y)=>A+y,0)+h.length+n.length+(s.length?1:0)+l.length+o.length+2*i.length+L*(c+2)+v.length*D,E=T+h.length,P=E+n.length+(s.length?1:0),H=P+l.length+o.length+2*i.length,$=[];for(let A=0;A<a;A++)$.push({r:Math.floor(A/e.cols),c:A%e.cols});return{terrainAt:E,objectsAt:P,hazardsAt:H,cells:$,terrains:new Map,objectLists:new Map,words:Math.max(1,Math.ceil(C/32)),cellBits:c,none:a,minotaur:f,cow:p,stoneBits:m,heartBits:g,relicBits:Ae(e.relics),pageBits:e.pageIds.length,keyBits:u,toolBits:d,gear:h,heartAt:b,pageAt:w,keyAt:M,toolAt:z,gearAt:T,changing:Int32Array.from(n),toggles:Int32Array.from(s),fixed:Int32Array.from(l),blockOnly:Int32Array.from(o),blockOrObject:Int32Array.from(i),hazardSlots:L,hazardCells:Int32Array.from(v),hazardBits:D,homeKinds:F}}function J(e,t,r,n,s){if(n===0)return r;let l=t+(r>>>5),o=r&31;return e[l]|=s<<o,o+n>32&&(e[l+1]|=s>>>32-o),r+n}function Y(e,t,r,n){if(n===0)return 0;let s=t+(r>>>5),l=r&31,o=e[s]>>>l;return l+n>32&&(o|=e[s+1]<<32-l),n===32?o>>>0:o&(1<<n)-1}var ve=(e,t,r)=>t?t.r*e.level.cols+t.c:r,Lr={up:0,down:1,left:2,right:3};function Rr(e,t,r,n,s,l){for(let o=s,i=s+l;o<i;o+=30){let a=Math.min(30,i-o);J(r,n,o,a,Y(e,t,o,a))}}function He(e,t,r,n,s,l,o=0){let i=t;for(let b=0;b<i.words;b++)r[n+b]=0;let a=0;a=J(r,n,a,i.cellBits,ve(e,e.player,i.none)),a=J(r,n,a,i.cellBits,ve(e,e.throwBack,i.none)),i.minotaur&&(a=J(r,n,a,i.cellBits,ve(e,e.minotaur,i.none))),i.cow&&(a=J(r,n,a,i.cellBits,ve(e,e.cow,i.none))),a=J(r,n,a,i.stoneBits,e.stone),a=J(r,n,a,i.heartBits,e.hearts),a=J(r,n,a,i.relicBits,e.relicsLeft),a=J(r,n,a,i.pageBits,e.pages);let u=e.keys,d=e.tools;a=J(r,n,a,i.keyBits[0],u.red),a=J(r,n,a,i.keyBits[1],u.blue),a=J(r,n,a,i.keyBits[2],u.yellow),a=J(r,n,a,i.keyBits[3],u.green),a=J(r,n,a,i.toolBits[0],d.mirror),a=J(r,n,a,i.toolBits[1],d.cake),a=J(r,n,a,i.toolBits[2],d.cow);for(let b=0;b<i.gear.length;b++)a=J(r,n,a,1,e.gear.includes(i.gear[b])?1:0);let h=e.terrain,c=e.objects,p=e.level.terrain;if(s&&l&&h===s.terrain)Rr(l,o,r,n,i.terrainAt,i.objectsAt-i.terrainAt);else{for(let b=0;b<i.changing.length;b++){let g=i.changing[b];J(r,n,i.terrainAt+b,1,h[g]===p[g]?0:1)}i.toggles.length&&J(r,n,i.objectsAt-1,1,h[i.toggles[0]]===p[i.toggles[0]]?0:1)}if(s&&l&&c===s.objects)Rr(l,o,r,n,i.objectsAt,i.hazardsAt-i.objectsAt);else{a=i.objectsAt;for(let b=0;b<i.fixed.length;b++)a=J(r,n,a,1,c[i.fixed[b]]?1:0);for(let b=0;b<i.blockOnly.length;b++)a=J(r,n,a,1,c[i.blockOnly[b]]==="block"?1:0);for(let b=0;b<i.blockOrObject.length;b++){let g=c[i.blockOrObject[b]];a=J(r,n,a,2,g==="block"?2:g?1:0)}}a=i.hazardsAt;let f=e.hazards;if(i.hazardSlots>1){for(let b=1;b<f.length;b++)if(ve(e,f[b].at,i.none)<ve(e,f[b-1].at,i.none))throw new Error("the hazards must be sorted by cell")}for(let b=0;b<i.hazardSlots;b++){let g;for(let w=0;w<f.length;w++)if(f[w].home===b){g=f[w];break}a=J(r,n,a,i.cellBits,g?ve(e,g.at,i.none):i.none),a=J(r,n,a,2,g?Lr[g.dir]:0)}let m=0;for(let b=0;b<i.hazardCells.length;b++){let g=i.hazardCells[b],w=f[m],M=w!==void 0&&ve(e,w.at,i.none)===g;a=J(r,n,a,i.hazardBits,M?1+Lr[w.dir]+4*w.home:0),M&&m++}if(i.hazardCells.length&&m!==f.length)throw new Error(`packed ${m} of ${f.length} hazards: they must be sorted by cell`)}var Or=4096;function Fr(e,t,r,n){if(n<=30)return Y(e,t,r,n);let s="";for(let l=r,o=r+n;l<o;l+=30)s+=Y(e,t,l,Math.min(30,o-l))+",";return s}function Ro(e,t,r,n){let s=r.objectsAt-r.terrainAt;if(s===0)return n.terrain;let l=Fr(e,t,r.terrainAt,s),o=r.terrains.get(l);if(o)return o;let i=[...n.terrain];for(let a=0;a<r.changing.length;a++){if(!Y(e,t,r.terrainAt+a,1))continue;let u=r.changing[a];i[u]=Wt(n.terrain[u])}if(r.toggles.length&&Y(e,t,r.objectsAt-1,1))for(let a of r.toggles)i[a]=n.terrain[a]==="toggle-open"?"toggle-closed":"toggle-open";return r.terrains.size>=Or&&r.terrains.clear(),r.terrains.set(l,i),i}function Oo(e,t,r,n){let s=r.hazardsAt-r.objectsAt;if(s===0)return n.objects;let l=Fr(e,t,r.objectsAt,s),o=r.objectLists.get(l);if(o)return o;let i=[...n.objects],a=r.objectsAt;for(let u of r.fixed)Y(e,t,a++,1)||(i[u]=null);for(let u of r.blockOnly)i[u]=Y(e,t,a++,1)?"block":null;for(let u of r.blockOrObject){let d=Y(e,t,a,2);a+=2,d===0?i[u]=null:d===2&&(i[u]="block")}return r.objectLists.size>=Or&&r.objectLists.clear(),r.objectLists.set(l,i),i}function pt(e,t,r,n,s=0){let l=r,o=l.cells,i=l.none,a=l.cellBits,u=0,d=o[Y(e,t,u,a)];u+=a;let h=o[Y(e,t,u,a)];u+=a;let c=null,p=null;if(l.minotaur){let y=Y(e,t,u,a);u+=a,c=y===i?null:o[y]}if(l.cow){let y=Y(e,t,u,a);u+=a,p=y===i?null:o[y]}let f=Y(e,t,u,l.stoneBits);u+=l.stoneBits;let m=Y(e,t,u,l.heartBits);u+=l.heartBits;let b=Y(e,t,u,l.relicBits);u+=l.relicBits;let g=Y(e,t,u,l.pageBits);u+=l.pageBits;let w=l.keyBits,M=l.toolBits,T=Y(e,t,u,w[0]);u+=w[0];let z=Y(e,t,u,w[1]);u+=w[1];let F=Y(e,t,u,w[2]);u+=w[2];let q=Y(e,t,u,w[3]);u+=w[3];let L={red:T,blue:z,yellow:F,green:q},v=Y(e,t,u,M[0]);u+=M[0];let D=Y(e,t,u,M[1]);u+=M[1];let C=Y(e,t,u,M[2]);u+=M[2];let E={mirror:v,cake:D,cow:C},P=[];for(let y=0;y<l.gear.length;y++)Y(e,t,u++,1)&&P.push(l.gear[y]);let H=Ro(e,t,l,n),$=Oo(e,t,l,n);u=l.hazardsAt;let A=[];for(let y=0;y<l.hazardSlots;y++){let B=Y(e,t,u,a);u+=a;let R=_[Y(e,t,u,2)];u+=2,B!==i&&A.push({kind:l.homeKinds[y],at:o[B],dir:R,home:y})}A.length>1&&A.sort((y,B)=>y.at.r*n.cols+y.at.c-(B.at.r*n.cols+B.at.c));for(let y=0;y<l.hazardCells.length;y++){let B=Y(e,t,u,l.hazardBits);if(u+=l.hazardBits,!B)continue;let R=B-1>>>2;A.push({kind:l.homeKinds[R],at:o[l.hazardCells[y]],dir:_[B-1&3],home:R})}return{level:n,terrain:H,objects:$,player:d,hearts:m,keys:L,gear:P,tools:E,pages:g,throwBack:h,minotaur:c,stone:f,cow:p,hazards:A,relicsLeft:b,moves:s,outcome:"playing"}}var Ir=new Set(["wall","invisible-wall","clone"]);function Fo(e,t,r,n){let s=(u,d)=>u>=0&&d>=0&&u<e.rows&&d<e.cols&&!Ir.has(e.terrain[u*e.cols+d]),l=new Set,o=new Set,i=[],a=(u,d,h)=>{if(!s(u,d))return;let c=(u*e.cols+d)*4+_.indexOf(h);o.has(c)||(o.add(c),l.add(u*e.cols+d),i.push([u,d,h]))};for(a(Math.floor(t/e.cols)+K[r][0],t%e.cols+K[r][1],r);i.length;){let[u,d,h]=i.pop(),c=e.terrain[u*e.cols+d];if(c==="teleport"){for(let m of n){if(m===u*e.cols+d)continue;let b=Math.floor(m/e.cols)+K[h][0],g=m%e.cols+K[h][1];s(b,g)&&e.terrain[b*e.cols+g]!=="teleport"&&a(b,g,h)}continue}let p=G[c],f=p.carries??(p.slides?h:null);f&&a(u+K[f][0],d+K[f][1],f)}return[...l]}function Co(e){let t=e.rows*e.cols,r=e.terrain.map(o=>!Ir.has(o)),n=e.terrain.flatMap((o,i)=>o==="teleport"?[i]:[]),s=Array.from({length:t},()=>[]);for(let o=0;o<t;o++)if(r[o])for(let i of _)for(let a of Fo(e,o,i,n.length>1?n:[]))s[a].push(o);let l=new Uint8Array(t);return e.terrain.forEach((o,i)=>{o==="safe"&&(l[i]=1)}),l[e.player.r*e.cols+e.player.c]=1,{n:t,open:r,into:s,thrown:l}}function Cr(e,t){let r=new Float64Array(e.n).fill(1/0),n=new Int32Array(e.n),s=0;for(let o of t)r[o]===1/0&&(r[o]=0,n[s++]=o);let l=!1;for(let o=0;o<s;o++){let i=n[o],a=r[i]+1;for(let u of e.into[i])r[u]===1/0&&(r[u]=a,n[s++]=u);if(!l&&e.thrown[i]){l=!0;for(let u=0;u<e.n;u++)e.open[u]&&r[u]===1/0&&(r[u]=a,n[s++]=u)}}return r}function Do(e){let t=Co(e),r=e.terrain.flatMap((o,i)=>o==="exit"?[i]:[]),n=Cr(t,r),s=e.objects.flatMap((o,i)=>o==="relic"?[i]:[]),l=s.map(o=>Cr(t,[o]));return o=>{if(o.outcome==="won")return 0;if(o.outcome==="lost")return 1/0;let i=o.player.r*e.cols+o.player.c,a=n[i];if(o.relicsLeft===0)return a;let u=0,d=1/0,h=0;for(let c=0;c<s.length;c++){if(o.objects[s[c]]!=="relic")continue;let p=l[c][i];u++,p<d&&(d=p),p>h&&(h=p)}return u<o.relicsLeft?1/0:Math.max(a,u===o.relicsLeft?h:d)}}var Dr=new WeakMap;function mt(e){let t=Dr.get(e);return t||Dr.set(e,t=Do(e)),t}var We=class extends Error{},Br=1024;function _t(e,t,r){let n=2538058380;for(let s=0;s<r;s++){let l=Math.imul(e[t+s],3432918353);l=Math.imul(l<<15|l>>>17,461845907),n^=l,n=Math.imul(n<<13|n>>>19,5)+3864292196}return n^=r,n=Math.imul(n^n>>>16,2246822507),n=Math.imul(n^n>>>13,3266489909),(n^n>>>16)>>>0}function bt(e){let t=e,r=Br,n=new Uint32Array(r*t),s=new Uint32Array(r),l=new Int32Array(r),o=new Uint8Array(r),i=new Uint32Array(r),a=0,u=new Int32Array(Br*2),d=u.length-1;function h(){r*=2;let p=new Uint32Array(r*t);p.set(n),n=p;let f=new Uint32Array(r);f.set(s),s=f;let m=new Int32Array(r);m.set(l),l=m;let b=new Uint8Array(r);b.set(o),o=b;let g=new Uint32Array(r);g.set(i),i=g,u=new Int32Array(r*2),d=u.length-1;for(let w=0;w<a;w++){let M=s[w]&d;for(;u[M]!==0;)M=M+1&d;u[M]=w+1}}function c(p,f,m){let b=p*t;for(let g=0;g<t;g++)if(n[b+g]!==f[m+g])return!1;return!0}return{get size(){return a},add(p,f,m,b,g){let w=_t(p,f,t),M=w&d;for(let z=u[M];z!==0;M=M+1&d,z=u[M]){let F=z-1;if(!(s[F]!==w||!c(F,p,f)))return g>=i[F]?-1:(l[F]=m,o[F]=b,i[F]=g,F)}if(a===r)for(h(),M=w&d;u[M]!==0;)M=M+1&d;let T=a++;return n.set(p.subarray(f,f+t),T*t),s[T]=w,l[T]=m,o[T]=b,i[T]=g,u[M]=T+1,T},words(p,f,m){f.set(n.subarray(p*t,p*t+t),m)},parent:p=>l[p],action:p=>o[p],g:p=>i[p]}}var Ve=["mirror","cake","cow"],Fe=_.length,yt=[..._.map(e=>({kind:"move",dir:e})),{kind:"wait"},...Ve.map(e=>({kind:"tool",tool:e}))],Nt=[Fe,..._.map((e,t)=>t),...Ve.map((e,t)=>Fe+1+t)];function $r(e,t){let r=[];for(let n=t;e.parent(n)>=0;n=e.parent(n))r.push(yt[e.action(n)]);return r.reverse()}function Kt(e,t){return _e(Ut(e,t),t.onProgress)}function*Ut(e,t){if(e.outcome==="won")return{solved:!0,line:[],explored:0};let r=t.store??bt(ge(e.level).words),n=l=>{if(l instanceof We)return{solved:!1,explored:r.size,capped:!0,reason:l.message};throw l},s;try{s=Io(e,t,r)}catch(l){return n(l)}for(;;){let l;try{l=s()}catch(o){return n(o)}if("explored"in l)return l;yield l}}function _e(e,t){for(;;){let r=e.next();if(r.done)return r.value;t?.(r.value)}}function Io(e,t,r){let{cap:n,refuse:s}=t,l=t.prune??null,o=Math.max(1,t.progressEvery??65536),i=e.level,a=ge(i),u=mt(i),d=new Uint32Array(a.words),h=new Uint32Array(a.words),c=1024,p=new Int32Array(c),f=new Int32Array(c),m=new Int32Array(c),b=new Uint8Array(c),g=new Uint16Array(c),w=new Int32Array(c),M=0,T=E=>{if(E<c)return;for(;c<=E;)c*=2;let P=new Int32Array(c);P.set(p),p=P;let H=new Int32Array(c);H.set(f),f=H;let $=new Int32Array(c);$.set(m),m=$;let A=new Uint8Array(c);A.set(b),b=A;let y=new Uint16Array(c);y.set(g),g=y},z=(E,P)=>p[E]<p[P]||p[E]===p[P]&&(f[E]<f[P]||f[E]===f[P]&&(g[E]>g[P]||g[E]===g[P]&&E<P)),F=E=>{let P=w[E];for(;E>0;){let H=E-1>>1,$=w[H];if(!z(P,$))break;w[E]=$,m[$]=E,E=H}w[E]=P,m[P]=E},q=E=>{if(M===w.length){let P=new Int32Array(w.length*2);P.set(w),w=P}w[M]=E,F(M++)},L=()=>{let E=w[0];m[E]=-1;let P=w[--M];if(M>0){let H=0;for(;;){let $=2*H+1;if($>=M)break;let A=$+1,y=A<M&&z(w[A],w[$])?A:$;if(!z(w[y],P))break;w[H]=w[y],m[w[H]]=H,H=y}w[H]=P,m[P]=H}return E},v=u(e);if(He(e,a,d,0),l&&l({...e,moves:0},d,0))return()=>({solved:!1,explored:0,capped:!1});let D=r.add(d,0,-1,0,0);if(r.size>=n)return()=>({solved:!1,explored:r.size,capped:!0});T(D),f[D]=Number.isFinite(v)?v:-1,p[D]=f[D],m[D]=-1,g[D]=e.hearts,f[D]>=0&&q(D);let C=0;return()=>{let E=null;for(;M>0;){if(E)return E;let P=L();if(b[P])return{solved:!0,line:$r(r,P),explored:r.size};let H=p[P],$=H-f[P];++C%o===0&&(E={expanded:C,stored:r.size,bestF:H,startH:v}),r.words(P,h,0);let A=pt(h,0,a,i,$);for(let y of Nt){if(y>Fe&&A.tools[Ve[y-Fe-1]]<=0)continue;let B=V(A,yt[y]),R=B.state;if(Oe(A,B)||R.outcome==="lost"||s&&s(B.events,A)||(He(R,a,d,0,A,h,0),l&&l(R,d,0)))continue;let N=r.size,I=r.add(d,0,P,y,$+1);if(I<0)continue;let ee=R.outcome==="won";if(r.size>N){T(I);let ne=ee?0:u(R);f[I]=Number.isFinite(ne)?ne:-1,m[I]=-1,b[I]=ee?1:0,g[I]=R.hearts}if(ee&&$+1===H)return{solved:!0,line:$r(r,I),explored:r.size};if(r.size>=n)return{solved:!1,explored:r.size,capped:!0};f[I]<0||(p[I]=$+1+f[I],m[I]>=0?F(m[I]):q(I))}}return{solved:!1,explored:r.size,capped:!1}}}function Bo(e,t){for(let r=0;r<e.terrain.length;r++){if(!t(e.terrain[r]))continue;let n=Math.floor(r/e.cols),s=r%e.cols;for(let l of _){let o=n-K[l][0],i=s-K[l][1];if(o<0||i<0||o>=e.rows||i>=e.cols)continue;let a=G[e.terrain[o*e.cols+i]];if(a.slides||a.carries===l)return!0}}return!1}function $o(e,t){let r=e.terrain.flatMap((n,s)=>n==="teleport"?[s]:[]);return r.length<2?!1:r.some(n=>_.some(s=>{let l=Math.floor(n/e.cols)+K[s][0],o=n%e.cols+K[s][1];return l>=0&&o>=0&&l<e.rows&&o<e.cols&&t(e.terrain[l*e.cols+o])}))}var jr=(e,t)=>Bo(e,t)||$o(e,t);function jo(e,t){let r=[];t.heartBits&&r.push({pos:t.heartAt,width:t.heartBits,set:!1}),t.pageBits&&r.push({pos:t.pageAt,width:t.pageBits,set:!0}),Ge.forEach((s,l)=>{t.keyBits[l]&&!jr(e,o=>G[o].door===s)&&r.push({pos:t.keyAt[l],width:t.keyBits[l],set:!1})}),t.toolBits.forEach((s,l)=>{s&&r.push({pos:t.toolAt[l],width:s,set:!1})});let n=["flippers","fire-boots"];return t.gear.forEach((s,l)=>{n.includes(s)&&!jr(e,o=>G[o].needs===s)&&r.push({pos:t.gearAt+l,width:1,set:!1})}),r}var Yt=1024;function gt(e,t){let r=mt(e),n=jo(e,t);if(!n.length)return y=>r(y)===1/0;let s=t.words,l=new Uint32Array(s);for(let y of n)for(let B=y.pos;B<y.pos+y.width;B++)l[B>>>5]|=1<<(B&31);let o=[],i=0;for(let y of n)o.push(i),i+=y.width;let a=i+31>>>5,u=n.length,d=Int32Array.from(n,y=>y.pos),h=Int32Array.from(n,y=>y.width),c=Uint8Array.from(n,y=>y.set?1:0),p=Int32Array.from(o),f=Uint32Array.from(l,y=>~y>>>0),m=Yt,b=new Uint32Array(m*s),g=new Int32Array(m),w=new Uint32Array(m),M=0,T=new Int32Array(Yt*2),z=T.length-1,F=Yt,q=new Uint32Array(F*a),L=new Uint32Array(F),v=new Int32Array(F),D=0,C=-1,E=new Uint32Array(s),P=new Uint32Array(a);function H(){m*=2;let y=new Uint32Array(m*s);y.set(b),b=y;let B=new Int32Array(m);B.set(g),g=B;let R=new Uint32Array(m);R.set(w),w=R,T=new Int32Array(m*2),z=T.length-1;for(let N=0;N<M;N++){let I=w[N]&z;for(;T[I]!==0;)I=I+1&z;T[I]=N+1}}function $(y,B){let R=C;if(R>=0)C=v[R];else{if(D===F){F*=2;let N=new Uint32Array(F*a);N.set(q),q=N;let I=new Uint32Array(F);I.set(L),L=I;let ee=new Int32Array(F);ee.set(v),v=ee}R=D++}return q.set(P,R*a),L[R]=y,v[R]=B,R}function A(y,B,R,N){for(let I=0;I<u;I++){let ee=Y(y,B,p[I],h[I]),ne=Y(R,N,p[I],h[I]);if(c[I]?(ee&ne)!==ne:ee<ne)return!1}return!0}return(y,B,R)=>{if(r(y)===1/0)return!0;let N=y.moves;for(let W=0;W<s;W++)E[W]=B[R+W]&f[W];let I=_t(E,0,s);P.fill(0);for(let W=0;W<u;W++)J(P,0,p[W],h[W],Y(B,R,d[W],h[W]));let ee=I&z,ne=-1;for(let W=T[ee];W!==0;ee=ee+1&z,W=T[ee]){let pe=W-1;if(w[pe]!==I)continue;let je=!0;for(let x=0;x<s&&je;x++)je=b[pe*s+x]===E[x];if(je){ne=pe;break}}if(ne<0){if(M===m)for(H(),ee=I&z;T[ee]!==0;)ee=ee+1&z;return ne=M++,b.set(E,ne*s),w[ne]=I,T[ee]=ne+1,g[ne]=$(N,-1),!1}for(let W=g[ne];W>=0;W=v[W])if(L[W]<=N&&A(q,W*a,P,0))return!0;let Te=-1;for(let W=g[ne];W>=0;){let pe=v[W];N<=L[W]&&A(P,0,q,W*a)?(Te<0?g[ne]=pe:v[Te]=pe,v[W]=C,C=W):Te=W,W=pe}return g[ne]=$(N,g[ne]),!1}}var de=2e6,he=e=>e.some(t=>t.kind==="caught");function Ze(e,t=de){return Kt(e,{cap:t,refuse:null,prune:gt(e.level,ge(e.level))})}function Gr(e,t,r=de){return Kt(e,{cap:r,refuse:t,prune:gt(e.level,ge(e.level))})}function fe(e,t,r=de,n={}){return Ut(e,{cap:r,refuse:t,prune:gt(e.level,ge(e.level)),store:n.store,progressEvery:n.every})}var Hr={up:"u",down:"d",left:"l",right:"r"},qt={mirror:"z",cake:"x",cow:"c"};function Ce(e){return e.map(t=>t.kind==="move"?Hr[t.dir]:t.kind==="wait"?"w":qt[t.tool]).join("")}function Ne(e){let t=[];for(let r of e){let n=_.find(l=>Hr[l]===r),s=Object.keys(qt).find(l=>qt[l]===r);if(n)t.push({kind:"move",dir:n});else if(r==="w")t.push({kind:"wait"});else if(s)t.push({kind:"tool",tool:s});else return null}return t}var Vt=e=>e.solved?e.line.length:e.capped?"unknown":"none";function Nr(e,t=de){return _e(Go(e,t))}function*Go(e,t=de,r={}){let n=te(e),s=w=>({store:r.store?.(ge(w).words),every:r.every}),l=yield*fe(n,null,t,s(e)),o=Vt(l),i=0;if(l.solved){let w=n;for(let M of l.line){let T=V(w,M);w=T.state,he(T.events,w)&&i++}}let a=Vt(yield*fe(n,he,t,s(e))),u=yield*Ho(e,t,s(e)),d=u===null?"unknown":u?"chase":"solo",h=Zt(e),c=l.solved?Ce(l.line):"";if(!e.minotaur)return{solved:l.solved,shortest:o,explored:l.explored,withoutMinotaur:null,minotaurDelta:0,greedyWins:!0,catchFree:a,catches:i,label:d,naiveWins:h,line:c};let p={...e,minotaur:null},f=yield*fe(te(p),null,t,s(p)),m=Vt(f),b=f.solved?!1:f.capped?null:!1;if(f.solved){let w=n;for(let M of f.line)w=V(w,M).state;b=w.outcome==="won"}let g=typeof o=="number"&&typeof m=="number"?o-m:null;return{solved:l.solved,shortest:o,explored:l.explored,withoutMinotaur:m,minotaurDelta:g,greedyWins:b,catchFree:a,catches:i,label:d,naiveWins:h,line:c}}function Wr(e,t,r,n){let s=new Uint8Array(e.rows*e.cols),l=[t];s[t]=1;for(let o=0;o<l.length;o++){let i=l[o],a=Math.floor(i/e.cols),u=i%e.cols;for(let d of _){let h=a+K[d][0],c=u+K[d][1];if(h<0||c<0||h>=e.rows||c>=e.cols)continue;let p=h*e.cols+c;!s[p]&&r(p)&&(s[p]=1,l.push(p))}if(n?.from(i))for(let d of n.to)!s[d]&&r(d)&&(s[d]=1,l.push(d))}return s}function Kr(e){let t=new Set(e.objects.filter(i=>i!==null));e.machines.some(i=>i.template==="block")&&t.add("block");let r=i=>{let a=G[i];return a.door?t.has(`key-${a.door}`):i==="water"?t.has("block"):i==="toggle-open"||i==="toggle-closed"},n=Wr(e,e.minotaur.r*e.cols+e.minotaur.c,i=>{let a=e.terrain[i];return G[a].minotaur||r(a)||a==="fake-wall"||a==="bomb"}),l=e.terrain.flatMap((i,a)=>i==="teleport"?[a]:[]).flatMap(i=>{let a=Math.floor(i/e.cols),u=i%e.cols;return _.flatMap(d=>{let h=a+K[d][0],c=u+K[d][1];return h<0||c<0||h>=e.rows||c>=e.cols?[]:[h*e.cols+c]})}),o=Wr(e,e.player.r*e.cols+e.player.c,i=>{let a=e.terrain[i],u=G[a];return a==="wall"?!1:u.door?r(a):!u.needs||t.has(u.needs)||r(a)},{from:i=>e.terrain[i]==="teleport",to:l});return!n.some((i,a)=>i===1&&o[a]===1)}function*Ho(e,t=de,r={}){if(!e.minotaur||Kr(e))return!1;let n=ge(e),s=r.store??bt(n.words),l=Math.max(1,r.every??65536);try{let o=new Uint32Array(n.words),i=new Uint32Array(n.words);if(He(te(e),n,o,0),s.add(o,0,-1,0,0),s.size>=t)return null;let a=0;for(let u=0;u<s.size;u++){++a%l===0&&(yield{expanded:a,stored:s.size,bestF:0,startH:0}),s.words(u,i,0);let d=pt(i,0,n,e,0);for(let h of Nt){if(h>Fe&&d.tools[Ve[h-Fe-1]]<=0)continue;let c=V(d,yt[h]);if(c.events.some(f=>f.kind==="caught"&&f.by==="minotaur"))return!0;let p=c.state;if(!(Oe(d,c)||p.outcome!=="playing")&&(He(p,n,o,0,d,i,0),s.add(o,0,u,h,0),s.size>=t))return null}}return!1}catch(o){if(o instanceof We)return null;throw o}}var Wo=16;function _o(e,t){let r=e.rows*e.cols,n=new Int32Array(r).fill(-1),s=new Int8Array(r).fill(-1);n[t]=0;let l=[t];for(let o=0;o<l.length;o++){let i=l[o],a=Math.floor(i/e.cols),u=i%e.cols;_.forEach((d,h)=>{let c=a+K[d][0],p=u+K[d][1];if(c<0||p<0||c>=e.rows||p>=e.cols)return;let f=c*e.cols+p;n[f]>=0||e.terrain[f]==="wall"||(n[f]=n[i]+1,s[f]=h,l.push(f))})}return{dist:n,via:s}}function No(e){let t=e.rows*e.cols,r=e.player.r*e.cols+e.player.c,n=[],s=[];for(let m=0;m<t;m++)e.objects[m]==="relic"&&n.push(m),e.terrain[m]==="exit"&&s.push(m);let l=e.relics,o=[r,...n].map(m=>_o(e,m)),i=m=>{let b=-1,g=1/0;for(let w of s){let M=o[m].dist[w];M>=0&&M<g&&(g=M,b=w)}return[b,g]},a=(m,b)=>{let g=o[m].dist[b===0?r:n[b-1]];return g<0?1/0:g},u=null;if(l===0)u=[];else if(n.length<=Wo){let m=n.length,b=new Float64Array((1<<m)*m).fill(1/0),g=new Int8Array((1<<m)*m).fill(-1);for(let T=0;T<m;T++)b[(1<<T)*m+T]=a(0,T+1);let w=1/0,M=-1;for(let T=1;T<1<<m;T++){let z=Ko(T);if(!(z>l))for(let F=0;F<m;F++){let q=b[T*m+F];if(!(!(T&1<<F)||q===1/0)){if(z===l){let L=q+i(F+1)[1];L<w&&(w=L,M=T*m+F);continue}for(let L=0;L<m;L++){if(T&1<<L)continue;let v=(T|1<<L)*m+L,D=q+a(F+1,L+1);D<b[v]&&(b[v]=D,g[v]=F)}}}}if(M>=0){u=[];for(let T=M;;){let z=Math.floor(T/m),F=T%m;if(u.push(F+1),g[T]<0)break;T=(z&~(1<<F))*m+g[T]}u.reverse()}}else{u=[];let m=new Set(n.map((g,w)=>w+1)),b=0;for(;u.length<l;){let g=-1,w=1/0;for(let M of m){let T=a(b,M);T<w&&(w=T,g=M)}if(g<0){u=null;break}u.push(g),m.delete(g),b=g}}if(!u)return null;let d=u.length?u[u.length-1]:0,[h]=i(d);if(h<0)return null;let c=[],p=[0,...u],f=[...u.map(m=>n[m-1]),h];return p.forEach((m,b)=>{let{via:g}=o[m],w=f[b],M=[];for(let T=w;g[T]>=0;){let z=_[g[T]];M.push(z),T-=K[z][0]*e.cols+K[z][1]}c.push(...M.reverse())}),c}function Ko(e){let t=0;for(;e;e&=e-1)t++;return t}function Zt(e){let t=No(e);if(!t)return!1;let r=te(e);for(let n of t)if(r=V(r,{kind:"move",dir:n}).state,r.outcome!=="playing")break;return r.outcome==="won"}var De={minotaurDelta:8,exploredTimes:20};function wt(e,t=De,r){let n=[];if(e.shortest==="unknown")return["the solver hit its cap: the level is not proved winnable"];if(!e.solved)return["the level cannot be won"];let s=e.withoutMinotaur!==null;if(s&&(e.minotaurDelta===null||e.greedyWins===null?n.push("the Minotaur-free search hit its cap"):e.minotaurDelta<=0&&e.greedyWins&&n.push("the Minotaur does not matter: the line that ignores him wins, no longer")),n.push(...Ur(e)),!r)return n;if(!s)return[...n,"a challenge level has a Minotaur"];e.greedyWins!==!1&&n.push("a challenge level: the line that ignores the Minotaur must lose"),e.minotaurDelta!==null&&e.minotaurDelta<t.minotaurDelta&&n.push(`a challenge level: the Minotaur adds ${e.minotaurDelta} moves, the bar is ${t.minotaurDelta}`);let l=a=>Math.max(0,...r.teaching.map(a)),o=l(a=>a.explored);e.explored<t.exploredTimes*o&&n.push(`a challenge level: stored ${e.explored} situations, the bar is ${t.exploredTimes} × ${o} = ${t.exploredTimes*o}`);let i=l(a=>typeof a.shortest=="number"?a.shortest:0);return typeof e.shortest=="number"&&e.shortest<i&&n.push(`a challenge level: ${e.shortest} moves, shorter than the longest teaching level's ${i}`),n}function Ur(e){return e.catchFree==="unknown"?["the catch-free search hit its cap"]:e.catchFree==="none"?["no win without a catch: no level may need one"]:typeof e.shortest=="number"&&e.catchFree>e.shortest?[`the fewest moves take a catch (${e.shortest}, against ${e.catchFree} without one): no level may need one`]:e.catches>0?["the shortest line takes a catch, though a line as short takes none: no level may need one"]:[]}var _r={ramp:{least:1.1,most:1.5},most:2e4};function Ie(e){return e.terrain.some(t=>t==="fake-wall"||t==="invisible-wall")}function Yr(e,t){return!Ie(e)||t.explored<=_r.most?[]:[`the level hides walls: stored ${t.explored} situations, the ceiling for a level that hides walls is ${_r.most}`]}var xt={shortest:40,explored:12e3,chaseShortest:30,chaseExplored:6e3};function qr(e,t=xt){if(e.shortest==="unknown")return["the solver hit its cap: the level is not proved winnable"];if(!e.solved||typeof e.shortest!="number")return["the level cannot be won"];let r=[];e.naiveWins&&r.push("the plain walk to the exit wins"),r.push(...Ur(e));let n=e.label==="chase"&&e.greedyWins===!1&&e.minotaurDelta!==null&&e.minotaurDelta>=De.minotaurDelta,s=n?t.chaseShortest:t.shortest,l=n?t.chaseExplored:t.explored;return e.shortest<s&&r.push(`the quickest win is ${e.shortest} moves, the bar is ${s}`),e.explored<l&&r.push(`the solver searched ${e.explored} situations, the bar is ${l}`),r}var Uo={flippers:e=>e.gear.includes("flippers")&&e.terrain[e.player.r*e.level.cols+e.player.c]==="water","fire-boots":e=>e.gear.includes("fire-boots")&&e.terrain[e.player.r*e.level.cols+e.player.c]==="fire",skates:e=>e.gear.includes("skates")&&e.terrain[e.player.r*e.level.cols+e.player.c]==="ice",suction:e=>e.gear.includes("suction")&&G[e.terrain[e.player.r*e.level.cols+e.player.c]].carries!==void 0,mirror:e=>e.stone>0,cow:e=>e.cow!==null},Yo={ice:"skates","force-up":"suction","force-down":"suction","force-left":"suction","force-right":"suction"};function xe(e,t){let r=[...e.terrain],n=[...e.objects];t(r,n);let s=e.machines.filter(l=>r[l.at.r*e.cols+l.at.c]==="clone");return Q(Me({...e,terrain:r,objects:n,machines:s}))}function kt(e){let t=[],r=o=>`row ${Math.floor(o/e.cols)+1}, column ${o%e.cols+1}`,n=o=>e.terrain[o.player.r*e.cols+o.player.c];for(let o of Ge){let i=`key-${o}`,a=u=>G[n(u)].door===o;e.objects.includes(i)&&t.push({name:`the ${o} keys`,ignored:[xe(e,(u,d)=>{d.forEach((h,c)=>{h===i&&(d[c]=null)})})],used:a}),e.terrain.some(u=>G[u].door===o)&&t.push({name:`the ${o} doors`,ignored:["wall","floor"].map(u=>xe(e,(d,h)=>{d.forEach((c,p)=>{G[c].door===o&&(d[p]=u)}),h.forEach((c,p)=>{c===i&&(h[p]=null)})})),used:a})}let s=e.objects.filter(o=>o==="relic").length>e.relics;e.objects.forEach((o,i)=>{o==="block"?t.push({name:`the block at ${r(i)}`,ignored:[xe(e,(a,u)=>{u[i]=null,a[i]="wall"}),xe(e,(a,u)=>{u[i]=null})]}):(o==="relic"?s:o!==null&&o!=="cake"&&o!=="page"&&!o.startsWith("key-"))&&t.push({name:`the ${o==="relic"?"spare relic":o} at ${r(i)}`,ignored:[xe(e,(a,u)=>{u[i]=null})],used:o===null?void 0:Uo[o]})});let l=[["gravel",["gravel"],["floor","wall"]],["marked stones",["safe"],["floor","wall"]],["pop-up walls",["popup"],["floor","wall"]],["ice",["ice"],["floor"]],["currents",["force-up","force-down","force-left","force-right"],["floor"]],["water",["water"],["wall","floor"]],["fire",["fire"],["wall","floor"]],["teleports",["teleport"],["wall","floor"]]];for(let[o,i,a]of l){if(!e.terrain.some(h=>i.includes(h)))continue;let u=a.map(h=>xe(e,c=>{c.forEach((p,f)=>{i.includes(p)&&(c[f]=h)})})),d=Yo[i[0]];d&&e.objects.includes(d)&&u.push(xe(e,(h,c)=>{c.forEach((p,f)=>{p===d&&(c[f]=null)})})),t.push({name:`the ${o}`,ignored:u})}return e.terrain.some(o=>o==="button"||o==="toggle-open"||o==="toggle-closed")&&t.push({name:"the toggle walls and their button",ignored:[xe(e,o=>{o.forEach((i,a)=>{i==="button"||i==="toggle-open"?o[a]="floor":i==="toggle-closed"&&(o[a]="wall")})})]}),e.terrain.forEach((o,i)=>{let a=d=>{for(let[h,c]of Object.entries(e.links))c===i&&(d[Number(h)]="floor")},u=(d,h,c,p)=>t.push({name:`the ${d} at ${r(i)}`,ignored:[h,...p?[p]:[]].map(f=>xe(e,m=>{m[i]=f,c?.(m)}))});o==="trap"?u("snare","floor",a):o==="fake-wall"?u("fake wall","wall",void 0,"floor"):o==="invisible-wall"?u("invisible wall","floor"):o==="thief"?u("thief","floor"):o==="bomb"?u("bomb","floor"):o==="clone"&&u("clone machine","wall",a)}),e.hazards.forEach((o,i)=>{t.push({name:`the ${se[o.kind].name.toLowerCase()} at ${r(o.at.r*e.cols+o.at.c)}`,ignored:[Q(Me({...e,hazards:e.hazards.filter((a,u)=>u!==i)}))]})}),t}var Vr={explored:1.3};function Zr(e,t,r,n=!1){let s=Ze(te(t),r);if(!s.solved)return s.capped?"capped":"the level cannot be won";if(s.line.length!==e.shortest)return`the fewest moves go from ${e.shortest} to ${s.line.length}`;let l=Gr(te(t),he,r);return l.solved?l.line.length!==e.catchFree?`the fewest catch-free moves go from ${e.catchFree} to ${l.line.length}`:!n&&e.explored>=Vr.explored*s.explored?`the search falls from ${e.explored} situations to ${s.explored}`:null:l.capped?"capped":"no win without a catch"}function qo(e,t){let r=new Set;for(let n of t.ignored)for(let s=0;s<e.terrain.length;s++)(n.terrain[s]!==e.terrain[s]||n.objects[s]!==e.objects[s])&&r.add(s);return[...r]}function Xr(e,t,r){let n=r.used?[]:qo(e,r);if(!n.length&&!r.used)return!1;let s=te(e),l=o=>o.r*e.cols+o.c;for(let o of Ne(t)??[]){if(s=V(s,o).state,r.used?.(s))return!0;let i=l(s.player),a=s.minotaur?l(s.minotaur):-1;for(let u of n)if(i===u||s.terrain[u]!==e.terrain[u]||s.objects[u]!==e.objects[u]||a===u&&e.terrain[u]==="trap")return!0}return!1}function Jr(e,t,r=de,n=!1){return!t.solved||typeof t.catchFree!="number"?[]:kt(e).flatMap(s=>{if(n&&Xr(e,t.line,s))return[];let l=s.ignored.map(o=>Zr(t,o,r,n));return l.some(o=>o!==null&&o!=="capped")?[]:l.includes("capped")?[{unit:s,problem:`${s.name}: the search without it hit its cap, so it is not proved to matter`}]:[{unit:s,problem:n?`${s.name}: the shortest line never meets it, and ignoring it leaves the fewest moves at ${t.shortest}`:`${s.name}: ignoring it changes nothing (still ${t.shortest} moves, and the search no ${Vr.explored} × smaller)`}]})}function*Qr(e,t,r=de){if(!t.solved||typeof t.catchFree!="number")return[];let n=[];for(let s of kt(e)){if(yield{expanded:0,stored:0,bestF:0,startH:0},Xr(e,t.line,s))continue;let l=s.ignored.map(o=>Zr(t,o,r,!0));l.some(o=>o!==null&&o!=="capped")||n.push(l.includes("capped")?`${s.name}: the search without it hit its cap, so it is not proved to matter`:`${s.name}: the shortest line never meets it, and ignoring it leaves the fewest moves at ${t.shortest}`)}return n}function en(e){let t=[["Theseus",e.player]];e.minotaur&&t.push(["the Minotaur",e.minotaur]);for(let n of e.hazards)t.push([`the ${se[n.kind].name.toLowerCase()}`,n.at]);let r=[];for(let[n,s]of t){let l=s.r*e.cols+s.c,o=e.terrain[l],i=e.objects[l];(o!=="floor"||i!==null)&&r.push(`${n} starts on ${i??o} at row ${s.r+1}, column ${s.c+1}: nothing may start under a figure`)}return r}var Ke={reach:8,challenge:{share:1/3,quiet:1/3},teaching:{share:1/4,quiet:1}};function tn(e){return!e.minotaur||e.objects.includes("mirror")||e.terrain.includes("trap")?!1:Kr(e)}function Vo(e,t){let r=e.level;if(!e.minotaur)return 1/0;let n=e.minotaur.r*r.cols+e.minotaur.c,s=e.player.r*r.cols+e.player.c,l=new Map([[n,0]]),o=[n];for(let i=0;i<o.length;i++){let a=o[i],u=l.get(a);if(a===s)return u;if(u>=t)continue;let d=Math.floor(a/r.cols),h=a%r.cols;for(let c of _){let p=d+K[c][0],f=h+K[c][1];if(p<0||f<0||p>=r.rows||f>=r.cols)continue;let m=p*r.cols+f;l.has(m)||m!==s&&(!G[e.terrain[m]].minotaur||e.objects[m]==="block")||(l.set(m,u+1),o.push(m))}}return 1/0}function Xt(e,t){let r=Ne(t.line)??[],n=te(e),s=0,l=0,o=0;for(let i of r)n=V(n,i).state,n.stone>0||!!n.minotaur&&(ie(mr(n),n.minotaur)||Vo(n,Ke.reach)<=Ke.reach)?(s++,o=0):l=Math.max(l,++o);return{turns:r.length,live:s,quiet:l}}function rn(e,t,r){if(!e.minotaur||!t.solved||typeof t.shortest!="number")return[];let n=[];t.minotaurDelta!==null&&t.minotaurDelta<1&&n.push("the beast adds no moves: a route that ignores him wins as quickly");let s=Ke[r],l=Xt(e,t);return l.live<s.share*l.turns&&n.push(`the beast is live on ${l.live} of ${l.turns} turns; the bar is ${Math.ceil(s.share*l.turns)}`),l.quiet>s.quiet*l.turns&&n.push(`the beast is quiet for ${l.quiet} turns in a row; the bar is ${Math.floor(s.quiet*l.turns)}`),n}var Zo={walk:"walks round the Minotaur and never uses a tool",cowAtOnce:"sets the cow down as soon as it holds it",cowNear:"sets the cow down when the Minotaur is within 3 steps",mirrorNear:"raises the mirror when the Minotaur is within 2 steps",toolsNear:"sets the cow down and raises the mirror when the Minotaur comes near",careful:"takes the safest step when its next one would be caught",carefulTools:"is careful and sets the cow down and raises the mirror when the Minotaur comes near",cowStuck:"sets the cow down where the Minotaur gets stuck behind a wall short of it",cowStuckCareful:"sets the cow down where the Minotaur gets stuck, raises the mirror when he is near, and is careful"},Je=Object.keys(Zo),Xo={walk:{cow:"none",mirror:!1,careful:!1},cowAtOnce:{cow:"once",mirror:!1,careful:!1},cowNear:{cow:"near",mirror:!1,careful:!1},mirrorNear:{cow:"none",mirror:!0,careful:!1},toolsNear:{cow:"near",mirror:!0,careful:!1},careful:{cow:"none",mirror:!1,careful:!0},carefulTools:{cow:"near",mirror:!0,careful:!0},cowStuck:{cow:"stuck",mirror:!1,careful:!1},cowStuckCareful:{cow:"stuck",mirror:!0,careful:!0}},Jo=_.map(e=>({kind:"move",dir:e})),Xe={kind:"wait"},Tt=e=>({kind:"tool",tool:e}),Qo=(e,t)=>Math.abs(e.r-t.r)+Math.abs(e.c-t.c),Ue=e=>e.some(t=>t.kind==="caught");function el(e){let t=V(e,Tt("cow"));if(t.state===e||Ue(t.events))return!1;let r=t.state;for(let n=0;n<10;n++){if(t=V(r,Xe),Ue(t.events)||t.state.outcome!=="playing")return!1;r=t.state}return!!r.cow}function tl(e,t){let r=null;for(let n=0;n<e.terrain.length;n++){let s=e.terrain[n];(s==="fake-wall"||s==="invisible-wall")&&(r??=[...e.terrain],r[n]=s==="fake-wall"?"wall":"floor")}return t?{...e,terrain:r??e.terrain}:{...e,terrain:r??e.terrain,minotaur:null,stone:0}}var ln=(e,t)=>t.relicsLeft<e.relicsLeft,sn=(e,t)=>t.outcome==="won",nn=e=>e.keys.red+e.keys.blue+e.keys.yellow+e.keys.green,Mt=(e,t)=>nn(t)>nn(e)||t.gear.length>e.gear.length||t.tools.mirror>e.tools.mirror||t.tools.cow>e.tools.cow||t.tools.cake>e.tools.cake,rl=e=>(t,r)=>r.tools[e]>t.tools[e];function ke(e,t){return on(e,t,!0)??on(e,t,!1)}function on(e,t,r){let n=tl(e,r),s=e.level.cols,l=new Set;for(let u of e.hazards){l.add(u.at.r*s+u.at.c);let[d,h]=K[u.dir];l.add((u.at.r+d)*s+u.at.c+h)}let o=u=>u.player.r*s+u.player.c,i=new Set([o(n)]),a=[];for(let u of _){let d=Ht(n,{kind:"move",dir:u});if(d.state===n||Ue(d.events)||d.state.player===n.player&&d.state.terrain===n.terrain||d.events.some(c=>c.kind==="robbed")||l.has(o(d.state)))continue;if(t(n,d.state))return{first:u,dist:1};let h=o(d.state);i.has(h)||(i.add(h),a.push({s:d.state,first:u}))}for(let u=2;a.length&&u<400;u++){let d=[];for(let{s:h,first:c}of a)for(let p of _){let f=Ht(h,{kind:"move",dir:p});if(f.state===h||Ue(f.events)||f.state.outcome==="lost"||f.events.some(b=>b.kind==="robbed"))continue;let m=o(f.state);if(!l.has(m)){if(t(n,f.state))return{first:c,dist:u};i.has(m)||(i.add(m),d.push({s:f.state,first:c}))}}a=d}return null}function Qe(e){let t=e.relicsLeft>0?ke(e,ln)??ke(e,Mt):ke(e,sn)??ke(e,Mt);return t?t.dist:1/0}function nl(e,t){for(let r of t)if(e.objects.some(n=>n===r)){let n=ke(e,rl(r));if(n)return n}return e.relicsLeft>0?ke(e,ln)??ke(e,Mt):ke(e,sn)??ke(e,Mt)}function ol(e,t){let r=e.minotaur,n=r?Qo(r,e.player):1/0;if(e.tools.cake>0&&e.hearts<=1)return Tt("cake");if(t.cow!=="none"&&e.tools.cow>0&&!e.cow&&(t.cow==="stuck"?el(e):t.cow==="once"||n<=3))return Tt("cow");if(t.mirror&&e.tools.mirror>0&&e.stone===0&&n<=2)return Tt("mirror");let s=[];t.cow!=="none"&&s.push("cow"),t.mirror&&s.push("mirror");let l=nl(e,s),o=l?{kind:"move",dir:l.first}:Xe;if(o.kind==="move"&&V(e,o).state===e&&(o=Xe),t.careful&&Ue(V(e,o).events)){let i=null,a=1/0;for(let u of[...Jo,Xe]){let d=V(e,u);if(d.state===e||Ue(d.events))continue;let h=Qe(d.state);h<a&&(a=h,i=u)}i&&(o=i)}return o}function Jt(e,t,r){let n=Xo[t],s=te(e),l=0;for(;l<r&&s.outcome==="playing";l++){let o=ol(s,n),i=V(s,o);i.state===s&&(i=V(s,Xe)),s=i.state}return{won:s.outcome==="won",turns:l}}var Qt=e=>4*e+50;function an(e,t){return Je.filter(r=>Jt(e,r,Qt(t)).won)}var Ye={detour:1,offRoute:1,away:2,waits:3,traps:3,forced:4},ll=3,sl=e=>Math.max(5e4,2*e.explored),il=e=>Math.max(6e3,e.explored),un=_.map(e=>({kind:"move",dir:e})),cn={kind:"wait"},tr=e=>e.some(t=>t.kind==="caught");function al(e){let t={...e.level,minotaur:null};return{...e,level:t,minotaur:null,stone:0}}function*et(e,t,r={spent:0}){let n=Ne(t.line)??[],s=Math.max(0,t.minotaurDelta??0),l=0;if(e.minotaur&&n.length){let h=function*(f){if(f.outcome==="won")return 0;let m=yield*fe(al(f),null,sl(t));return r.spent+=m.explored,m.solved?m.line.length:m.capped?NaN:1/0},c=te(e),p=yield*h(c);for(let f of n){let m=V(c,f).state,b=yield*h(m);Number.isFinite(p)&&!Number.isNaN(b)&&b!==p-1&&l++,p=b,c=m}}let o=0,i=0,a=0;{let h=te(e),c=Qe(h);for(let p of n){let f=0;for(let g of[...un,cn]){let w=V(h,g);g.kind==="move"&&Oe(h,w)||tr(w.events)||w.state.outcome==="lost"||f++}f===1&&a++,p.kind==="wait"&&i++;let m=V(h,p).state,b=m.outcome==="won"||m.relicsLeft<h.relicsLeft?0:Qe(m);p.kind==="move"&&Number.isFinite(c)&&b>c&&o++,c=b===0?Qe(m):b,h=m}}let u=0;{let h=te(e);for(let c=0;c<n.length;c++){let p=n[c];if(c%ll===0)for(let f of[...un,cn]){if(f.kind===p.kind&&(f.kind!=="move"||p.kind!=="move"||f.dir===p.dir))continue;let m=V(h,f);if(f.kind==="move"&&Oe(h,m)||tr(m.events)||m.state.outcome!=="playing")continue;let b=yield*fe(m.state,he,il(t));r.spent+=b.explored,!b.solved&&!b.capped&&u++}h=V(h,p).state}}let d=Ye.detour*s+Ye.offRoute*l+Ye.away*o+Ye.waits*i+Ye.traps*u+Ye.forced*a;return{detour:s,offRoute:l,away:o,waits:i,traps:u,forced:a,total:d}}var ul=new Set(["wall","door-red","door-blue","door-yellow","door-green","gate","toggle-closed","fake-wall","invisible-wall","clone"]),er={most:.5,area:6};function cl(e){let t=e.rows,r=e.cols,n=(d,h)=>d>=0&&h>=0&&d<t&&h<r&&!ul.has(e.terrain[d*r+h]),s=0;for(let d=0;d<t;d++)for(let h=0;h<r;h++)n(d,h)&&s++;let l=new Uint8Array(t*r),o=new Uint8Array(t*r);for(let d=0;d+1<t;d++)for(let h=0;h+1<r;h++)n(d,h)&&n(d+1,h)&&n(d,h+1)&&n(d+1,h+1)&&(l[d*r+h]=1,o[d*r+h]=o[(d+1)*r+h]=o[d*r+h+1]=o[(d+1)*r+h+1]=1);let i=new Uint8Array(t*r),a=[];for(let d=0;d<t*r;d++){if(!l[d]||i[d])continue;let h=new Set,c=[d];i[d]=1;for(let p=0;p<c.length;p++){let f=c[p],m=Math.floor(f/r),b=f%r;h.add(f),h.add(f+1),h.add(f+r),h.add(f+r+1);for(let[g,w]of[[1,0],[-1,0],[0,1],[0,-1]]){let M=m+g,T=b+w,z=M*r+T;M>=0&&T>=0&&M<t&&T<r&&l[z]&&!i[z]&&(i[z]=1,c.push(z))}}a.push({cells:[...h].sort((p,f)=>p-f)})}let u=0;for(let d of o)u+=d;return{open:s,share:s?u/s:0,areas:a}}function dl(e,t){let r=e.cols,n=new Set([e.player.r*r+e.player.c,...e.hazards.map(l=>l.at.r*r+l.at.c)]);e.minotaur&&n.add(e.minotaur.r*r+e.minotaur.c);let s=[...e.terrain];for(let l of t){let o=Math.floor(l/r),i=l%r;o%2===0&&i%2===0&&s[l]==="floor"&&e.objects[l]===null&&!n.has(l)&&(s[l]="wall")}return Q(Me({...e,terrain:s}))}function*hl(e,t){let r=yield*fe(te(e),he,t);if(!r.solved)return null;let n=0;if(e.minotaur){let s=yield*fe(te({...e,minotaur:null}),null,t);if(!s.solved)return null;n=r.line.length-s.line.length}return yield*et(e,{line:Ce(r.line),minotaurDelta:n,explored:r.explored})}var fl=(e,t)=>`row ${Math.floor(t/e.cols)+1}, column ${t%e.cols+1}`;function*hn(e,t,r){let n=cl(e),s=[];n.share>er.most&&s.push({rule:"open",words:`Too open: ${Math.round(100*n.share)}% of the floor is open space (at most ${Math.round(100*er.most)}%)`});for(let l of n.areas){if(l.cells.length<er.area)continue;let o=dl(e,l.cells);if(o.terrain.every((a,u)=>a===e.terrain[u]))continue;let i=yield*hl(o,r);i&&i.total>=t.total&&s.push({rule:"open-area",words:`An open area near ${fl(e,l.cells[0])} does not earn its place: walled into corridors, the level is as hard (${i.total} against ${t.total})`,mended:o})}return s}var pl={walk:"The plain walk wins: walking to each relic and the exit, round the Minotaur, clears it",cowAtOnce:"The cow habit wins: setting the cow down at once and walking clears it",cowNear:"The cow habit wins: setting the cow down when the Minotaur comes near clears it",mirrorNear:"The mirror habit wins: raising the mirror when the Minotaur comes near clears it",toolsNear:"The tool habit wins: using the cow and the mirror when the Minotaur comes near clears it",careful:"The careful walk wins: stepping aside whenever the Minotaur would catch clears it",carefulTools:"The careful walk with tools wins: stepping aside and using the tools when he is near clears it",cowStuck:"The cow habit wins: setting the cow down where the Minotaur gets stuck clears it",cowStuckCareful:"The cow habit wins: setting the cow down where he gets stuck and stepping aside clears it"};function fn(e,t){return typeof t.shortest!="number"?[]:Je.filter(r=>Jt(e,r,Qt(t.shortest)).won).map(r=>({rule:`habit:${r}`,words:pl[r]}))}var dn=(e,t)=>Q(Me({...e,objects:e.objects.map(r=>r===t?null:r)}));function*pn(e,t,r,n){let s=[];if(typeof t.shortest!="number")return s;for(let l of["cow","mirror"]){if(!e.objects.includes(l))continue;let o=yield*fe(te(dn(e,l)),he,n);o.solved&&o.line.length<=t.shortest&&s.push({rule:`tool:${l}`,words:`The ${l} is not needed: without it the level is won in ${o.line.length} moves`,mended:dn(e,l)})}if(r==="hard"&&e.objects.includes("cow")){let l=te(e);for(let o of Ne(t.line)??[]){if(l.tools.cow>0&&!l.cow){let i=V(l,{kind:"tool",tool:"cow"});!tr(i.events)&&i.state!==l&&(yield*fe(i.state,he,n)).solved&&s.push({rule:"tool:cow-early",words:"The cow works too early: setting it down as soon as it is held still wins"});break}l=V(l,o).state}}return s}function rr(e,t=0){let r=3735928559^t,n=1103547991^t;for(let s=0;s<e.length;s++){let l=e.charCodeAt(s);r=Math.imul(r^l,2654435761),n=Math.imul(n^l,1597334677)}return r=Math.imul(r^r>>>16,2246822507)^Math.imul(n^n>>>13,3266489909),n=Math.imul(n^n>>>16,2246822507)^Math.imul(r^r>>>13,3266489909),[r>>>0,n>>>0]}function nr(...e){return rr(e.join(""))[0]}function mn(...e){let t=e.join(""),[r,n]=rr(t),[s,l]=rr(t,2654435769),o=r,i=n,a=s,u=l|1,d=()=>{let c=(o+i|0)+u|0;return u=u+1|0,o=i^i>>>9,i=a+(a<<3)|0,a=a<<21|a>>>11,a=a+c|0,(c>>>0)/4294967296};for(let c=0;c<12;c++)d();let h=c=>Math.floor(d()*c);return{next:d,int:h,pick:c=>c[h(c.length)],shuffle(c){let p=[...c];for(let f=p.length-1;f>0;f--){let m=h(f+1);[p[f],p[m]]=[p[m],p[f]]}return p}}}var Et={keys:1,water:1,fire:1,ice:1,force:1,blocks:1,toggle:1,mirror:1,cow:1,gravel:2,popup:3,fake:4,invisible:4,snare:5,teleport:6,ball:7,glider:8,fireball:8,thief:9,bomb:9,clone:9};function or(e){return Object.keys(Et).filter(t=>Et[t]<=e)}var qe=["fake","invisible"],ue={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]},Be=["up","down","left","right"];function ml(e,t,r){let n=e.length,s=e[0].length;return t<=0||r<=0||t>=n-1||r>=s-1||e[t][r]!=="#"?!1:e[t-1][r]!=="#"&&e[t+1][r]!=="#"&&e[t][r-1]!=="#"&&e[t][r+1]!=="#"}function yn(e,t,r){let n=e[t][r];e[t][r]=".";let s=Be.some(l=>ml(e,t+ue[l][0],r+ue[l][1]));return e[t][r]=n,!s}function gn(e,t){let{rows:r,cols:n}=t;if(r%2===0||n%2===0||r<7||n<7)return null;let s=(r-1)/2,l=(n-1)/2,o=Array.from({length:r},()=>Array(n).fill("#")),i=x=>2*Math.floor(x/l)+1,a=x=>2*(x%l)+1,u=s*l;for(let x=0;x<u;x++)o[i(x)][a(x)]=".";let d=x=>{let k=Math.floor(x/l),S=x%l,j=[];return k>0&&j.push(x-l),k<s-1&&j.push(x+l),S>0&&j.push(x-1),S<l-1&&j.push(x+1),j},h=(x,k)=>[(i(x)+i(k))/2,(a(x)+a(k))/2],c=[],p=(x,k)=>{let[S,j]=h(x,k);o[S][j]=".",c.push({r:S,c:j})},f=new Uint8Array(u),m=e.int(u);f[m]=1;let b=[m];for(;b.length;){let x=e.next()<t.winding?b.length-1:e.int(b.length),k=b[x],S=d(k).filter(Z=>!f[Z]);if(!S.length){b.splice(x,1);continue}let j=e.pick(S);p(k,j),f[j]=1,b.push(j)}let g=(x,k)=>o[x][k]!=="#",w=x=>Be.filter(k=>g(i(x)+ue[k][0],a(x)+ue[k][1])).length;for(let x of e.shuffle([...Array(u).keys()])){if(w(x)!==1||e.next()>=t.braid)continue;let k=e.shuffle(d(x).filter(S=>{let[j,Z]=h(x,S);return o[j][Z]==="#"&&yn(o,j,Z)}));k.length&&p(x,k[0])}let M=new Set;for(let x=0;x<t.chambers&&s>2&&l>2;x++){let k=e.int(s-1),S=e.int(l-1);for(let j=2*k+1;j<=2*k+3;j++)for(let Z=2*S+1;Z<=2*S+3;Z++)o[j][Z]==="#"&&(o[j][Z]="."),M.add(j*n+Z)}let T=c.filter(x=>!M.has(x.r*n+x.c));T.length!==c.length&&(c.length=0,c.push(...T));let z=(x,k)=>c.some(S=>S.r===x&&S.c===k),F=()=>{let x=[];for(let k=1;k<r-1;k++)for(let S=1;S<n-1;S++)o[k][S]==="."&&!z(k,S)&&x.push([k,S]);return x},q=(x,k)=>Be.filter(S=>g(x+ue[S][0],k+ue[S][1])).length===1,L=(x=!1)=>{let k=F();if(!k.length)return null;let S=x?k.filter(([j,Z])=>q(j,Z)):[];return e.pick(S.length?S:k)},v=(x,k=!1)=>{let S=L(k);return S?(o[S[0]][S[1]]=x,!0):!1},D=()=>e.shuffle(c.filter(x=>o[x.r][x.c]===".")),C=x=>{let k=D()[0];return k?(o[k.r][k.c]=x,!0):!1},E=()=>{let x=[];for(let k=1;k<r-1;k++)for(let S=1;S<n-1;S++)o[k][S]==="#"&&(o[k-1][S]==="."&&o[k+1][S]==="."&&o[k][S-1]==="#"&&o[k][S+1]==="#"||o[k][S-1]==="."&&o[k][S+1]==="."&&o[k-1][S]==="#"&&o[k+1][S]==="#")&&x.push([k,S]);return x.length?e.pick(x):null},P=x=>{for(let k of D()){let S=g(k.r-1,k.c)&&g(k.r+1,k.c)?["up","down"]:["left","right"],j=[[k.r,k.c]],Z=2+e.int(3);for(let me of e.shuffle(S)){let ce=k.r,we=k.c;for(;j.length<Z&&(ce+=ue[me][0],we+=ue[me][1],o[ce]?.[we]===".");)j.push([ce,we])}if(!(j.length<2)){for(let[me,ce]of j)o[me][ce]=x;return!0}}return!1},H=new Map,$=new Map,A=x=>{let k=L();return k?(o[k[0]][k[1]]=x,H.set(k[0]*n+k[1],e.pick(Be)),!0):!1},y=!0;for(let x of t.families){switch(x){case"keys":{let[k,S]=e.pick([["R","r"],["B","b"],["Y","y"],["G","g"]]),j=1+e.int(2);for(let Z=0;Z<j;Z++)y=C(k)&&y;for(let Z=0;Z<(k==="G"?1:j);Z++)y=v(S,!0)&&y;break}case"water":y=P("~")&&(e.next()<.5?v("f",!0):v("O"))&&y;break;case"fire":y=P("F")&&v("h",!0)&&y;break;case"ice":{y=P("=")&&y,e.next()<.5&&(y=v("k",!0)&&y);break}case"force":{y=P(e.pick(["^","v","<",">"]))&&y,e.next()<.5&&(y=v("u",!0)&&y);break}case"blocks":{let k=1+e.int(2);for(let S=0;S<k;S++)y=v("O")&&y;break}case"toggle":{let k=1+e.int(2);for(let S=0;S<k;S++)y=C(e.next()<.5?"T":"t")&&y;y=v("_")&&y;break}case"mirror":y=v("z",!0)&&y;break;case"cow":y=v("c",!0)&&y;break;case"gravel":{let k=1+e.int(2);for(let S=0;S<k;S++)y=C(":")&&y;break}case"popup":y=C(";")&&y;break;case"fake":{let k=e.next()<.6?E():null;k?o[k[0]][k[1]]="W":y=C("W")&&y;break}case"invisible":y=(e.next()<.5?C("I"):v("I"))&&y;break;case"snare":y=(e.next()<.5?C("&"):v("&"))&&v("-")&&y;break;case"teleport":y=v("@",!0)&&v("@",!0)&&y;break;case"ball":y=A("o")&&y;break;case"glider":y=A("w")&&y;break;case"fireball":y=A("e")&&y;break;case"thief":y=C("$")&&y;break;case"bomb":y=(e.next()<.5?C("!"):v("!"))&&y;break;case"clone":{let k=!1;for(let S=0;S<60&&!k;S++){let j=1+e.int(r-2),Z=1+e.int(n-2),me=e.pick(Be),ce=j+ue[me][0],we=Z+ue[me][1];o[j][Z]!=="#"||o[ce]?.[we]!=="."||(o[j][Z]="C",$.set(j*n+Z,`${e.pick(["block","ball","block"])}-${me}`),k=!0)}y=k&&v("+")&&y;break}}if(!y)return null}let B=L();if(!B)return null;o[B[0]][B[1]]="P";let R=bl(o,B),N=[];for(let x=1;x<r-1;x++)o[x][1]==="."&&N.push([x,0,x,1,R[x*n+1]]),o[x][n-2]==="."&&N.push([x,n-1,x,n-2,R[x*n+n-2]]);for(let x=1;x<n-1;x++)o[1][x]==="."&&N.push([0,x,1,x,R[n+x]]),o[r-2][x]==="."&&N.push([r-1,x,r-2,x,R[(r-2)*n+x]]);N.sort((x,k)=>k[4]-x[4]||x[0]-k[0]||x[1]-k[1]);let I=N.filter(x=>x[4]>0).slice(0,Math.max(1,Math.ceil(N.length/3)));if(!I.length)return null;let[ee,ne,Te,W]=e.pick(I);o[ee][ne]="E";for(let x=0;x<t.relics;x++){let k=bn(o,R,.5,1).filter(([ce,we])=>!(ce===Te&&we===W)),S=k.filter(([ce,we])=>q(ce,we)),j=S.length&&e.next()<.7?S:k;if(!j.length)return null;let[Z,me]=e.pick(j);o[Z][me]="*"}let pe=bn(o,R,.25,.6);if(!pe.length)return null;let je=e.pick(pe);return o[je[0]][je[1]]="M",t.relics>0&&e.next()<.5&&o[Te][W]==="."&&!z(Te,W)&&(o[Te][W]="|"),{g:o,doors:c,facing:H,machines:$}}function bl(e,t){let r=e.length,n=e[0].length,s=new Int32Array(r*n).fill(-1);s[t[0]*n+t[1]]=0;let l=[t[0]*n+t[1]];for(let o=0;o<l.length;o++){let i=l[o],a=Math.floor(i/n),u=i%n;for(let d of Be){let h=a+ue[d][0],c=u+ue[d][1];if(h<=0||c<=0||h>=r-1||c>=n-1)continue;let p=h*n+c;s[p]>=0||e[h][c]==="#"||(s[p]=s[i]+1,l.push(p))}}return s}function bn(e,t,r,n){let s=e.length,l=e[0].length,o=[];for(let i=1;i<s-1;i++)for(let a=1;a<l-1;a++)e[i][a]==="."&&t[i*l+a]>0&&o.push([i,a,t[i*l+a]]);return o.sort((i,a)=>i[2]-a[2]||i[0]-a[0]||i[1]-a[1]),o.slice(Math.floor(o.length*r),Math.ceil(o.length*n)).map(([i,a])=>[i,a])}function $e(e,t){let r=[`title: ${t}`,"intro: "],n=[...e.facing.keys()].sort((l,o)=>l-o);n.length&&r.push(`facing: ${n.map(l=>e.facing.get(l)).join(" ")}`);let s=[...e.machines.keys()].sort((l,o)=>l-o);return s.length&&r.push(`machines: ${s.map(l=>e.machines.get(l)).join(" ")}`),`${r.join(`
+`}function yn(e){let t=0;for(let n of e.objects)n==="cake"&&t++;return e.hearts+t}function ee(e){return{level:e,terrain:e.terrain,objects:e.objects,player:e.player,hearts:e.hearts,keys:{red:0,blue:0,yellow:0,green:0},gear:[],tools:{mirror:0,cake:0,cow:0},pages:0,throwBack:e.player,minotaur:e.minotaur,stone:0,cow:null,hazards:[...e.hazards],relicsLeft:e.relics,moves:0,outcome:"playing"}}var ie=(e,t)=>t.r>=0&&t.c>=0&&t.r<e.rows&&t.c<e.cols,C=(e,t)=>t.r*e.level.cols+t.c;var V=(e,t)=>!!t&&e.r===t.r&&e.c===t.c,Ae=66,xo=Array.from({length:Ae*Ae},(e,t)=>({r:Math.floor(t/Ae)-1,c:t%Ae-1})),ko=(e,t)=>e>=-1&&t>=-1&&e<Ae-1&&t<Ae-1?xo[(e+1)*Ae+t+1]:{r:e,c:t},re=(e,t)=>ko(e.r+K[t][0],e.c+K[t][1]),St=e=>e.relicsLeft===0;var gn=e=>{let t=st(e);return t.terrain=[...e.terrain],t.objects=[...e.objects],t.ownTerrain=t.ownObjects=!0,ve(t),t},st=e=>({level:e.level,terrain:e.terrain,objects:e.objects,ownTerrain:!1,ownObjects:!1,player:e.player,hearts:e.hearts,keys:e.keys,gear:e.gear,tools:e.tools,ownHeld:!1,pages:e.pages,throwBack:e.throwBack,minotaur:e.minotaur,stone:e.stone,cow:e.cow,hazards:e.hazards.length>0?[...e.hazards]:e.hazards,relicsLeft:e.relicsLeft,moves:e.moves,outcome:e.outcome});function ve(e){e.ownHeld||(e.keys={...e.keys},e.tools={...e.tools},e.gear=[...e.gear],e.ownHeld=!0)}function pe(e,t,n){e.ownTerrain||(e.terrain=e.terrain.slice(),e.ownTerrain=!0),e.terrain[t]=n}function Se(e,t,n){e.ownObjects||(e.objects=e.objects.slice(),e.ownObjects=!0),e.objects[t]=n}var te=(e,t)=>ie(e.level,t)?e.terrain[C(e,t)]:"wall",me=(e,t)=>ie(e.level,t)?e.objects[C(e,t)]:null;function Te(e,t){let n=e.hazards;for(let r=0;r<n.length;r++){let s=n[r].at;if(s.r===t.r&&s.c===t.c)return!0}return!1}function it(e,t){e.terrain=e.terrain.map(n=>n==="toggle-open"?"toggle-closed":n==="toggle-closed"?"toggle-open":n),e.ownTerrain=!0,t.push({kind:"flipped"})}var wn=new WeakMap;function kn(e){let t=wn.get(e);return t||(t=e.terrain.flatMap((n,r)=>n==="teleport"?[r]:[]),wn.set(e,t)),t}var Tn=e=>kn(e).length>1;function zt(e,t,n,r){let{cols:s}=e.level,l=kn(e.level),o=t.r*s+t.c,i=l.findIndex(a=>a>o);for(let a=0;a<l.length;a++){let u=l[((i<0?0:i)+a)%l.length];if(u===o)continue;let c={r:Math.floor(u/s),c:u%s},h=re(c,n);if(te(e,h)!=="teleport"&&r(h))return{via:c,to:h}}return null}var xn=new WeakMap;function To(e){let t=xn.get(e);if(!t){let n=new Map;for(let[r,s]of Object.entries(e.links)){if(e.terrain[s]!=="trap")continue;let l=n.get(s);l?l.push(Number(r)):n.set(s,[Number(r)])}t=n,xn.set(e,t)}return t}function Mo(e,t){let n=To(e.level).get(t);if(!n)return!1;let{cols:r}=e.level;return n.some(s=>{let l={r:Math.floor(s/r),c:s%r};return V(l,e.player)||me(e,l)==="block"||Te(e,l)})}var se=(e,t)=>te(e,t)==="trap"&&!Mo(e,t.r*e.level.cols+t.c);function Mn(e,t,n){if(!ie(e.level,n))return!1;let r=te(e,n);return H[r].hazard||le[t].crosses===r}var at=(e,t,n)=>Mn(e,t,n)&&!me(e,n)&&!V(n,e.minotaur)&&!V(n,e.cow)&&!Te(e,n),ut=(e,t,n)=>V(n,e.player)?Mn(e,t,n):at(e,t,n);function Lt(e,t,n,r,s=!1){let l=e.hazards[t],o=te(e,l.at);return o==="bomb"?(pe(e,C(e,l.at),"floor"),e.hazards.splice(t,1),n.push({kind:"exploded",who:"hazard",at:l.at}),"gone"):(o==="button"?it(e,n):o==="button-red"&&dt(e,C(e,l.at),n,r,s),se(e,l.at)&&n.push({kind:"held",who:"hazard",at:l.at}),"on")}function dt(e,t,n,r,s=!1){let l=e.level.links[t];if(l===void 0)return;let o=e.level.machines.find(c=>C(e,c.at)===l),i=re(o.at,o.dir);if(r&&V(i,r))return;if(o.template==="block"){if(!ct(e,i))return;Se(e,C(e,i),"block"),n.push({kind:"cloned",what:"block",at:i}),Rt(e,i,o.dir,r,n,s);return}if(!at(e,o.template,i)||V(i,e.player))return;let a={kind:o.template,at:i,dir:o.dir,home:o.home};e.hazards.length===0&&(e.hazards=[]);let u=e.hazards.length;if(!s){let c=C(e,i);for(;u>0&&C(e,e.hazards[u-1].at)>c;)u--}e.hazards.splice(u,0,a),n.push({kind:"cloned",what:o.template,at:i}),Lt(e,u,n,r,s)}function Eo(e,t){let n=e.hazards[t];if(n)return n.at;let r=e.machines.find(s=>s.home===t);return re(r.at,r.dir)}function Ot(e,t,n){te(e,t)==="popup"&&(pe(e,C(e,t),"wall"),n.push({kind:"rose",at:t}))}var Po=(e,t,n)=>at(e,t,n)&&te(e,n)!=="bomb"&&!V(n,e.player);function Ao(e,t,n){let r=Eo(e.level,n),s=new Set([C(e,r)]),l=[r];for(;l.length>0;){let o=l.filter(a=>Po(e,t,a)).sort((a,u)=>C(e,a)-C(e,u));if(o.length>0)return o[0];let i=[];for(let a of l)for(let u of _){let c=re(a,u);!ie(e.level,c)||s.has(C(e,c))||(s.add(C(e,c)),i.push(c))}l=i}return null}function En(e,t,n){let r=e.hazards.findIndex(o=>V(t,o.at));if(r<0)return;let s=e.hazards[r];e.hazards.splice(r,1);let l=Ao(e,s.kind,s.home);l&&(e.hazards.push({...s,at:l}),e.hazards.sort((o,i)=>C(e,o.at)-C(e,i.at))),n.push({kind:"sent-home",from:t,to:l})}function ze(e,t,n,r){if(e.hearts--,t.push(r?{kind:"caught",at:e.player,hearts:e.hearts,by:n,hazard:r}:{kind:"caught",at:e.player,hearts:e.hearts,by:n}),e.hearts<=0){e.outcome="lost",t.push({kind:"lost"});return}Ot(e,e.player,t),e.player=e.throwBack;let s=null;V(e.player,e.minotaur)&&(s=e.level.minotaur,e.minotaur=s,V(s,e.cow)&&(e.cow=null)),En(e,e.player,t),s&&En(e,s,t)}function ht(e,t){if(e.outcome!=="playing")return!0;for(let n=0;n<t.length;n++)if(t[n].kind==="caught")return!0;return!1}function Ft(e,t){return ie(e.level,t)&&H[te(e,t)].minotaur&&me(e,t)!=="block"&&!Te(e,t)}function Pn(e,t,n){return e.minotaur=t,se(e,t)&&n.push({kind:"held",who:"minotaur",at:t}),V(t,e.cow)&&(e.cow=null),V(t,e.player)?(ze(e,n,"minotaur"),!0):!1}function vo(e,t){let n=e.minotaur;if(!n)return!0;if(se(e,n))return!1;let r=e.cow??e.player,s=null,l=null;if(r.c!==n.c){let a=r.c>n.c?"right":"left",u=re(n,a);Ft(e,u)&&(s=a,l=u)}if(!l&&r.r!==n.r){let a=r.r>n.r?"down":"up",u=re(n,a);Ft(e,u)&&(s=a,l=u)}if(!s||!l)return!1;if(t.push({kind:"moved",who:"minotaur",from:n,to:l}),Pn(e,l,t))return!0;let o=s,i=null;for(;;){let a=H[te(e,e.minotaur)];if(a.carries)o=a.carries;else if(!a.slides)return!1;i??=new Set([C(e,l)]);let u=re(e.minotaur,o);if(!Ft(e,u)||i.has(C(e,u)))return!1;if(t.push({kind:"slid",who:"minotaur",from:e.minotaur,to:u}),i.add(C(e,u)),Pn(e,u,t))return!0}}function An(e,t){if(e.minotaur){if(e.stone>0){e.stone--;return}for(let n=0;n<2&&e.outcome==="playing";n++)if(vo(e,t))return}}var So={ahead:{up:"up",down:"down",left:"left",right:"right"},left:{up:"left",left:"down",down:"right",right:"up"},right:{up:"right",right:"down",down:"left",left:"up"},back:{up:"down",down:"up",left:"right",right:"left"}};function zo(e,t,n){return V(e.hazards[t].at,e.player)?(V(e.player,e.cow)&&(e.cow=null),ze(e,n,"hazard",e.hazards[t].kind),"caught"):Lt(e,t,n,void 0,!0)}function Lo(e,t,n){let r=e.hazards[t];if(se(e,r.at))return"on";let s=r.dir;if(!ut(e,r.kind,re(r.at,s))){s=void 0;for(let i of le[r.kind].turns){let a=So[i][r.dir];if(ut(e,r.kind,re(r.at,a))){s=a;break}}}if(!s)return"on";let l=re(r.at,s);n.push({kind:"moved",who:"hazard",hazard:r.kind,from:r.at,to:l});let o=null;for(;;){r=e.hazards[t]={kind:r.kind,at:l,dir:s,home:r.home};let i=zo(e,t,n);if(i!=="on")return i;let a=H[te(e,l)];if(a.carries)s=a.carries,r.dir!==s&&(r=e.hazards[t]={kind:r.kind,at:r.at,dir:s,home:r.home});else if(!a.slides)return"on";o??=new Set([C(e,l)]);let u=re(l,s);if(o.has(C(e,u))||!ut(e,r.kind,u))return"on";n.push({kind:"slid",who:"hazard",hazard:r.kind,from:l,to:u}),o.add(C(e,u)),l=u}}function vn(e,t){if(e.hazards.length!==0){for(let n=0,r=e.hazards.length;n<r;){let s=Lo(e,n,t);if(s==="caught")break;s==="gone"?r--:n++}e.hazards.sort((n,r)=>C(e,n.at)-C(e,r.at))}}function ct(e,t){return ie(e.level,t)&&H[te(e,t)].block&&!me(e,t)&&!V(t,e.player)&&!V(t,e.minotaur)&&!V(t,e.cow)&&!V(t,e.throwBack)&&!V(t,e.level.minotaur)&&!Te(e,t)}function Dt(e,t,n,r){let s=re(t,n);if(te(e,s)!=="teleport")return ct(e,s)&&r(s)?{entry:s,to:s}:null;if(V(s,e.player))return null;let l=zt(e,s,n,o=>ct(e,o)&&r(o));return l&&{entry:s,via:l.via,to:l.to}}function Sn(e,t,n,r,s){Se(e,C(e,t),null),Se(e,C(e,n.to),"block"),s.push(r==="pushed"?{kind:"pushed",from:t,to:n.entry}:{kind:"slid",who:"block",from:t,to:n.entry}),n.via&&s.push({kind:"teleported",who:"block",from:n.entry,via:n.via,to:n.to})}function Rt(e,t,n,r,s,l=!1){let o=t,i=n,a=new Set([C(e,o)]);for(r&&a.add(C(e,r));;){let u=te(e,o);if(u==="water"||u==="bomb"){Se(e,C(e,o),null),pe(e,C(e,o),u==="water"?"dirt":"floor"),s.push(u==="water"?{kind:"sank",at:o}:{kind:"exploded",who:"block",at:o});return}u==="button"?it(e,s):u==="button-red"&&dt(e,C(e,o),s,r,l),se(e,o)&&s.push({kind:"held",who:"block",at:o});let c=H[u];if(c.carries)i=c.carries;else if(!c.slides)return;let h=Dt(e,o,i,d=>!a.has(C(e,d)));if(!h)return;Sn(e,o,h,"slid",s),a.add(C(e,h.to)),o=h.to}}var Ro=new Set(["wall","toggle-closed","fake-wall","invisible-wall","clone"]);function zn(e,t,n,r){if(!ie(e.level,t)||V(t,e.minotaur))return!1;let s=te(e,t),l=H[s];return Ro.has(s)||s==="teleport"&&!Tn(e.level)||s==="gate"&&!St(e)||l.needs&&!e.gear.includes(l.needs)||l.door&&e.keys[l.door]<=0?!1:Te(e,t)||me(e,t)!=="block"?!0:!r&&!se(e,t)&&!!Dt(e,t,n,()=>!0)}function It(e,t,n,r,s){if(!zn(e,t,n,r))return!1;if(Te(e,t))return ze(e,s,"hazard",e.hazards.find(o=>V(o.at,t)).kind),!1;let l=H[te(e,t)];if(l.door&&(l.door!=="green"&&(ve(e),e.keys[l.door]--),pe(e,C(e,t),"floor"),s.push({kind:"opened",color:l.door,at:t})),me(e,t)==="block"){let o=Dt(e,t,n,()=>!0);Sn(e,t,o,"pushed",s),Rt(e,o.to,n,t,s)}return!0}function $t(e,t,n,r,s){Ot(e,e.player,s),e.player=t;let l=te(e,t);if(l==="bomb")return pe(e,C(e,t),"floor"),s.push({kind:"exploded",who:"player",at:t}),ze(e,s,"bomb"),!0;let o=me(e,t);if(o&&o!=="block"&&(Se(e,C(e,t),null),s.push({kind:"took",what:o,at:t}),o==="relic"?e.relicsLeft=Math.max(0,e.relicsLeft-1):o==="page"?e.pages|=1<<e.level.pageCells.indexOf(C(e,t)):o.startsWith("key-")?(ve(e),e.keys[o.slice(4)]++):o==="mirror"||o==="cake"||o==="cow"?(ve(e),e.tools[o]++):e.gear.includes(o)||(ve(e),e.gear.push(o))),l==="thief"&&e.gear.length>0&&(s.push({kind:"robbed",at:t,gear:e.gear}),e.gear=[]),l==="safe"&&(e.throwBack=t),se(e,t)&&s.push({kind:"held",who:"player",at:t}),l==="button"?it(e,s):l==="button-red"&&dt(e,C(e,t),s),l==="exit"&&St(e)&&(e.outcome="won",s.push({kind:"won"})),l==="teleport"){let i=zt(e,t,n,a=>zn(e,a,n,r));return i?It(e,i.to,n,r,s)?(s.push({kind:"teleported",who:"player",from:t,via:i.via,to:i.to}),$t(e,i.to,n,r,s)):!0:!1}return!1}function Oo(e,t,n){let r=t,s=e.player,l=null;for(;e.outcome==="playing";){let o=H[te(e,e.player)];if(o.carries&&!e.gear.includes("suction"))r=o.carries;else if(!o.slides||e.gear.includes(o.slides))return;l??=new Set([C(e,s)]);let i=re(e.player,r);if(l.has(C(e,i))||!It(e,i,r,!0,n)||(n.push({kind:"slid",who:"player",from:e.player,to:i}),l.add(C(e,i)),$t(e,i,r,!0,n)))return;l.add(C(e,e.player))}}function Ct(e,t){if(e.length!==t.length)return!1;for(let n=0;n<e.length;n++)if(e[n]!==t[n])return!1;return!0}function Ln(e,t,n){if(t.kind==="move"){let r=e.player;if(se(e,r))return!1;let s=re(r,t.dir),l=te(e,s);if(l==="invisible-wall")return pe(e,C(e,s),"wall"),n.push({kind:"revealed",at:s,what:l}),!0;if(l==="fake-wall"&&(pe(e,C(e,s),"floor"),n.push({kind:"revealed",at:s,what:l})),It(e,s,t.dir,!1,n))n.push({kind:"moved",who:"player",from:r,to:s}),$t(e,s,t.dir,!1,n)||Oo(e,t.dir,n);else if(!ht(e,n))return!1}else if(t.kind==="tool"){if(e.tools[t.tool]<=0)return!1;if(t.tool==="cake")e.hearts++;else if(t.tool==="cow"){if(e.cow)return!1;e.cow=e.player}else e.stone=3,n.push({kind:"stoned",turns:3});ve(e),e.tools[t.tool]--}return!0}function Rn(e,t){return{level:e.level,terrain:!e.ownTerrain||Ct(e.terrain,t.terrain)?t.terrain:e.terrain,objects:!e.ownObjects||Ct(e.objects,t.objects)?t.objects:e.objects,player:e.player,hearts:e.hearts,keys:e.keys,gear:e.gear,tools:e.tools,pages:e.pages,throwBack:e.throwBack,minotaur:e.minotaur,stone:e.stone,cow:e.cow,hazards:Ct(e.hazards,t.hazards)?t.hazards:e.hazards,relicsLeft:e.relicsLeft,moves:e.moves,outcome:e.outcome}}function Bt(e,t){if(e.outcome!=="playing")return{state:e,events:[]};let n=st(e),r=[];return Ln(n,t,r)?{state:Rn(n,e),events:r}:{state:e,events:[]}}function Le(e,t){if(t.state===e)return!0;let n=t.events[0];return n?.kind==="revealed"&&n.what==="invisible-wall"}function q(e,t){if(e.outcome!=="playing")return{state:e,events:[]};let n=st(e),r=[];if(!Ln(n,t,r))return{state:e,events:[]};let s=t.kind==="tool"&&t.tool==="mirror";return ht(n,r)||vn(n,r),!s&&!ht(n,r)&&An(n,r),n.moves++,{state:Rn(n,e),events:r}}var Fo=["mirror","cake","cow"],Me=e=>e<=0?0:32-Math.clz32(e),On=new WeakMap;function be(e){let t=On.get(e);return t||On.set(e,t=$o(e)),t}function Co(e){let t=new Set,n=[],r=a=>{let u=e.terrain[a];return H[u].block||H[u].door!==void 0||u==="fake-wall"},s=e.minotaur?e.minotaur.r*e.cols+e.minotaur.c:-1,l=(a,u)=>a>=0&&u>=0&&a<e.rows&&u<e.cols,o=a=>{t.has(a)||a===s||!r(a)||(t.add(a),n.push(a))};e.objects.forEach((a,u)=>{a==="block"&&(t.add(u),n.push(u))});for(let a of e.machines){let u=a.at.r+K[a.dir][0],c=a.at.c+K[a.dir][1];a.template==="block"&&l(u,c)&&o(u*e.cols+c)}let i=[];for(e.terrain.forEach((a,u)=>{a==="teleport"&&i.push(u)});n.length;){let a=n.pop(),u=Math.floor(a/e.cols),c=a%e.cols,h=H[e.terrain[a]],d=h.slides!==void 0||h.carries!==void 0;for(let f of _){let[m,p]=K[f],g=u+m,y=c+p;if(!l(g,y))continue;let b=u-m,w=c-p;if(!(l(b,w)&&e.terrain[b*e.cols+w]!=="wall")&&!d)continue;let L=g*e.cols+y;if(e.terrain[L]!=="teleport"){o(L);continue}for(let P of i){let O=Math.floor(P/e.cols)+m,v=P%e.cols+p;l(O,v)&&o(O*e.cols+v)}}}return t}var Do={water:"dirt",popup:"wall","fake-wall":"floor","invisible-wall":"wall",bomb:"floor"},jt=e=>Do[e]??(H[e].door!==void 0?"floor":void 0);function Io(e,t){let n=new Set(t.map(s=>le[s].crosses)),r=[];return e.terrain.forEach((s,l)=>{let o=jt(s);(H[s].hazard||n.has(s)||s==="toggle-closed"||o&&H[o].hazard)&&r.push(l)}),r}function $o(e){let t=A=>e.objects.filter(M=>M===A).length,n=Co(e),r=[],s=[],l=[],o=[],i=[];e.terrain.forEach((A,M)=>{jt(A)?r.push(M):(A==="toggle-open"||A==="toggle-closed")&&s.push(M);let j=e.objects[M];n.has(M)?(j&&j!=="block"?i:o).push(M):j&&l.push(M)});let a=e.rows*e.cols,u=$e.map(A=>Me(t(`key-${A}`))),c=Fo.map(A=>Me(t(A))),h=mn.filter(A=>t(A)>0),d=Me(a),f=t("cow")>0,m=e.minotaur!==null,p=t("mirror")>0?2:0,g=d*(2+(m?1:0)+(f?1:0))+p,y=Me(yn(e)),b=g+y+Me(e.relics),w=[],E=b+e.pageIds.length;for(let A of u)w.push(E),E+=A;let L=[];for(let A of c)L.push(E),E+=A;let P=[...e.hazards.map(A=>A.kind)];for(let A of e.machines)A.home!==void 0&&(P[A.home]=A.template);let O=P.length>e.hazards.length,v=O?0:e.hazards.length,I=O?Io(e,P):[],D=O?Me(4*P.length):0,$=d*(2+(m?1:0)+(f?1:0))+p+y+Me(e.relics)+e.pageIds.length+u.reduce((A,M)=>A+M,0)+c.reduce((A,M)=>A+M,0)+h.length+r.length+(s.length?1:0)+l.length+o.length+2*i.length+v*(d+2)+I.length*D,S=E+h.length,R=S+r.length+(s.length?1:0),T=R+l.length+o.length+2*i.length,B=[];for(let A=0;A<a;A++)B.push({r:Math.floor(A/e.cols),c:A%e.cols});return{terrainAt:S,objectsAt:R,hazardsAt:T,cells:B,terrains:new Map,objectLists:new Map,words:Math.max(1,Math.ceil($/32)),cellBits:d,none:a,minotaur:m,cow:f,stoneBits:p,heartBits:y,relicBits:Me(e.relics),pageBits:e.pageIds.length,keyBits:u,toolBits:c,gear:h,heartAt:g,pageAt:b,keyAt:w,toolAt:L,gearAt:E,changing:Int32Array.from(r),toggles:Int32Array.from(s),fixed:Int32Array.from(l),blockOnly:Int32Array.from(o),blockOrObject:Int32Array.from(i),hazardSlots:v,hazardCells:Int32Array.from(I),hazardBits:D,homeKinds:P}}function Z(e,t,n,r,s){if(r===0)return n;let l=t+(n>>>5),o=n&31;return e[l]|=s<<o,o+r>32&&(e[l+1]|=s>>>32-o),n+r}function Y(e,t,n,r){if(r===0)return 0;let s=t+(n>>>5),l=n&31,o=e[s]>>>l;return l+r>32&&(o|=e[s+1]<<32-l),r===32?o>>>0:o&(1<<r)-1}var Ee=(e,t,n)=>t?t.r*e.level.cols+t.c:n,Fn={up:0,down:1,left:2,right:3};function Cn(e,t,n,r,s,l){for(let o=s,i=s+l;o<i;o+=30){let a=Math.min(30,i-o);Z(n,r,o,a,Y(e,t,o,a))}}function Be(e,t,n,r,s,l,o=0){let i=t;for(let g=0;g<i.words;g++)n[r+g]=0;let a=0;a=Z(n,r,a,i.cellBits,Ee(e,e.player,i.none)),a=Z(n,r,a,i.cellBits,Ee(e,e.throwBack,i.none)),i.minotaur&&(a=Z(n,r,a,i.cellBits,Ee(e,e.minotaur,i.none))),i.cow&&(a=Z(n,r,a,i.cellBits,Ee(e,e.cow,i.none))),a=Z(n,r,a,i.stoneBits,e.stone),a=Z(n,r,a,i.heartBits,e.hearts),a=Z(n,r,a,i.relicBits,e.relicsLeft),a=Z(n,r,a,i.pageBits,e.pages);let u=e.keys,c=e.tools;a=Z(n,r,a,i.keyBits[0],u.red),a=Z(n,r,a,i.keyBits[1],u.blue),a=Z(n,r,a,i.keyBits[2],u.yellow),a=Z(n,r,a,i.keyBits[3],u.green),a=Z(n,r,a,i.toolBits[0],c.mirror),a=Z(n,r,a,i.toolBits[1],c.cake),a=Z(n,r,a,i.toolBits[2],c.cow);for(let g=0;g<i.gear.length;g++)a=Z(n,r,a,1,e.gear.includes(i.gear[g])?1:0);let h=e.terrain,d=e.objects,f=e.level.terrain;if(s&&l&&h===s.terrain)Cn(l,o,n,r,i.terrainAt,i.objectsAt-i.terrainAt);else{for(let g=0;g<i.changing.length;g++){let y=i.changing[g];Z(n,r,i.terrainAt+g,1,h[y]===f[y]?0:1)}i.toggles.length&&Z(n,r,i.objectsAt-1,1,h[i.toggles[0]]===f[i.toggles[0]]?0:1)}if(s&&l&&d===s.objects)Cn(l,o,n,r,i.objectsAt,i.hazardsAt-i.objectsAt);else{a=i.objectsAt;for(let g=0;g<i.fixed.length;g++)a=Z(n,r,a,1,d[i.fixed[g]]?1:0);for(let g=0;g<i.blockOnly.length;g++)a=Z(n,r,a,1,d[i.blockOnly[g]]==="block"?1:0);for(let g=0;g<i.blockOrObject.length;g++){let y=d[i.blockOrObject[g]];a=Z(n,r,a,2,y==="block"?2:y?1:0)}}a=i.hazardsAt;let m=e.hazards;if(i.hazardSlots>1){for(let g=1;g<m.length;g++)if(Ee(e,m[g].at,i.none)<Ee(e,m[g-1].at,i.none))throw new Error("the hazards must be sorted by cell")}for(let g=0;g<i.hazardSlots;g++){let y;for(let b=0;b<m.length;b++)if(m[b].home===g){y=m[b];break}a=Z(n,r,a,i.cellBits,y?Ee(e,y.at,i.none):i.none),a=Z(n,r,a,2,y?Fn[y.dir]:0)}let p=0;for(let g=0;g<i.hazardCells.length;g++){let y=i.hazardCells[g],b=m[p],w=b!==void 0&&Ee(e,b.at,i.none)===y;a=Z(n,r,a,i.hazardBits,w?1+Fn[b.dir]+4*b.home:0),w&&p++}if(i.hazardCells.length&&p!==m.length)throw new Error(`packed ${p} of ${m.length} hazards: they must be sorted by cell`)}var Dn=4096;function In(e,t,n,r){if(r<=30)return Y(e,t,n,r);let s="";for(let l=n,o=n+r;l<o;l+=30)s+=Y(e,t,l,Math.min(30,o-l))+",";return s}function Bo(e,t,n,r){let s=n.objectsAt-n.terrainAt;if(s===0)return r.terrain;let l=In(e,t,n.terrainAt,s),o=n.terrains.get(l);if(o)return o;let i=[...r.terrain];for(let a=0;a<n.changing.length;a++){if(!Y(e,t,n.terrainAt+a,1))continue;let u=n.changing[a];i[u]=jt(r.terrain[u])}if(n.toggles.length&&Y(e,t,n.objectsAt-1,1))for(let a of n.toggles)i[a]=r.terrain[a]==="toggle-open"?"toggle-closed":"toggle-open";return n.terrains.size>=Dn&&n.terrains.clear(),n.terrains.set(l,i),i}function jo(e,t,n,r){let s=n.hazardsAt-n.objectsAt;if(s===0)return r.objects;let l=In(e,t,n.objectsAt,s),o=n.objectLists.get(l);if(o)return o;let i=[...r.objects],a=n.objectsAt;for(let u of n.fixed)Y(e,t,a++,1)||(i[u]=null);for(let u of n.blockOnly)i[u]=Y(e,t,a++,1)?"block":null;for(let u of n.blockOrObject){let c=Y(e,t,a,2);a+=2,c===0?i[u]=null:c===2&&(i[u]="block")}return n.objectLists.size>=Dn&&n.objectLists.clear(),n.objectLists.set(l,i),i}function ft(e,t,n,r,s=0){let l=n,o=l.cells,i=l.none,a=l.cellBits,u=0,c=o[Y(e,t,u,a)];u+=a;let h=o[Y(e,t,u,a)];u+=a;let d=null,f=null;if(l.minotaur){let M=Y(e,t,u,a);u+=a,d=M===i?null:o[M]}if(l.cow){let M=Y(e,t,u,a);u+=a,f=M===i?null:o[M]}let m=Y(e,t,u,l.stoneBits);u+=l.stoneBits;let p=Y(e,t,u,l.heartBits);u+=l.heartBits;let g=Y(e,t,u,l.relicBits);u+=l.relicBits;let y=Y(e,t,u,l.pageBits);u+=l.pageBits;let b=l.keyBits,w=l.toolBits,E=Y(e,t,u,b[0]);u+=b[0];let L=Y(e,t,u,b[1]);u+=b[1];let P=Y(e,t,u,b[2]);u+=b[2];let O=Y(e,t,u,b[3]);u+=b[3];let v={red:E,blue:L,yellow:P,green:O},I=Y(e,t,u,w[0]);u+=w[0];let D=Y(e,t,u,w[1]);u+=w[1];let $=Y(e,t,u,w[2]);u+=w[2];let S={mirror:I,cake:D,cow:$},R=[];for(let M=0;M<l.gear.length;M++)Y(e,t,u++,1)&&R.push(l.gear[M]);let T=Bo(e,t,l,r),B=jo(e,t,l,r);u=l.hazardsAt;let A=[];for(let M=0;M<l.hazardSlots;M++){let j=Y(e,t,u,a);u+=a;let W=_[Y(e,t,u,2)];u+=2,j!==i&&A.push({kind:l.homeKinds[M],at:o[j],dir:W,home:M})}A.length>1&&A.sort((M,j)=>M.at.r*r.cols+M.at.c-(j.at.r*r.cols+j.at.c));for(let M=0;M<l.hazardCells.length;M++){let j=Y(e,t,u,l.hazardBits);if(u+=l.hazardBits,!j)continue;let W=j-1>>>2;A.push({kind:l.homeKinds[W],at:o[l.hazardCells[M]],dir:_[j-1&3],home:W})}return{level:r,terrain:T,objects:B,player:c,hearts:p,keys:v,gear:R,tools:S,pages:y,throwBack:h,minotaur:d,stone:m,cow:f,hazards:A,relicsLeft:g,moves:s,outcome:"playing"}}var jn=new Set(["wall","invisible-wall","clone"]);function Go(e,t,n,r){let s=(u,c)=>u>=0&&c>=0&&u<e.rows&&c<e.cols&&!jn.has(e.terrain[u*e.cols+c]),l=new Set,o=new Set,i=[],a=(u,c,h)=>{if(!s(u,c))return;let d=(u*e.cols+c)*4+_.indexOf(h);o.has(d)||(o.add(d),l.add(u*e.cols+c),i.push([u,c,h]))};for(a(Math.floor(t/e.cols)+K[n][0],t%e.cols+K[n][1],n);i.length;){let[u,c,h]=i.pop(),d=e.terrain[u*e.cols+c];if(d==="teleport"){for(let p of r){if(p===u*e.cols+c)continue;let g=Math.floor(p/e.cols)+K[h][0],y=p%e.cols+K[h][1];s(g,y)&&e.terrain[g*e.cols+y]!=="teleport"&&a(g,y,h)}continue}let f=H[d],m=f.carries??(f.slides?h:null);m&&a(u+K[m][0],c+K[m][1],m)}return[...l]}function Ho(e){let t=e.rows*e.cols,n=e.terrain.map(o=>!jn.has(o)),r=e.terrain.flatMap((o,i)=>o==="teleport"?[i]:[]),s=Array.from({length:t},()=>[]);for(let o=0;o<t;o++)if(n[o])for(let i of _)for(let a of Go(e,o,i,r.length>1?r:[]))s[a].push(o);let l=new Uint8Array(t);return e.terrain.forEach((o,i)=>{o==="safe"&&(l[i]=1)}),l[e.player.r*e.cols+e.player.c]=1,{n:t,open:n,into:s,thrown:l}}function $n(e,t){let n=new Float64Array(e.n).fill(1/0),r=new Int32Array(e.n),s=0;for(let o of t)n[o]===1/0&&(n[o]=0,r[s++]=o);let l=!1;for(let o=0;o<s;o++){let i=r[o],a=n[i]+1;for(let u of e.into[i])n[u]===1/0&&(n[u]=a,r[s++]=u);if(!l&&e.thrown[i]){l=!0;for(let u=0;u<e.n;u++)e.open[u]&&n[u]===1/0&&(n[u]=a,r[s++]=u)}}return n}function _o(e){let t=Ho(e),n=e.terrain.flatMap((o,i)=>o==="exit"?[i]:[]),r=$n(t,n),s=e.objects.flatMap((o,i)=>o==="relic"?[i]:[]),l=s.map(o=>$n(t,[o]));return o=>{if(o.outcome==="won")return 0;if(o.outcome==="lost")return 1/0;let i=o.player.r*e.cols+o.player.c,a=r[i];if(o.relicsLeft===0)return a;let u=0,c=1/0,h=0;for(let d=0;d<s.length;d++){if(o.objects[s[d]]!=="relic")continue;let f=l[d][i];u++,f<c&&(c=f),f>h&&(h=f)}return u<o.relicsLeft?1/0:Math.max(a,u===o.relicsLeft?h:c)}}var Bn=new WeakMap;function pt(e){let t=Bn.get(e);return t||Bn.set(e,t=_o(e)),t}var je=class extends Error{},Gn=1024;function Gt(e,t,n){let r=2538058380;for(let s=0;s<n;s++){let l=Math.imul(e[t+s],3432918353);l=Math.imul(l<<15|l>>>17,461845907),r^=l,r=Math.imul(r<<13|r>>>19,5)+3864292196}return r^=n,r=Math.imul(r^r>>>16,2246822507),r=Math.imul(r^r>>>13,3266489909),(r^r>>>16)>>>0}function mt(e){let t=e,n=Gn,r=new Uint32Array(n*t),s=new Uint32Array(n),l=new Int32Array(n),o=new Uint8Array(n),i=new Uint32Array(n),a=0,u=new Int32Array(Gn*2),c=u.length-1;function h(){n*=2;let f=new Uint32Array(n*t);f.set(r),r=f;let m=new Uint32Array(n);m.set(s),s=m;let p=new Int32Array(n);p.set(l),l=p;let g=new Uint8Array(n);g.set(o),o=g;let y=new Uint32Array(n);y.set(i),i=y,u=new Int32Array(n*2),c=u.length-1;for(let b=0;b<a;b++){let w=s[b]&c;for(;u[w]!==0;)w=w+1&c;u[w]=b+1}}function d(f,m,p){let g=f*t;for(let y=0;y<t;y++)if(r[g+y]!==m[p+y])return!1;return!0}return{get size(){return a},add(f,m,p,g,y){let b=Gt(f,m,t),w=b&c;for(let L=u[w];L!==0;w=w+1&c,L=u[w]){let P=L-1;if(!(s[P]!==b||!d(P,f,m)))return y>=i[P]?-1:(l[P]=p,o[P]=g,i[P]=y,P)}if(a===n)for(h(),w=b&c;u[w]!==0;)w=w+1&c;let E=a++;return r.set(f.subarray(m,m+t),E*t),s[E]=b,l[E]=p,o[E]=g,i[E]=y,u[w]=E+1,E},words(f,m,p){m.set(r.subarray(f*t,f*t+t),p)},parent:f=>l[f],action:f=>o[f],g:f=>i[f]}}var Ve=["mirror","cake","cow"],Re=_.length,bt=[..._.map(e=>({kind:"move",dir:e})),{kind:"wait"},...Ve.map(e=>({kind:"tool",tool:e}))],Ht=[Re,..._.map((e,t)=>t),...Ve.map((e,t)=>Re+1+t)];function Hn(e,t){let n=[];for(let r=t;e.parent(r)>=0;r=e.parent(r))n.push(bt[e.action(r)]);return n.reverse()}function _t(e,t){return Ge(Wt(e,t),t.onProgress)}function*Wt(e,t){if(e.outcome==="won")return{solved:!0,line:[],explored:0};let n=t.store??mt(be(e.level).words),r=l=>{if(l instanceof je)return{solved:!1,explored:n.size,capped:!0,reason:l.message};throw l},s;try{s=Wo(e,t,n)}catch(l){return r(l)}for(;;){let l;try{l=s()}catch(o){return r(o)}if("explored"in l)return l;yield l}}function Ge(e,t){for(;;){let n=e.next();if(n.done)return n.value;t?.(n.value)}}function Wo(e,t,n){let{cap:r,refuse:s}=t,l=t.prune??null,o=Math.max(1,t.progressEvery??65536),i=e.level,a=be(i),u=pt(i),c=new Uint32Array(a.words),h=new Uint32Array(a.words),d=1024,f=new Int32Array(d),m=new Int32Array(d),p=new Int32Array(d),g=new Uint8Array(d),y=new Uint16Array(d),b=new Int32Array(d),w=0,E=S=>{if(S<d)return;for(;d<=S;)d*=2;let R=new Int32Array(d);R.set(f),f=R;let T=new Int32Array(d);T.set(m),m=T;let B=new Int32Array(d);B.set(p),p=B;let A=new Uint8Array(d);A.set(g),g=A;let M=new Uint16Array(d);M.set(y),y=M},L=(S,R)=>f[S]<f[R]||f[S]===f[R]&&(m[S]<m[R]||m[S]===m[R]&&(y[S]>y[R]||y[S]===y[R]&&S<R)),P=S=>{let R=b[S];for(;S>0;){let T=S-1>>1,B=b[T];if(!L(R,B))break;b[S]=B,p[B]=S,S=T}b[S]=R,p[R]=S},O=S=>{if(w===b.length){let R=new Int32Array(b.length*2);R.set(b),b=R}b[w]=S,P(w++)},v=()=>{let S=b[0];p[S]=-1;let R=b[--w];if(w>0){let T=0;for(;;){let B=2*T+1;if(B>=w)break;let A=B+1,M=A<w&&L(b[A],b[B])?A:B;if(!L(b[M],R))break;b[T]=b[M],p[b[T]]=T,T=M}b[T]=R,p[R]=T}return S},I=u(e);if(Be(e,a,c,0),l&&l({...e,moves:0},c,0))return()=>({solved:!1,explored:0,capped:!1});let D=n.add(c,0,-1,0,0);if(n.size>=r)return()=>({solved:!1,explored:n.size,capped:!0});E(D),m[D]=Number.isFinite(I)?I:-1,f[D]=m[D],p[D]=-1,y[D]=e.hearts,m[D]>=0&&O(D);let $=0;return()=>{let S=null;for(;w>0;){if(S)return S;let R=v();if(g[R])return{solved:!0,line:Hn(n,R),explored:n.size};let T=f[R],B=T-m[R];++$%o===0&&(S={expanded:$,stored:n.size,bestF:T,startH:I}),n.words(R,h,0);let A=ft(h,0,a,i,B);for(let M of Ht){if(M>Re&&A.tools[Ve[M-Re-1]]<=0)continue;let j=q(A,bt[M]),W=j.state;if(Le(A,j)||W.outcome==="lost"||s&&s(j.events,A)||(Be(W,a,c,0,A,h,0),l&&l(W,c,0)))continue;let ne=n.size,F=n.add(c,0,R,M,B+1);if(F<0)continue;let N=W.outcome==="won";if(n.size>ne){E(F);let X=N?0:u(W);m[F]=Number.isFinite(X)?X:-1,p[F]=-1,g[F]=N?1:0,y[F]=W.hearts}if(N&&B+1===T)return{solved:!0,line:Hn(n,F),explored:n.size};if(n.size>=r)return{solved:!1,explored:n.size,capped:!0};m[F]<0||(f[F]=B+1+m[F],p[F]>=0?P(p[F]):O(F))}}return{solved:!1,explored:n.size,capped:!1}}}function No(e,t){for(let n=0;n<e.terrain.length;n++){if(!t(e.terrain[n]))continue;let r=Math.floor(n/e.cols),s=n%e.cols;for(let l of _){let o=r-K[l][0],i=s-K[l][1];if(o<0||i<0||o>=e.rows||i>=e.cols)continue;let a=H[e.terrain[o*e.cols+i]];if(a.slides||a.carries===l)return!0}}return!1}function Ko(e,t){let n=e.terrain.flatMap((r,s)=>r==="teleport"?[s]:[]);return n.length<2?!1:n.some(r=>_.some(s=>{let l=Math.floor(r/e.cols)+K[s][0],o=r%e.cols+K[s][1];return l>=0&&o>=0&&l<e.rows&&o<e.cols&&t(e.terrain[l*e.cols+o])}))}var _n=(e,t)=>No(e,t)||Ko(e,t);function Uo(e,t){let n=[];t.heartBits&&n.push({pos:t.heartAt,width:t.heartBits,set:!1}),t.pageBits&&n.push({pos:t.pageAt,width:t.pageBits,set:!0}),$e.forEach((s,l)=>{t.keyBits[l]&&!_n(e,o=>H[o].door===s)&&n.push({pos:t.keyAt[l],width:t.keyBits[l],set:!1})}),t.toolBits.forEach((s,l)=>{s&&n.push({pos:t.toolAt[l],width:s,set:!1})});let r=["flippers","fire-boots"];return t.gear.forEach((s,l)=>{r.includes(s)&&!_n(e,o=>H[o].needs===s)&&n.push({pos:t.gearAt+l,width:1,set:!1})}),n}var Nt=1024;function yt(e,t){let n=pt(e),r=Uo(e,t);if(!r.length)return M=>n(M)===1/0;let s=t.words,l=new Uint32Array(s);for(let M of r)for(let j=M.pos;j<M.pos+M.width;j++)l[j>>>5]|=1<<(j&31);let o=[],i=0;for(let M of r)o.push(i),i+=M.width;let a=i+31>>>5,u=r.length,c=Int32Array.from(r,M=>M.pos),h=Int32Array.from(r,M=>M.width),d=Uint8Array.from(r,M=>M.set?1:0),f=Int32Array.from(o),m=Uint32Array.from(l,M=>~M>>>0),p=Nt,g=new Uint32Array(p*s),y=new Int32Array(p),b=new Uint32Array(p),w=0,E=new Int32Array(Nt*2),L=E.length-1,P=Nt,O=new Uint32Array(P*a),v=new Uint32Array(P),I=new Int32Array(P),D=0,$=-1,S=new Uint32Array(s),R=new Uint32Array(a);function T(){p*=2;let M=new Uint32Array(p*s);M.set(g),g=M;let j=new Int32Array(p);j.set(y),y=j;let W=new Uint32Array(p);W.set(b),b=W,E=new Int32Array(p*2),L=E.length-1;for(let ne=0;ne<w;ne++){let F=b[ne]&L;for(;E[F]!==0;)F=F+1&L;E[F]=ne+1}}function B(M,j){let W=$;if(W>=0)$=I[W];else{if(D===P){P*=2;let ne=new Uint32Array(P*a);ne.set(O),O=ne;let F=new Uint32Array(P);F.set(v),v=F;let N=new Int32Array(P);N.set(I),I=N}W=D++}return O.set(R,W*a),v[W]=M,I[W]=j,W}function A(M,j,W,ne){for(let F=0;F<u;F++){let N=Y(M,j,f[F],h[F]),X=Y(W,ne,f[F],h[F]);if(d[F]?(N&X)!==X:N<X)return!1}return!0}return(M,j,W)=>{if(n(M)===1/0)return!0;let ne=M.moves;for(let x=0;x<s;x++)S[x]=j[W+x]&m[x];let F=Gt(S,0,s);R.fill(0);for(let x=0;x<u;x++)Z(R,0,f[x],h[x],Y(j,W,c[x],h[x]));let N=F&L,X=-1;for(let x=E[N];x!==0;N=N+1&L,x=E[N]){let k=x-1;if(b[k]!==F)continue;let z=!0;for(let G=0;G<s&&z;G++)z=g[k*s+G]===S[G];if(z){X=k;break}}if(X<0){if(w===p)for(T(),N=F&L;E[N]!==0;)N=N+1&L;return X=w++,g.set(S,X*s),b[X]=F,E[N]=X+1,y[X]=B(ne,-1),!1}for(let x=y[X];x>=0;x=I[x])if(v[x]<=ne&&A(O,x*a,R,0))return!0;let xe=-1;for(let x=y[X];x>=0;){let k=I[x];ne<=v[x]&&A(R,0,O,x*a)?(xe<0?y[X]=k:I[xe]=k,I[x]=$,$=x):xe=x,x=k}return y[X]=B(ne,y[X]),!1}}var de=2e6,ce=e=>e.some(t=>t.kind==="caught");function Ze(e,t=de){return _t(e,{cap:t,refuse:null,prune:yt(e.level,be(e.level))})}function Wn(e,t,n=de){return _t(e,{cap:n,refuse:t,prune:yt(e.level,be(e.level))})}function he(e,t,n=de,r={}){return Wt(e,{cap:n,refuse:t,prune:yt(e.level,be(e.level)),store:r.store,progressEvery:r.every})}var Nn={up:"u",down:"d",left:"l",right:"r"},Kt={mirror:"z",cake:"x",cow:"c"};function Oe(e){return e.map(t=>t.kind==="move"?Nn[t.dir]:t.kind==="wait"?"w":Kt[t.tool]).join("")}function He(e){let t=[];for(let n of e){let r=_.find(l=>Nn[l]===n),s=Object.keys(Kt).find(l=>Kt[l]===n);if(r)t.push({kind:"move",dir:r});else if(n==="w")t.push({kind:"wait"});else if(s)t.push({kind:"tool",tool:s});else return null}return t}var Ut=e=>e.solved?e.line.length:e.capped?"unknown":"none";function Yn(e,t=de){return Ge(Yo(e,t))}function*Yo(e,t=de,n={}){let r=ee(e),s=b=>({store:n.store?.(be(b).words),every:n.every}),l=yield*he(r,null,t,s(e)),o=Ut(l),i=0;if(l.solved){let b=r;for(let w of l.line){let E=q(b,w);b=E.state,ce(E.events,b)&&i++}}let a=Ut(yield*he(r,ce,t,s(e))),u=yield*qo(e,t,s(e)),c=u===null?"unknown":u?"chase":"solo",h=Yt(e),d=l.solved?Oe(l.line):"";if(!e.minotaur)return{solved:l.solved,shortest:o,explored:l.explored,withoutMinotaur:null,minotaurDelta:0,greedyWins:!0,catchFree:a,catches:i,label:c,naiveWins:h,line:d};let f={...e,minotaur:null},m=yield*he(ee(f),null,t,s(f)),p=Ut(m),g=m.solved?!1:m.capped?null:!1;if(m.solved){let b=r;for(let w of m.line)b=q(b,w).state;g=b.outcome==="won"}let y=typeof o=="number"&&typeof p=="number"?o-p:null;return{solved:l.solved,shortest:o,explored:l.explored,withoutMinotaur:p,minotaurDelta:y,greedyWins:g,catchFree:a,catches:i,label:c,naiveWins:h,line:d}}function Kn(e,t,n,r){let s=new Uint8Array(e.rows*e.cols),l=[t];s[t]=1;for(let o=0;o<l.length;o++){let i=l[o],a=Math.floor(i/e.cols),u=i%e.cols;for(let c of _){let h=a+K[c][0],d=u+K[c][1];if(h<0||d<0||h>=e.rows||d>=e.cols)continue;let f=h*e.cols+d;!s[f]&&n(f)&&(s[f]=1,l.push(f))}if(r?.from(i))for(let c of r.to)!s[c]&&n(c)&&(s[c]=1,l.push(c))}return s}function qn(e){let t=new Set(e.objects.filter(i=>i!==null));e.machines.some(i=>i.template==="block")&&t.add("block");let n=i=>{let a=H[i];return a.door?t.has(`key-${a.door}`):i==="water"?t.has("block"):i==="toggle-open"||i==="toggle-closed"},r=Kn(e,e.minotaur.r*e.cols+e.minotaur.c,i=>{let a=e.terrain[i];return H[a].minotaur||n(a)||a==="fake-wall"||a==="bomb"}),l=e.terrain.flatMap((i,a)=>i==="teleport"?[a]:[]).flatMap(i=>{let a=Math.floor(i/e.cols),u=i%e.cols;return _.flatMap(c=>{let h=a+K[c][0],d=u+K[c][1];return h<0||d<0||h>=e.rows||d>=e.cols?[]:[h*e.cols+d]})}),o=Kn(e,e.player.r*e.cols+e.player.c,i=>{let a=e.terrain[i],u=H[a];return a==="wall"?!1:u.door?n(a):!u.needs||t.has(u.needs)||n(a)},{from:i=>e.terrain[i]==="teleport",to:l});return!r.some((i,a)=>i===1&&o[a]===1)}function*qo(e,t=de,n={}){if(!e.minotaur||qn(e))return!1;let r=be(e),s=n.store??mt(r.words),l=Math.max(1,n.every??65536);try{let o=new Uint32Array(r.words),i=new Uint32Array(r.words);if(Be(ee(e),r,o,0),s.add(o,0,-1,0,0),s.size>=t)return null;let a=0;for(let u=0;u<s.size;u++){++a%l===0&&(yield{expanded:a,stored:s.size,bestF:0,startH:0}),s.words(u,i,0);let c=ft(i,0,r,e,0);for(let h of Ht){if(h>Re&&c.tools[Ve[h-Re-1]]<=0)continue;let d=q(c,bt[h]);if(d.events.some(m=>m.kind==="caught"&&m.by==="minotaur"))return!0;let f=d.state;if(!(Le(c,d)||f.outcome!=="playing")&&(Be(f,r,o,0,c,i,0),s.add(o,0,u,h,0),s.size>=t))return null}}return!1}catch(o){if(o instanceof je)return null;throw o}}var Vo=16;function Zo(e,t){let n=e.rows*e.cols,r=new Int32Array(n).fill(-1),s=new Int8Array(n).fill(-1);r[t]=0;let l=[t];for(let o=0;o<l.length;o++){let i=l[o],a=Math.floor(i/e.cols),u=i%e.cols;_.forEach((c,h)=>{let d=a+K[c][0],f=u+K[c][1];if(d<0||f<0||d>=e.rows||f>=e.cols)return;let m=d*e.cols+f;r[m]>=0||e.terrain[m]==="wall"||(r[m]=r[i]+1,s[m]=h,l.push(m))})}return{dist:r,via:s}}function Xo(e){let t=e.rows*e.cols,n=e.player.r*e.cols+e.player.c,r=[],s=[];for(let p=0;p<t;p++)e.objects[p]==="relic"&&r.push(p),e.terrain[p]==="exit"&&s.push(p);let l=e.relics,o=[n,...r].map(p=>Zo(e,p)),i=p=>{let g=-1,y=1/0;for(let b of s){let w=o[p].dist[b];w>=0&&w<y&&(y=w,g=b)}return[g,y]},a=(p,g)=>{let y=o[p].dist[g===0?n:r[g-1]];return y<0?1/0:y},u=null;if(l===0)u=[];else if(r.length<=Vo){let p=r.length,g=new Float64Array((1<<p)*p).fill(1/0),y=new Int8Array((1<<p)*p).fill(-1);for(let E=0;E<p;E++)g[(1<<E)*p+E]=a(0,E+1);let b=1/0,w=-1;for(let E=1;E<1<<p;E++){let L=Jo(E);if(!(L>l))for(let P=0;P<p;P++){let O=g[E*p+P];if(!(!(E&1<<P)||O===1/0)){if(L===l){let v=O+i(P+1)[1];v<b&&(b=v,w=E*p+P);continue}for(let v=0;v<p;v++){if(E&1<<v)continue;let I=(E|1<<v)*p+v,D=O+a(P+1,v+1);D<g[I]&&(g[I]=D,y[I]=P)}}}}if(w>=0){u=[];for(let E=w;;){let L=Math.floor(E/p),P=E%p;if(u.push(P+1),y[E]<0)break;E=(L&~(1<<P))*p+y[E]}u.reverse()}}else{u=[];let p=new Set(r.map((y,b)=>b+1)),g=0;for(;u.length<l;){let y=-1,b=1/0;for(let w of p){let E=a(g,w);E<b&&(b=E,y=w)}if(y<0){u=null;break}u.push(y),p.delete(y),g=y}}if(!u)return null;let c=u.length?u[u.length-1]:0,[h]=i(c);if(h<0)return null;let d=[],f=[0,...u],m=[...u.map(p=>r[p-1]),h];return f.forEach((p,g)=>{let{via:y}=o[p],b=m[g],w=[];for(let E=b;y[E]>=0;){let L=_[y[E]];w.push(L),E-=K[L][0]*e.cols+K[L][1]}d.push(...w.reverse())}),d}function Jo(e){let t=0;for(;e;e&=e-1)t++;return t}function Yt(e){let t=Xo(e);if(!t)return!1;let n=ee(e);for(let r of t)if(n=q(n,{kind:"move",dir:r}).state,n.outcome!=="playing")break;return n.outcome==="won"}var Fe={minotaurDelta:8,exploredTimes:20};function gt(e,t=Fe,n){let r=[];if(e.shortest==="unknown")return["the solver hit its cap: the level is not proved winnable"];if(!e.solved)return["the level cannot be won"];let s=e.withoutMinotaur!==null;if(s&&(e.minotaurDelta===null||e.greedyWins===null?r.push("the Minotaur-free search hit its cap"):e.minotaurDelta<=0&&e.greedyWins&&r.push("the Minotaur does not matter: the line that ignores him wins, no longer")),r.push(...Vn(e)),!n)return r;if(!s)return[...r,"a challenge level has a Minotaur"];e.greedyWins!==!1&&r.push("a challenge level: the line that ignores the Minotaur must lose"),e.minotaurDelta!==null&&e.minotaurDelta<t.minotaurDelta&&r.push(`a challenge level: the Minotaur adds ${e.minotaurDelta} moves, the bar is ${t.minotaurDelta}`);let l=a=>Math.max(0,...n.teaching.map(a)),o=l(a=>a.explored);e.explored<t.exploredTimes*o&&r.push(`a challenge level: stored ${e.explored} situations, the bar is ${t.exploredTimes} × ${o} = ${t.exploredTimes*o}`);let i=l(a=>typeof a.shortest=="number"?a.shortest:0);return typeof e.shortest=="number"&&e.shortest<i&&r.push(`a challenge level: ${e.shortest} moves, shorter than the longest teaching level's ${i}`),r}function Vn(e){return e.catchFree==="unknown"?["the catch-free search hit its cap"]:e.catchFree==="none"?["no win without a catch: no level may need one"]:typeof e.shortest=="number"&&e.catchFree>e.shortest?[`the fewest moves take a catch (${e.shortest}, against ${e.catchFree} without one): no level may need one`]:e.catches>0?["the shortest line takes a catch, though a line as short takes none: no level may need one"]:[]}var Un={ramp:{least:1.1,most:1.5},most:2e4};function Ce(e){return e.terrain.some(t=>t==="fake-wall"||t==="invisible-wall")}function Zn(e,t){return!Ce(e)||t.explored<=Un.most?[]:[`the level hides walls: stored ${t.explored} situations, the ceiling for a level that hides walls is ${Un.most}`]}var wt={shortest:40,explored:12e3,chaseShortest:30,chaseExplored:6e3};function Xn(e,t=wt){if(e.shortest==="unknown")return["the solver hit its cap: the level is not proved winnable"];if(!e.solved||typeof e.shortest!="number")return["the level cannot be won"];let n=[];e.naiveWins&&n.push("the plain walk to the exit wins"),n.push(...Vn(e));let r=e.label==="chase"&&e.greedyWins===!1&&e.minotaurDelta!==null&&e.minotaurDelta>=Fe.minotaurDelta,s=r?t.chaseShortest:t.shortest,l=r?t.chaseExplored:t.explored;return e.shortest<s&&n.push(`the quickest win is ${e.shortest} moves, the bar is ${s}`),e.explored<l&&n.push(`the solver searched ${e.explored} situations, the bar is ${l}`),n}var Qo={flippers:e=>e.gear.includes("flippers")&&e.terrain[e.player.r*e.level.cols+e.player.c]==="water","fire-boots":e=>e.gear.includes("fire-boots")&&e.terrain[e.player.r*e.level.cols+e.player.c]==="fire",skates:e=>e.gear.includes("skates")&&e.terrain[e.player.r*e.level.cols+e.player.c]==="ice",suction:e=>e.gear.includes("suction")&&H[e.terrain[e.player.r*e.level.cols+e.player.c]].carries!==void 0,mirror:e=>e.stone>0,cow:e=>e.cow!==null},el={ice:"skates","force-up":"suction","force-down":"suction","force-left":"suction","force-right":"suction"};function ge(e,t){let n=[...e.terrain],r=[...e.objects];t(n,r);let s=e.machines.filter(l=>n[l.at.r*e.cols+l.at.c]==="clone");return J(ke({...e,terrain:n,objects:r,machines:s}))}function xt(e){let t=[],n=o=>`row ${Math.floor(o/e.cols)+1}, column ${o%e.cols+1}`,r=o=>e.terrain[o.player.r*e.cols+o.player.c];for(let o of $e){let i=`key-${o}`,a=u=>H[r(u)].door===o;e.objects.includes(i)&&t.push({name:`the ${o} keys`,ignored:[ge(e,(u,c)=>{c.forEach((h,d)=>{h===i&&(c[d]=null)})})],used:a}),e.terrain.some(u=>H[u].door===o)&&t.push({name:`the ${o} doors`,ignored:["wall","floor"].map(u=>ge(e,(c,h)=>{c.forEach((d,f)=>{H[d].door===o&&(c[f]=u)}),h.forEach((d,f)=>{d===i&&(h[f]=null)})})),used:a})}let s=e.objects.filter(o=>o==="relic").length>e.relics;e.objects.forEach((o,i)=>{o==="block"?t.push({name:`the block at ${n(i)}`,ignored:[ge(e,(a,u)=>{u[i]=null,a[i]="wall"}),ge(e,(a,u)=>{u[i]=null})]}):(o==="relic"?s:o!==null&&o!=="cake"&&o!=="page"&&!o.startsWith("key-"))&&t.push({name:`the ${o==="relic"?"spare relic":o} at ${n(i)}`,ignored:[ge(e,(a,u)=>{u[i]=null})],used:o===null?void 0:Qo[o]})});let l=[["gravel",["gravel"],["floor","wall"]],["marked stones",["safe"],["floor","wall"]],["pop-up walls",["popup"],["floor","wall"]],["ice",["ice"],["floor"]],["currents",["force-up","force-down","force-left","force-right"],["floor"]],["water",["water"],["wall","floor"]],["fire",["fire"],["wall","floor"]],["teleports",["teleport"],["wall","floor"]]];for(let[o,i,a]of l){if(!e.terrain.some(h=>i.includes(h)))continue;let u=a.map(h=>ge(e,d=>{d.forEach((f,m)=>{i.includes(f)&&(d[m]=h)})})),c=el[i[0]];c&&e.objects.includes(c)&&u.push(ge(e,(h,d)=>{d.forEach((f,m)=>{f===c&&(d[m]=null)})})),t.push({name:`the ${o}`,ignored:u})}return e.terrain.some(o=>o==="button"||o==="toggle-open"||o==="toggle-closed")&&t.push({name:"the toggle walls and their button",ignored:[ge(e,o=>{o.forEach((i,a)=>{i==="button"||i==="toggle-open"?o[a]="floor":i==="toggle-closed"&&(o[a]="wall")})})]}),e.terrain.forEach((o,i)=>{let a=c=>{for(let[h,d]of Object.entries(e.links))d===i&&(c[Number(h)]="floor")},u=(c,h,d,f)=>t.push({name:`the ${c} at ${n(i)}`,ignored:[h,...f?[f]:[]].map(m=>ge(e,p=>{p[i]=m,d?.(p)}))});o==="trap"?u("snare","floor",a):o==="fake-wall"?u("fake wall","wall",void 0,"floor"):o==="invisible-wall"?u("invisible wall","floor"):o==="thief"?u("thief","floor"):o==="bomb"?u("bomb","floor"):o==="clone"&&u("clone machine","wall",a)}),e.hazards.forEach((o,i)=>{t.push({name:`the ${le[o.kind].name.toLowerCase()} at ${n(o.at.r*e.cols+o.at.c)}`,ignored:[J(ke({...e,hazards:e.hazards.filter((a,u)=>u!==i)}))]})}),t}var Jn={explored:1.3};function Qn(e,t,n,r=!1){let s=Ze(ee(t),n);if(!s.solved)return s.capped?"capped":"the level cannot be won";if(s.line.length!==e.shortest)return`the fewest moves go from ${e.shortest} to ${s.line.length}`;let l=Wn(ee(t),ce,n);return l.solved?l.line.length!==e.catchFree?`the fewest catch-free moves go from ${e.catchFree} to ${l.line.length}`:!r&&e.explored>=Jn.explored*s.explored?`the search falls from ${e.explored} situations to ${s.explored}`:null:l.capped?"capped":"no win without a catch"}function tl(e,t){let n=new Set;for(let r of t.ignored)for(let s=0;s<e.terrain.length;s++)(r.terrain[s]!==e.terrain[s]||r.objects[s]!==e.objects[s])&&n.add(s);return[...n]}function er(e,t,n){let r=n.used?[]:tl(e,n);if(!r.length&&!n.used)return!1;let s=ee(e),l=o=>o.r*e.cols+o.c;for(let o of He(t)??[]){if(s=q(s,o).state,n.used?.(s))return!0;let i=l(s.player),a=s.minotaur?l(s.minotaur):-1;for(let u of r)if(i===u||s.terrain[u]!==e.terrain[u]||s.objects[u]!==e.objects[u]||a===u&&e.terrain[u]==="trap")return!0}return!1}function tr(e,t,n=de,r=!1){return!t.solved||typeof t.catchFree!="number"?[]:xt(e).flatMap(s=>{if(r&&er(e,t.line,s))return[];let l=s.ignored.map(o=>Qn(t,o,n,r));return l.some(o=>o!==null&&o!=="capped")?[]:l.includes("capped")?[{unit:s,problem:`${s.name}: the search without it hit its cap, so it is not proved to matter`}]:[{unit:s,problem:r?`${s.name}: the shortest line never meets it, and ignoring it leaves the fewest moves at ${t.shortest}`:`${s.name}: ignoring it changes nothing (still ${t.shortest} moves, and the search no ${Jn.explored} × smaller)`}]})}function*nr(e,t,n=de){if(!t.solved||typeof t.catchFree!="number")return[];let r=[];for(let s of xt(e)){if(yield{expanded:0,stored:0,bestF:0,startH:0},er(e,t.line,s))continue;let l=s.ignored.map(o=>Qn(t,o,n,!0));l.some(o=>o!==null&&o!=="capped")||r.push(l.includes("capped")?`${s.name}: the search without it hit its cap, so it is not proved to matter`:`${s.name}: the shortest line never meets it, and ignoring it leaves the fewest moves at ${t.shortest}`)}return r}function rr(e){let t=[["Theseus",e.player]];e.minotaur&&t.push(["the Minotaur",e.minotaur]);for(let r of e.hazards)t.push([`the ${le[r.kind].name.toLowerCase()}`,r.at]);let n=[];for(let[r,s]of t){let l=s.r*e.cols+s.c,o=e.terrain[l],i=e.objects[l];(o!=="floor"||i!==null)&&n.push(`${r} starts on ${i??o} at row ${s.r+1}, column ${s.c+1}: nothing may start under a figure`)}return n}var _e={reach:8,challenge:{share:1/3,quiet:1/3},teaching:{share:1/4,quiet:1}};function or(e){return!e.minotaur||e.objects.includes("mirror")||e.terrain.includes("trap")?!1:qn(e)}function nl(e,t){let n=e.level;if(!e.minotaur)return 1/0;let r=e.minotaur.r*n.cols+e.minotaur.c,s=e.player.r*n.cols+e.player.c,l=new Map([[r,0]]),o=[r];for(let i=0;i<o.length;i++){let a=o[i],u=l.get(a);if(a===s)return u;if(u>=t)continue;let c=Math.floor(a/n.cols),h=a%n.cols;for(let d of _){let f=c+K[d][0],m=h+K[d][1];if(f<0||m<0||f>=n.rows||m>=n.cols)continue;let p=f*n.cols+m;l.has(p)||p!==s&&(!H[e.terrain[p]].minotaur||e.objects[p]==="block")||(l.set(p,u+1),o.push(p))}}return 1/0}function qt(e,t){let n=He(t.line)??[],r=ee(e),s=0,l=0,o=0;for(let i of n)r=q(r,i).state,r.stone>0||!!r.minotaur&&(se(gn(r),r.minotaur)||nl(r,_e.reach)<=_e.reach)?(s++,o=0):l=Math.max(l,++o);return{turns:n.length,live:s,quiet:l}}function lr(e,t,n){if(!e.minotaur||!t.solved||typeof t.shortest!="number")return[];let r=[];t.minotaurDelta!==null&&t.minotaurDelta<1&&r.push("the beast adds no moves: a route that ignores him wins as quickly");let s=_e[n],l=qt(e,t);return l.live<s.share*l.turns&&r.push(`the beast is live on ${l.live} of ${l.turns} turns; the bar is ${Math.ceil(s.share*l.turns)}`),l.quiet>s.quiet*l.turns&&r.push(`the beast is quiet for ${l.quiet} turns in a row; the bar is ${Math.floor(s.quiet*l.turns)}`),r}var rl={walk:"walks round the Minotaur and never uses a tool",cowAtOnce:"sets the cow down as soon as it holds it",cowNear:"sets the cow down when the Minotaur is within 3 steps",mirrorNear:"raises the mirror when the Minotaur is within 2 steps",toolsNear:"sets the cow down and raises the mirror when the Minotaur comes near",careful:"takes the safest step when its next one would be caught",carefulTools:"is careful and sets the cow down and raises the mirror when the Minotaur comes near",cowStuck:"sets the cow down where the Minotaur gets stuck behind a wall short of it",cowStuckCareful:"sets the cow down where the Minotaur gets stuck, raises the mirror when he is near, and is careful"},Je=Object.keys(rl),ol={walk:{cow:"none",mirror:!1,careful:!1},cowAtOnce:{cow:"once",mirror:!1,careful:!1},cowNear:{cow:"near",mirror:!1,careful:!1},mirrorNear:{cow:"none",mirror:!0,careful:!1},toolsNear:{cow:"near",mirror:!0,careful:!1},careful:{cow:"none",mirror:!1,careful:!0},carefulTools:{cow:"near",mirror:!0,careful:!0},cowStuck:{cow:"stuck",mirror:!1,careful:!1},cowStuckCareful:{cow:"stuck",mirror:!0,careful:!0}},ll=_.map(e=>({kind:"move",dir:e})),Xe={kind:"wait"},kt=e=>({kind:"tool",tool:e}),sl=(e,t)=>Math.abs(e.r-t.r)+Math.abs(e.c-t.c),We=e=>e.some(t=>t.kind==="caught");function il(e){let t=q(e,kt("cow"));if(t.state===e||We(t.events))return!1;let n=t.state;for(let r=0;r<10;r++){if(t=q(n,Xe),We(t.events)||t.state.outcome!=="playing")return!1;n=t.state}return!!n.cow}function al(e,t){let n=null;for(let r=0;r<e.terrain.length;r++){let s=e.terrain[r];(s==="fake-wall"||s==="invisible-wall")&&(n??=[...e.terrain],n[r]=s==="fake-wall"?"wall":"floor")}return t?{...e,terrain:n??e.terrain}:{...e,terrain:n??e.terrain,minotaur:null,stone:0}}var ar=(e,t)=>t.relicsLeft<e.relicsLeft,ur=(e,t)=>t.outcome==="won",sr=e=>e.keys.red+e.keys.blue+e.keys.yellow+e.keys.green,Tt=(e,t)=>sr(t)>sr(e)||t.gear.length>e.gear.length||t.tools.mirror>e.tools.mirror||t.tools.cow>e.tools.cow||t.tools.cake>e.tools.cake,ul=e=>(t,n)=>n.tools[e]>t.tools[e];function we(e,t){return ir(e,t,!0)??ir(e,t,!1)}function ir(e,t,n){let r=al(e,n),s=e.level.cols,l=new Set;for(let u of e.hazards){l.add(u.at.r*s+u.at.c);let[c,h]=K[u.dir];l.add((u.at.r+c)*s+u.at.c+h)}let o=u=>u.player.r*s+u.player.c,i=new Set([o(r)]),a=[];for(let u of _){let c=Bt(r,{kind:"move",dir:u});if(c.state===r||We(c.events)||c.state.player===r.player&&c.state.terrain===r.terrain||c.events.some(d=>d.kind==="robbed")||l.has(o(c.state)))continue;if(t(r,c.state))return{first:u,dist:1};let h=o(c.state);i.has(h)||(i.add(h),a.push({s:c.state,first:u}))}for(let u=2;a.length&&u<400;u++){let c=[];for(let{s:h,first:d}of a)for(let f of _){let m=Bt(h,{kind:"move",dir:f});if(m.state===h||We(m.events)||m.state.outcome==="lost"||m.events.some(g=>g.kind==="robbed"))continue;let p=o(m.state);if(!l.has(p)){if(t(r,m.state))return{first:d,dist:u};i.has(p)||(i.add(p),c.push({s:m.state,first:d}))}}a=c}return null}function Qe(e){let t=e.relicsLeft>0?we(e,ar)??we(e,Tt):we(e,ur)??we(e,Tt);return t?t.dist:1/0}function dl(e,t){for(let n of t)if(e.objects.some(r=>r===n)){let r=we(e,ul(n));if(r)return r}return e.relicsLeft>0?we(e,ar)??we(e,Tt):we(e,ur)??we(e,Tt)}function cl(e,t){let n=e.minotaur,r=n?sl(n,e.player):1/0;if(e.tools.cake>0&&e.hearts<=1)return kt("cake");if(t.cow!=="none"&&e.tools.cow>0&&!e.cow&&(t.cow==="stuck"?il(e):t.cow==="once"||r<=3))return kt("cow");if(t.mirror&&e.tools.mirror>0&&e.stone===0&&r<=2)return kt("mirror");let s=[];t.cow!=="none"&&s.push("cow"),t.mirror&&s.push("mirror");let l=dl(e,s),o=l?{kind:"move",dir:l.first}:Xe;if(o.kind==="move"&&q(e,o).state===e&&(o=Xe),t.careful&&We(q(e,o).events)){let i=null,a=1/0;for(let u of[...ll,Xe]){let c=q(e,u);if(c.state===e||We(c.events))continue;let h=Qe(c.state);h<a&&(a=h,i=u)}i&&(o=i)}return o}function Vt(e,t,n){let r=ol[t],s=ee(e),l=0;for(;l<n&&s.outcome==="playing";l++){let o=cl(s,r),i=q(s,o);i.state===s&&(i=q(s,Xe)),s=i.state}return{won:s.outcome==="won",turns:l}}var Zt=e=>4*e+50;function dr(e,t){return Je.filter(n=>Vt(e,n,Zt(t)).won)}var Ne={detour:1,offRoute:1,away:2,waits:3,traps:3,forced:4},hl=3,fl=e=>Math.max(5e4,2*e.explored),pl=e=>Math.max(6e3,e.explored),cr=_.map(e=>({kind:"move",dir:e})),hr={kind:"wait"},Jt=e=>e.some(t=>t.kind==="caught");function ml(e){let t={...e.level,minotaur:null};return{...e,level:t,minotaur:null,stone:0}}function*et(e,t,n={spent:0}){let r=He(t.line)??[],s=Math.max(0,t.minotaurDelta??0),l=0;if(e.minotaur&&r.length){let h=function*(m){if(m.outcome==="won")return 0;let p=yield*he(ml(m),null,fl(t));return n.spent+=p.explored,p.solved?p.line.length:p.capped?NaN:1/0},d=ee(e),f=yield*h(d);for(let m of r){let p=q(d,m).state,g=yield*h(p);Number.isFinite(f)&&!Number.isNaN(g)&&g!==f-1&&l++,f=g,d=p}}let o=0,i=0,a=0;{let h=ee(e),d=Qe(h);for(let f of r){let m=0;for(let y of[...cr,hr]){let b=q(h,y);y.kind==="move"&&Le(h,b)||Jt(b.events)||b.state.outcome==="lost"||m++}m===1&&a++,f.kind==="wait"&&i++;let p=q(h,f).state,g=p.outcome==="won"||p.relicsLeft<h.relicsLeft?0:Qe(p);f.kind==="move"&&Number.isFinite(d)&&g>d&&o++,d=g===0?Qe(p):g,h=p}}let u=0;{let h=ee(e);for(let d=0;d<r.length;d++){let f=r[d];if(d%hl===0)for(let m of[...cr,hr]){if(m.kind===f.kind&&(m.kind!=="move"||f.kind!=="move"||m.dir===f.dir))continue;let p=q(h,m);if(m.kind==="move"&&Le(h,p)||Jt(p.events)||p.state.outcome!=="playing")continue;let g=yield*he(p.state,ce,pl(t));n.spent+=g.explored,!g.solved&&!g.capped&&u++}h=q(h,f).state}}let c=Ne.detour*s+Ne.offRoute*l+Ne.away*o+Ne.waits*i+Ne.traps*u+Ne.forced*a;return{detour:s,offRoute:l,away:o,waits:i,traps:u,forced:a,total:c}}var bl=new Set(["wall","door-red","door-blue","door-yellow","door-green","gate","toggle-closed","fake-wall","invisible-wall","clone"]),Xt={most:.5,area:6};function yl(e){let t=e.rows,n=e.cols,r=(c,h)=>c>=0&&h>=0&&c<t&&h<n&&!bl.has(e.terrain[c*n+h]),s=0;for(let c=0;c<t;c++)for(let h=0;h<n;h++)r(c,h)&&s++;let l=new Uint8Array(t*n),o=new Uint8Array(t*n);for(let c=0;c+1<t;c++)for(let h=0;h+1<n;h++)r(c,h)&&r(c+1,h)&&r(c,h+1)&&r(c+1,h+1)&&(l[c*n+h]=1,o[c*n+h]=o[(c+1)*n+h]=o[c*n+h+1]=o[(c+1)*n+h+1]=1);let i=new Uint8Array(t*n),a=[];for(let c=0;c<t*n;c++){if(!l[c]||i[c])continue;let h=new Set,d=[c];i[c]=1;for(let f=0;f<d.length;f++){let m=d[f],p=Math.floor(m/n),g=m%n;h.add(m),h.add(m+1),h.add(m+n),h.add(m+n+1);for(let[y,b]of[[1,0],[-1,0],[0,1],[0,-1]]){let w=p+y,E=g+b,L=w*n+E;w>=0&&E>=0&&w<t&&E<n&&l[L]&&!i[L]&&(i[L]=1,d.push(L))}}a.push({cells:[...h].sort((f,m)=>f-m)})}let u=0;for(let c of o)u+=c;return{open:s,share:s?u/s:0,areas:a}}function gl(e,t){let n=e.cols,r=new Set([e.player.r*n+e.player.c,...e.hazards.map(l=>l.at.r*n+l.at.c)]);e.minotaur&&r.add(e.minotaur.r*n+e.minotaur.c);let s=[...e.terrain];for(let l of t){let o=Math.floor(l/n),i=l%n;o%2===0&&i%2===0&&s[l]==="floor"&&e.objects[l]===null&&!r.has(l)&&(s[l]="wall")}return J(ke({...e,terrain:s}))}function*wl(e,t){let n=yield*he(ee(e),ce,t);if(!n.solved)return null;let r=0;if(e.minotaur){let s=yield*he(ee({...e,minotaur:null}),null,t);if(!s.solved)return null;r=n.line.length-s.line.length}return yield*et(e,{line:Oe(n.line),minotaurDelta:r,explored:n.explored})}var xl=(e,t)=>`row ${Math.floor(t/e.cols)+1}, column ${t%e.cols+1}`;function*pr(e,t,n){let r=yl(e),s=[];r.share>Xt.most&&s.push({rule:"open",words:`Too open: ${Math.round(100*r.share)}% of the floor is open space (at most ${Math.round(100*Xt.most)}%)`});for(let l of r.areas){if(l.cells.length<Xt.area)continue;let o=gl(e,l.cells);if(o.terrain.every((a,u)=>a===e.terrain[u]))continue;let i=yield*wl(o,n);i&&i.total>=t.total&&s.push({rule:"open-area",words:`An open area near ${xl(e,l.cells[0])} does not earn its place: walled into corridors, the level is as hard (${i.total} against ${t.total})`,mended:o})}return s}var kl={walk:"The plain walk wins: walking to each relic and the exit, round the Minotaur, clears it",cowAtOnce:"The cow habit wins: setting the cow down at once and walking clears it",cowNear:"The cow habit wins: setting the cow down when the Minotaur comes near clears it",mirrorNear:"The mirror habit wins: raising the mirror when the Minotaur comes near clears it",toolsNear:"The tool habit wins: using the cow and the mirror when the Minotaur comes near clears it",careful:"The careful walk wins: stepping aside whenever the Minotaur would catch clears it",carefulTools:"The careful walk with tools wins: stepping aside and using the tools when he is near clears it",cowStuck:"The cow habit wins: setting the cow down where the Minotaur gets stuck clears it",cowStuckCareful:"The cow habit wins: setting the cow down where he gets stuck and stepping aside clears it"};function mr(e,t){return typeof t.shortest!="number"?[]:Je.filter(n=>Vt(e,n,Zt(t.shortest)).won).map(n=>({rule:`habit:${n}`,words:kl[n]}))}var fr=(e,t)=>J(ke({...e,objects:e.objects.map(n=>n===t?null:n)}));function*br(e,t,n,r){let s=[];if(typeof t.shortest!="number")return s;for(let l of["cow","mirror"]){if(!e.objects.includes(l))continue;let o=yield*he(ee(fr(e,l)),ce,r);o.solved&&o.line.length<=t.shortest&&s.push({rule:`tool:${l}`,words:`The ${l} is not needed: without it the level is won in ${o.line.length} moves`,mended:fr(e,l)})}if(n==="hard"&&e.objects.includes("cow")){let l=ee(e);for(let o of He(t.line)??[]){if(l.tools.cow>0&&!l.cow){let i=q(l,{kind:"tool",tool:"cow"});!Jt(i.events)&&i.state!==l&&(yield*he(i.state,ce,r)).solved&&s.push({rule:"tool:cow-early",words:"The cow works too early: setting it down as soon as it is held still wins"});break}l=q(l,o).state}}return s}function Qt(e,t=0){let n=3735928559^t,r=1103547991^t;for(let s=0;s<e.length;s++){let l=e.charCodeAt(s);n=Math.imul(n^l,2654435761),r=Math.imul(r^l,1597334677)}return n=Math.imul(n^n>>>16,2246822507)^Math.imul(r^r>>>13,3266489909),r=Math.imul(r^r>>>16,2246822507)^Math.imul(n^n>>>13,3266489909),[n>>>0,r>>>0]}function en(...e){return Qt(e.join(""))[0]}function yr(...e){let t=e.join(""),[n,r]=Qt(t),[s,l]=Qt(t,2654435769),o=n,i=r,a=s,u=l|1,c=()=>{let d=(o+i|0)+u|0;return u=u+1|0,o=i^i>>>9,i=a+(a<<3)|0,a=a<<21|a>>>11,a=a+d|0,(d>>>0)/4294967296};for(let d=0;d<12;d++)c();let h=d=>Math.floor(c()*d);return{next:c,int:h,pick:d=>d[h(d.length)],shuffle(d){let f=[...d];for(let m=f.length-1;m>0;m--){let p=h(m+1);[f[m],f[p]]=[f[p],f[m]]}return f}}}var Mt={keys:1,water:1,fire:1,ice:1,force:1,blocks:1,toggle:1,mirror:1,cow:1,gravel:2,popup:3,fake:4,invisible:4,snare:5,teleport:6,ball:7,glider:8,fireball:8,thief:9,bomb:9,clone:9};function tn(e){return Object.keys(Mt).filter(t=>Mt[t]<=e)}var Ke=["fake","invisible"],wr=["winding","branching","sidewinder","division","braided"],ae={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]},De=["up","down","left","right"];function Tl(e,t,n){let r=e.length,s=e[0].length;return t<=0||n<=0||t>=r-1||n>=s-1||e[t][n]!=="#"?!1:e[t-1][n]!=="#"&&e[t+1][n]!=="#"&&e[t][n-1]!=="#"&&e[t][n+1]!=="#"}function xr(e,t,n){let r=e[t][n];e[t][n]=".";let s=De.some(l=>Tl(e,t+ae[l][0],n+ae[l][1]));return e[t][n]=r,!s}function kr(e,t){let{rows:n,cols:r}=t;if(n%2===0||r%2===0||n<7||r<7)return null;let s=(n-1)/2,l=(r-1)/2,o=Array.from({length:n},()=>Array(r).fill("#")),i=x=>2*Math.floor(x/l)+1,a=x=>2*(x%l)+1,u=s*l;for(let x=0;x<u;x++)o[i(x)][a(x)]=".";let c=x=>{let k=Math.floor(x/l),z=x%l,G=[];return k>0&&G.push(x-l),k<s-1&&G.push(x+l),z>0&&G.push(x-1),z<l-1&&G.push(x+1),G},h=(x,k)=>[(i(x)+i(k))/2,(a(x)+a(k))/2],d=[],f=(x,k)=>{let[z,G]=h(x,k);o[z][G]=".",d.push({r:z,c:G})};for(let[x,k]of Ml(e,t.style,s,l,t.winding,c))f(x,k);let m=(x,k)=>o[x][k]!=="#",p=x=>De.filter(k=>m(i(x)+ae[k][0],a(x)+ae[k][1])).length;for(let x of e.shuffle([...Array(u).keys()])){if(p(x)!==1||e.next()>=t.braid)continue;let k=e.shuffle(c(x).filter(z=>{let[G,Q]=h(x,z);return o[G][Q]==="#"&&xr(o,G,Q)}));k.length&&f(x,k[0])}let g=new Set;for(let x=0;x<t.chambers&&s>2&&l>2;x++){let k=e.int(s-1),z=e.int(l-1);for(let G=2*k+1;G<=2*k+3;G++)for(let Q=2*z+1;Q<=2*z+3;Q++)o[G][Q]==="#"&&(o[G][Q]="."),g.add(G*r+Q)}let y=d.filter(x=>!g.has(x.r*r+x.c));y.length!==d.length&&(d.length=0,d.push(...y));let b=(x,k)=>d.some(z=>z.r===x&&z.c===k),w=()=>{let x=[];for(let k=1;k<n-1;k++)for(let z=1;z<r-1;z++)o[k][z]==="."&&!b(k,z)&&x.push([k,z]);return x},E=(x,k)=>De.filter(z=>m(x+ae[z][0],k+ae[z][1])).length===1,L=(x=!1)=>{let k=w();if(!k.length)return null;let z=x?k.filter(([G,Q])=>E(G,Q)):[];return e.pick(z.length?z:k)},P=(x,k=!1)=>{let z=L(k);return z?(o[z[0]][z[1]]=x,!0):!1},O=()=>e.shuffle(d.filter(x=>o[x.r][x.c]===".")),v=x=>{let k=O()[0];return k?(o[k.r][k.c]=x,!0):!1},I=()=>{let x=[];for(let k=1;k<n-1;k++)for(let z=1;z<r-1;z++)o[k][z]==="#"&&(o[k-1][z]==="."&&o[k+1][z]==="."&&o[k][z-1]==="#"&&o[k][z+1]==="#"||o[k][z-1]==="."&&o[k][z+1]==="."&&o[k-1][z]==="#"&&o[k+1][z]==="#")&&x.push([k,z]);return x.length?e.pick(x):null},D=x=>{for(let k of O()){let z=m(k.r-1,k.c)&&m(k.r+1,k.c)?["up","down"]:["left","right"],G=[[k.r,k.c]],Q=2+e.int(3);for(let fe of e.shuffle(z)){let ue=k.r,ye=k.c;for(;G.length<Q&&(ue+=ae[fe][0],ye+=ae[fe][1],o[ue]?.[ye]===".");)G.push([ue,ye])}if(!(G.length<2)){for(let[fe,ue]of G)o[fe][ue]=x;return!0}}return!1},$=new Map,S=new Map,R=x=>{let k=L();return k?(o[k[0]][k[1]]=x,$.set(k[0]*r+k[1],e.pick(De)),!0):!1},T=!0;for(let x of t.families){switch(x){case"keys":{let[k,z]=e.pick([["R","r"],["B","b"],["Y","y"],["G","g"]]),G=1+e.int(2);for(let Q=0;Q<G;Q++)T=v(k)&&T;for(let Q=0;Q<(k==="G"?1:G);Q++)T=P(z,!0)&&T;break}case"water":T=D("~")&&(e.next()<.5?P("f",!0):P("O"))&&T;break;case"fire":T=D("F")&&P("h",!0)&&T;break;case"ice":{T=D("=")&&T,e.next()<.5&&(T=P("k",!0)&&T);break}case"force":{T=D(e.pick(["^","v","<",">"]))&&T,e.next()<.5&&(T=P("u",!0)&&T);break}case"blocks":{let k=1+e.int(2);for(let z=0;z<k;z++)T=P("O")&&T;break}case"toggle":{let k=1+e.int(2);for(let z=0;z<k;z++)T=v(e.next()<.5?"T":"t")&&T;T=P("_")&&T;break}case"mirror":T=P("z",!0)&&T;break;case"cow":T=P("c",!0)&&T;break;case"gravel":{let k=1+e.int(2);for(let z=0;z<k;z++)T=v(":")&&T;break}case"popup":T=v(";")&&T;break;case"fake":{let k=e.next()<.6?I():null;k?o[k[0]][k[1]]="W":T=v("W")&&T;break}case"invisible":T=(e.next()<.5?v("I"):P("I"))&&T;break;case"snare":T=(e.next()<.5?v("&"):P("&"))&&P("-")&&T;break;case"teleport":T=P("@",!0)&&P("@",!0)&&T;break;case"ball":T=R("o")&&T;break;case"glider":T=R("w")&&T;break;case"fireball":T=R("e")&&T;break;case"thief":T=v("$")&&T;break;case"bomb":T=(e.next()<.5?v("!"):P("!"))&&T;break;case"clone":{let k=!1;for(let z=0;z<60&&!k;z++){let G=1+e.int(n-2),Q=1+e.int(r-2),fe=e.pick(De),ue=G+ae[fe][0],ye=Q+ae[fe][1];o[G][Q]!=="#"||o[ue]?.[ye]!=="."||(o[G][Q]="C",S.set(G*r+Q,`${e.pick(["block","ball","block"])}-${fe}`),k=!0)}T=k&&P("+")&&T;break}}if(!T)return null}let B=L();if(!B)return null;o[B[0]][B[1]]="P";let A=El(o,B),M=[];for(let x=1;x<n-1;x++)o[x][1]==="."&&M.push([x,0,x,1,A[x*r+1]]),o[x][r-2]==="."&&M.push([x,r-1,x,r-2,A[x*r+r-2]]);for(let x=1;x<r-1;x++)o[1][x]==="."&&M.push([0,x,1,x,A[r+x]]),o[n-2][x]==="."&&M.push([n-1,x,n-2,x,A[(n-2)*r+x]]);M.sort((x,k)=>k[4]-x[4]||x[0]-k[0]||x[1]-k[1]);let j=M.filter(x=>x[4]>0).slice(0,Math.max(1,Math.ceil(M.length/3)));if(!j.length)return null;let[W,ne,F,N]=e.pick(j);o[W][ne]="E";for(let x=0;x<t.relics;x++){let k=gr(o,A,.5,1).filter(([ue,ye])=>!(ue===F&&ye===N)),z=k.filter(([ue,ye])=>E(ue,ye)),G=z.length&&e.next()<.7?z:k;if(!G.length)return null;let[Q,fe]=e.pick(G);o[Q][fe]="*"}let X=gr(o,A,.25,.6);if(!X.length)return null;let xe=e.pick(X);return o[xe[0]][xe[1]]="M",t.relics>0&&e.next()<.5&&o[F][N]==="."&&!b(F,N)&&(o[F][N]="|"),{g:o,doors:d,facing:$,machines:S}}function Ml(e,t,n,r,s,l){let o=n*r,i=[];if(t==="sidewinder"){let d=e.next()<.5,f=e.next()<.5,m=d?r:n,p=d?n:r,g=(y,b)=>{let w=f?m-1-y:y;return d?b*r+w:w*r+b};for(let y=0;y<m;y++){let b=[];for(let w=0;w<p;w++){b.push(g(y,w));let E=y>0&&(w===p-1||e.next()<.5);if(y===0?w<p-1:!E){i.push([g(y,w),g(y,w+1)]);continue}if(y>0){let L=e.int(b.length);i.push([b[L],g(y-1,L+w-b.length+1)])}b=[]}}return i}if(t==="division"){let d=new Set,f=(m,p,g,y)=>{let b=g-m+1,w=y-p+1;if(b<2||w<2)return;if(b>w||b===w&&e.next()<.5){let L=m+e.int(b-1),P=p+e.int(w);for(let O=p;O<=y;O++)O!==P&&d.add(`${L*r+O}:${(L+1)*r+O}`);f(m,p,L,y),f(L+1,p,g,y)}else{let L=p+e.int(w-1),P=m+e.int(b);for(let O=m;O<=g;O++)O!==P&&d.add(`${O*r+L}:${O*r+L+1}`);f(m,p,g,L),f(m,L+1,g,y)}};f(0,0,n-1,r-1);for(let m=0;m<o;m++)m%r<r-1&&!d.has(`${m}:${m+1}`)&&i.push([m,m+1]),m+r<o&&!d.has(`${m}:${m+r}`)&&i.push([m,m+r]);return i}let a=t==="winding"?Math.max(s,.85):t==="branching"?Math.min(s,.15):s,u=new Uint8Array(o),c=e.int(o);u[c]=1;let h=[c];for(;h.length;){let d=e.next()<a?h.length-1:e.int(h.length),f=h[d],m=l(f).filter(g=>!u[g]);if(!m.length){h.splice(d,1);continue}let p=e.pick(m);i.push([f,p]),u[p]=1,h.push(p)}return i}function El(e,t){let n=e.length,r=e[0].length,s=new Int32Array(n*r).fill(-1);s[t[0]*r+t[1]]=0;let l=[t[0]*r+t[1]];for(let o=0;o<l.length;o++){let i=l[o],a=Math.floor(i/r),u=i%r;for(let c of De){let h=a+ae[c][0],d=u+ae[c][1];if(h<=0||d<=0||h>=n-1||d>=r-1)continue;let f=h*r+d;s[f]>=0||e[h][d]==="#"||(s[f]=s[i]+1,l.push(f))}}return s}function gr(e,t,n,r){let s=e.length,l=e[0].length,o=[];for(let i=1;i<s-1;i++)for(let a=1;a<l-1;a++)e[i][a]==="."&&t[i*l+a]>0&&o.push([i,a,t[i*l+a]]);return o.sort((i,a)=>i[2]-a[2]||i[0]-a[0]||i[1]-a[1]),o.slice(Math.floor(o.length*n),Math.ceil(o.length*r)).map(([i,a])=>[i,a])}function Ie(e,t){let n=[`title: ${t}`,"intro: "],r=[...e.facing.keys()].sort((l,o)=>l-o);r.length&&n.push(`facing: ${r.map(l=>e.facing.get(l)).join(" ")}`);let s=[...e.machines.keys()].sort((l,o)=>l-o);return s.length&&n.push(`machines: ${s.map(l=>e.machines.get(l)).join(" ")}`),`${n.join(`
 `)}
 
 ${e.g.map(l=>l.join("")).join(`
 `)}
-`}var yl=new Set("PM*rbygfhkuzcxOowe_-+&!I@");function wn(e,t){let r=t.g.map(d=>[...d]),n=r.length,s=r[0].length,l=[...t.doors],o=new Map(t.facing),i=d=>{let h=[];for(let c=1;c<n-1;c++)for(let p=1;p<s-1;p++)d(c,p)&&h.push([c,p]);return h},a=(d,h)=>l.some(c=>c.r===d&&c.c===h),u=e.next();if(u<.55){let d=i((c,p)=>yl.has(r[c][p])&&!a(c,p)),h=i((c,p)=>r[c][p]==="."&&!a(c,p));if(d.length&&h.length){let[c,p]=e.pick(d),[f,m]=e.pick(h);r[f][m]=r[c][p],r[c][p]=".";let b=o.get(c*s+p);b&&(o.delete(c*s+p),o.set(f*s+m,b))}}else if(u<.7){let d=l.filter(c=>r[c.r][c.c]!=="."),h=l.filter(c=>r[c.r][c.c]===".");if(d.length&&h.length){let c=e.pick(d),p=e.pick(h);r[p.r][p.c]=r[c.r][c.c],r[c.r][c.c]="."}}else if(u<.8&&o.size)o.set(e.pick([...o.keys()]),e.pick(Be));else{let d=l.filter(c=>r[c.r][c.c]==="."),h=i((c,p)=>r[c][p]==="#"&&(r[c-1][p]!=="#"&&r[c+1][p]!=="#"&&r[c][p-1]==="#"&&r[c][p+1]==="#"||r[c][p-1]!=="#"&&r[c][p+1]!=="#"&&r[c-1][p]==="#"&&r[c+1][p]==="#")&&yn(r,c,p));if(d.length>1&&(e.next()<.5||!h.length)){let c=e.pick(d);r[c.r][c.c]="#",l=l.filter(p=>p!==c)}else if(h.length){let[c,p]=e.pick(h);r[c][p]=".",l.push({r:c,c:p})}}return{g:r,doors:l,facing:o,machines:new Map(t.machines)}}var xn=e=>e==="floor"?"":e.startsWith("force")?"force":e.startsWith("toggle")?"toggle":e==="exit"||e==="gate"?"wall":e;function gl(e,t,r){for(let n=-1;n<=1;n++)for(let s=-1;s<=1;s++){let l=t+n,o=r+s;if(l>=0&&o>=0&&l<e.rows&&o<e.cols&&xn(e.terrain[l*e.cols+o])!=="wall")return!1}return!0}function kn(e){return Array.from({length:e.rows-2},(t,r)=>Array.from({length:e.cols-2},(n,s)=>{let l=xn(e.terrain[(r+1)*e.cols+s+1]);return l==="wall"&&gl(e,r+1,s+1)?"":l}))}var wl=e=>e[0].map((t,r)=>e.map(n=>n[r]).reverse()),xl=e=>e.map(t=>[...t].reverse());function At(e){let t=[];for(let r=0,n=e;r<4;r++,n=wl(n))t.push(n,xl(n));return t}function tt(e,t){let r=0;for(let n of t){let[s,l]=e.length*e[0].length<=n.length*n[0].length?[e,n]:[n,e],o=s.length,i=s[0].length,a=l.length,u=l[0].length;if(!(o>a||i>u||a-o>2||u-i>2))for(let d=0;d<=a-o;d++)for(let h=0;h<=u-i;h++){let c=0,p=0;for(let f=0;f<o;f++)for(let m=0;m<i;m++){let b=s[f][m],g=l[f+d][m+h];b&&b===g&&c++,(b||g)&&p++}r=Math.max(r,p?c/p:1)}}return r}var Mn=[{explored:614,shortest:36},{explored:272,shortest:25},{explored:259,shortest:23},{explored:53,shortest:16},{explored:59,shortest:18},{explored:98,shortest:14},{explored:174,shortest:18},{explored:322,shortest:25},{explored:450,shortest:18}];function lr(e){let t=new Set(e.terrain);return t.has("thief")||t.has("bomb")||t.has("clone")||t.has("button-red")?9:e.hazards.some(r=>r.kind!=="ball")?8:e.hazards.length?7:t.has("teleport")?6:t.has("trap")||t.has("button-brown")?5:t.has("fake-wall")||t.has("invisible-wall")?4:t.has("popup")?3:t.has("gravel")?2:1}var vt=2e3,kl={...xt,explored:vt,chaseExplored:vt},Tl=e=>({teaching:[{explored:Math.ceil(vt/De.exploredTimes),shortest:Mn[e-1].shortest}]});function En(e){let t=Mn[e-1];return{explored:vt,shortest:Math.max(xt.chaseShortest,t.shortest)}}var ot=3e4,An=4*ot,Ml={easy:{first:[25,40],plateau:[45,70]},medium:{first:[35,55],plateau:[70,110]},hard:{first:[50,75],plateau:[110,170]}},St={least:1.1,most:1.35},rt={least:.7,most:.9},vn=5;function sr(e,t){let r=Ml[t];if(e===null)return{least:r.first[0],most:r.first[1],plateau:!1};let n={least:r.plateau[0],most:r.plateau[1],plateau:!0};if(e>=r.plateau[0])return n;let s=Math.max(r.first[0],Math.ceil(e*St.least)),l=Math.min(r.plateau[1],Math.floor(e*St.most));return s>=r.plateau[0]?n:{least:s,most:Math.max(l,s+4),plateau:!1}}function Sn(e){return{least:Math.floor(e.least*rt.least),most:Math.max(Math.floor(e.least*rt.most),Math.floor(e.least*rt.least)+4),plateau:e.plateau}}function lt(e){return kn(e).map((t,r)=>t.map((n,s)=>(r+1)%2===0&&(s+1)%2===0?"":n))}function Pn(e){return{features:e.map(t=>At(lt(t)))}}function ir(e){let{rows:t,cols:r}=e,n=(o,i)=>e.terrain[o*r+i]==="wall",s=(o,i)=>4-[n(o-1,i),n(o+1,i),n(o,i-1),n(o,i+1)].filter(Boolean).length,l=[];for(let o=1;o<t-1;o++)for(let i=1;i<r-1;i++){let a=o*r+i,u=4-s(o,i);if(n(o,i)&&u===0&&l.push(`a lone wall at row ${o+1}, column ${i+1}`),!(e.terrain[a]==="floor"&&e.objects[a]===null&&!(e.player.r===o&&e.player.c===i)&&!(e.minotaur?.r===o&&e.minotaur.c===i)&&!e.hazards.some(p=>p.at.r===o&&p.at.c===i))||u<3)continue;let[h,c]=n(o-1,i)?n(o+1,i)?n(o,i-1)?[o,i+1]:[o,i-1]:[o+1,i]:[o-1,i];(u===4||h<=0||c<=0||h>=t-1||c>=r-1||s(h,c)!==2)&&l.push(`a bare pocket at row ${o+1}, column ${i+1}`)}return l}function ar(e,t,r=[]){let n=lt(e),s=[];return t.features.forEach((l,o)=>{let i=tt(n,l);i>=.42&&s.push(`its layout repeats campaign level ${o+1}'s (${i.toFixed(2)})`)}),r.forEach((l,o)=>{let i=tt(n,At(lt(l)));i>=.42&&s.push(`its layout repeats the run's level ${o+1}'s (${i.toFixed(2)})`)}),s}function zn(e,t,r=[]){let n=lt(e),s=0;for(let l of t.features)s=Math.max(s,tt(n,l));for(let l of r)s=Math.max(s,tt(n,At(lt(l))));return s}var Tn=e=>e.charAt(0).toUpperCase()+e.slice(1);function Se(e,t){return t.map(r=>{let n=Tn(r);return e==="purpose"?n=`A useless piece: ${r.slice(0,r.indexOf(":")>0?r.indexOf(":"):r.length)}`:r==="the plain walk to the exit wins"?n="The plain walk wins: walking straight to each relic and the exit clears it":r.startsWith("a challenge level: the line that ignores")?n="The Minotaur can be ignored: the best line without him also wins":r.startsWith("a challenge level: ")?n=Tn(r.slice(19)):e==="threat"?n=`The Minotaur is no threat: ${r}`:e==="tidy"&&(n=`Untidy: ${r}`),{rule:e,words:n}})}function*Ln(e,t,r,n,s=de){let l=[],o=a=>(l.push(...a),!n&&l.length>0);if(!t.solved)return{score:null,problems:Se("solve",wt(t))};if(o(Se("challenge",wt(t,De,Tl(lr(e))))))return{score:null,problems:l};if(o(Se("shared",qr(t,kl).filter(a=>!wt(t).includes(a)))))return{score:null,problems:l};if(o(Se("threat",rn(e,t,"challenge"))))return{score:null,problems:l};if(o(Se("hidden",Yr(e,t))))return{score:null,problems:l};if(o(Se("start",en(e))))return{score:null,problems:l};if(o(Se("tidy",ir(e))))return{score:null,problems:l};if(yield{expanded:0,stored:0,bestF:0,startH:0},o(fn(e,t)))return{score:null,problems:l};let i=yield*et(e,t);return o(yield*hn(e,i,s))?{score:i,problems:l}:o(yield*pn(e,t,typeof r=="function"?r(i):r,s))?{score:i,problems:l}:(o(Se("purpose",yield*Qr(e,t,s))),{score:i,problems:l})}function Rn(e,t,r,n=[]){let s=[];return t.explored>ot&&s.push(`stored ${t.explored} situations, more than ${ot}`),[...s,...ar(e,r,n)]}function On(e,t){return e.total<t.least||e.total>t.most?[`scored ${e.total}, the band is ${t.least} to ${t.most}`]:[]}var Dn=3e6,cr=12,ji=Dn*cr;function El(e){return{parts:cr,budget:e.budget===void 0?Dn:Math.max(1,Math.floor(e.budget/cr))}}var In=12,Pt=120,Al=.25,vl=8,Sl=60;function Pl(e,t,r,n,s=null,l=!1){let o=or(t).filter(c=>!qe.includes(c));r==="hard"&&s!=="cow"&&e.int(vl)!==0&&(o=o.filter(c=>c!=="cow"));let i=o.filter(c=>Et[c]===Math.min(t,9)),a=(r==="hard"?4:3)+e.int(2),u=[];s&&!qe.includes(s)?u.push(s):i.length&&e.next()<.5&&u.push(e.pick(i)),n&&u.push(s&&qe.includes(s)?s:e.pick(qe));for(let c of e.shuffle(o))u.length<a+(n?1:0)&&!u.includes(c)&&u.push(c);let d=l?[15]:[13,15],h=e.next();return{rows:e.pick(d),cols:e.pick(d),families:u,relics:(l?2:1)+e.int(2),winding:.3+.6*e.next(),braid:.45+.5*e.next(),chambers:h<.85?0:h<.97?1:2}}var dr=.6931471805599453;function zt(e){let t=0;for(;e>=2;)e/=2,t++;for(;e<1;)e*=2,t--;let r=(e-1)/(e+1),n=r*r,s=r,l=0;for(let o=1;o<60;o+=2)l+=s/o,s*=n;return 2*l+t*dr}function zl(e){if(!(e>=0))return 1;if(e>60)return 0;let t=0;for(;e>=dr;)e-=dr,t++;let r=1,n=1;for(let s=1;s<30;s++)r*=-e/s,n+=r;for(;t>0;t--)n/=2;return n}var Fn=Math.ceil(ot*1.05),ur=An,Ll=2e3;function Rl(e,t,r,n=()=>0){if(!e.minotaur)return 1/0;let s=ir(e).length;if(s)return 14+s;let l=n(e);if(l>=.42)return 13+10*(l-.42);if(Zt(e))return r(0,"cheap:walk"),12.5;if(tn(e))return r(0,"cheap:penned"),12.5;let o=te(e),i=Ze(o,Fn);if(!i.solved)return r(i.explored,i.capped?"solve:capped":"solve:lost"),i.capped?12:30;r(i.explored,"solve");let a=0,u=En(lr(e));i.explored<u.explored&&(a+=3*zt(u.explored/i.explored)),i.line.length<u.shortest&&(a+=.2*(u.shortest-i.line.length));let d=o,h=0;for(let w of i.line){let M=V(d,w);d=M.state,he(M.events,d)&&h++}a+=3*h;let c=Xt(e,{line:Ce(i.line)});if(a+=6*Math.max(0,Ke.challenge.share-c.live/Math.max(1,c.turns)),a+=6*Math.max(0,c.quiet/Math.max(1,c.turns)-Ke.challenge.quiet),a>0)return a;let p=Ze(te({...e,minotaur:null}),Fn);r(p.explored,"free");let f=0;if(p.solved){f=i.line.length-p.line.length,a+=.4*Math.max(0,De.minotaurDelta-f);let w=o;for(let M of p.line)w=V(w,M).state;w.outcome==="won"&&(a+=2)}if(a>0)return a;let m=an(e,i.line.length).length;if(r(Ll*Je.length,"habits"),m)return 1+.5*Math.min(m,4);let b={spent:0},g=_e(et(e,{line:Ce(i.line),minotaurDelta:f,explored:i.explored},b)).total;return r(b.spent,"score"),g<t.least&&(a+=3*zt(t.least/Math.max(1,g))),g>t.most&&(a+=3*zt(g/t.most)),a}function Cn(e,t){let r=Me(t),n=r.slice(r.indexOf(`
+`}var Pl=new Set("PM*rbygfhkuzcxOowe_-+&!I@");function Tr(e,t){let n=t.g.map(c=>[...c]),r=n.length,s=n[0].length,l=[...t.doors],o=new Map(t.facing),i=c=>{let h=[];for(let d=1;d<r-1;d++)for(let f=1;f<s-1;f++)c(d,f)&&h.push([d,f]);return h},a=(c,h)=>l.some(d=>d.r===c&&d.c===h),u=e.next();if(u<.55){let c=i((d,f)=>Pl.has(n[d][f])&&!a(d,f)),h=i((d,f)=>n[d][f]==="."&&!a(d,f));if(c.length&&h.length){let[d,f]=e.pick(c),[m,p]=e.pick(h);n[m][p]=n[d][f],n[d][f]=".";let g=o.get(d*s+f);g&&(o.delete(d*s+f),o.set(m*s+p,g))}}else if(u<.7){let c=l.filter(d=>n[d.r][d.c]!=="."),h=l.filter(d=>n[d.r][d.c]===".");if(c.length&&h.length){let d=e.pick(c),f=e.pick(h);n[f.r][f.c]=n[d.r][d.c],n[d.r][d.c]="."}}else if(u<.8&&o.size)o.set(e.pick([...o.keys()]),e.pick(De));else{let c=l.filter(d=>n[d.r][d.c]==="."),h=i((d,f)=>n[d][f]==="#"&&(n[d-1][f]!=="#"&&n[d+1][f]!=="#"&&n[d][f-1]==="#"&&n[d][f+1]==="#"||n[d][f-1]!=="#"&&n[d][f+1]!=="#"&&n[d-1][f]==="#"&&n[d+1][f]==="#")&&xr(n,d,f));if(c.length>1&&(e.next()<.5||!h.length)){let d=e.pick(c);n[d.r][d.c]="#",l=l.filter(f=>f!==d)}else if(h.length){let[d,f]=e.pick(h);n[d][f]=".",l.push({r:d,c:f})}}return{g:n,doors:l,facing:o,machines:new Map(t.machines)}}var Mr=e=>e==="floor"?"":e.startsWith("force")?"force":e.startsWith("toggle")?"toggle":e==="exit"||e==="gate"?"wall":e;function Al(e,t,n){for(let r=-1;r<=1;r++)for(let s=-1;s<=1;s++){let l=t+r,o=n+s;if(l>=0&&o>=0&&l<e.rows&&o<e.cols&&Mr(e.terrain[l*e.cols+o])!=="wall")return!1}return!0}function nn(e){return Array.from({length:e.rows-2},(t,n)=>Array.from({length:e.cols-2},(r,s)=>{let l=Mr(e.terrain[(n+1)*e.cols+s+1]);return l==="wall"&&Al(e,n+1,s+1)?"":l}))}var vl=e=>e[0].map((t,n)=>e.map(r=>r[n]).reverse()),Sl=e=>e.map(t=>[...t].reverse());function rn(e){let t=[];for(let n=0,r=e;n<4;n++,r=vl(r))t.push(r,Sl(r));return t}function Ue(e,t){let n=0;for(let r of t){let[s,l]=e.length*e[0].length<=r.length*r[0].length?[e,r]:[r,e],o=s.length,i=s[0].length,a=l.length,u=l[0].length;if(!(o>a||i>u||a-o>2||u-i>2))for(let c=0;c<=a-o;c++)for(let h=0;h<=u-i;h++){let d=0,f=0;for(let m=0;m<o;m++)for(let p=0;p<i;p++){let g=s[m][p],y=l[m+c][p+h];g&&g===y&&d++,(g||y)&&f++}n=Math.max(n,f?d/f:1)}}return n}var zr=[{explored:614,shortest:36},{explored:272,shortest:25},{explored:259,shortest:23},{explored:53,shortest:16},{explored:59,shortest:18},{explored:98,shortest:14},{explored:174,shortest:18},{explored:322,shortest:25},{explored:450,shortest:18}];function on(e){let t=new Set(e.terrain);return t.has("thief")||t.has("bomb")||t.has("clone")||t.has("button-red")?9:e.hazards.some(n=>n.kind!=="ball")?8:e.hazards.length?7:t.has("teleport")?6:t.has("trap")||t.has("button-brown")?5:t.has("fake-wall")||t.has("invisible-wall")?4:t.has("popup")?3:t.has("gravel")?2:1}var Et=2e3,zl={...wt,explored:Et,chaseExplored:Et},Ll=e=>({teaching:[{explored:Math.ceil(Et/Fe.exploredTimes),shortest:zr[e-1].shortest}]});function Lr(e){let t=zr[e-1];return{explored:Et,shortest:Math.max(wt.chaseShortest,t.shortest)}}var nt=3e4,Rr=4*nt,ln={easy:{first:[25,40],plateau:[45,70]},medium:{first:[35,55],plateau:[70,110]},hard:{first:[50,75],plateau:[110,170]}},rt={least:1.1,most:1.35},Ye={least:.7,most:.9},Or=5;function sn(e,t){let n=ln[t];if(e===null)return{least:n.first[0],most:n.first[1],plateau:!1};let r={least:n.plateau[0],most:n.plateau[1],plateau:!0};if(e>=n.plateau[0])return r;let s=Math.max(n.first[0],Math.ceil(e*rt.least)),l=Math.min(n.plateau[1],Math.floor(e*rt.most));return s>=n.plateau[0]?r:{least:s,most:Math.max(l,s+4),plateau:!1}}function Fr(e){return{least:Math.floor(e.least*Ye.least),most:Math.max(Math.floor(e.least*Ye.most),Math.floor(e.least*Ye.least)+4),plateau:e.plateau}}function ot(e){return nn(e).map((t,n)=>t.map((r,s)=>(n+1)%2===0&&(s+1)%2===0?"":r))}function Cr(e){return{features:e.map(t=>rn(ot(t)))}}function an(e){let{rows:t,cols:n}=e,r=(o,i)=>e.terrain[o*n+i]==="wall",s=(o,i)=>4-[r(o-1,i),r(o+1,i),r(o,i-1),r(o,i+1)].filter(Boolean).length,l=[];for(let o=1;o<t-1;o++)for(let i=1;i<n-1;i++){let a=o*n+i,u=4-s(o,i);if(r(o,i)&&u===0&&l.push(`a lone wall at row ${o+1}, column ${i+1}`),!(e.terrain[a]==="floor"&&e.objects[a]===null&&!(e.player.r===o&&e.player.c===i)&&!(e.minotaur?.r===o&&e.minotaur.c===i)&&!e.hazards.some(f=>f.at.r===o&&f.at.c===i))||u<3)continue;let[h,d]=r(o-1,i)?r(o+1,i)?r(o,i-1)?[o,i+1]:[o,i-1]:[o+1,i]:[o-1,i];(u===4||h<=0||d<=0||h>=t-1||d>=n-1||s(h,d)!==2)&&l.push(`a bare pocket at row ${o+1}, column ${i+1}`)}return l}function Rl(e){let{rows:t,cols:n}=e,r=nn(e),s=(b,w)=>b>=1&&w>=1&&b<t-1&&w<n-1,l=(b,w)=>s(b,w)&&r[b-1][w-1]!=="wall",o=(b,w)=>s(b,w)&&r[b-1][w-1]==="wall",i=0,a=0,u=0,c=0,h=[[0,0],[0,0],[0,0]],d=(b,w,E,L,P,O)=>{if(b(w-L,E-P))return;let v=0;for(;b(w+v*L,E+v*P);)v++;v>=2&&(O[0]++,O[1]+=v)};for(let b=1;b<t-1;b++)for(let w=1;w<n-1;w++){if(o(b,w)){d(o,b,w,0,1,h[2]),d(o,b,w,1,0,h[2]);continue}i++;let E=[l(b-1,w),l(b+1,w),l(b,w-1),l(b,w+1)].filter(Boolean).length;E===1&&a++,E>=3&&u++,l(b,w+1)&&c++,l(b+1,w)&&c++,d(l,b,w,0,1,h[0]),d(l,b,w,1,0,h[1])}let f=Math.max(1,i),m=([b,w])=>b?w/b:0,[p,g,y]=h.map(m);return{rows:t,cols:n,dead:a/f,forks:u/f,loops:Math.max(0,c-i+1)/f,run:m([h[0][0]+h[1][0],h[0][1]+h[1][1]]),walls:y,skew:p+g?Math.abs(p-g)/(p+g):0}}var Er={dead:.08,forks:.08,loops:.05,run:2,walls:3,skew:.3};function Ol(e,t){let n=(o,i)=>Math.min(o,i)/Math.max(o,i),r=Math.max(n(e.rows,t.rows)*n(e.cols,t.cols),n(e.rows,t.cols)*n(e.cols,t.rows)),s=Object.keys(Er),l=s.reduce((o,i)=>o+Math.abs(e[i]-t[i])/Er[i],0)/s.length;return r*Math.max(0,1-l)}var un=.6;function Dr(e,t){return Math.max(Ol(vr(e),vr(t)),Ue(ot(e),dn(t))*un/.42)}var Pr=new WeakMap,Ar=new WeakMap,vr=e=>{let t=Pr.get(e);return t||(t=Rl(e),Pr.set(e,t)),t},dn=e=>{let t=Ar.get(e);return t||(t=rn(ot(e)),Ar.set(e,t)),t};function cn(e,t,n=[],r=!0){let s=ot(e),l=[];return t.features.forEach((o,i)=>{let a=Ue(s,o);a>=.42&&l.push(`its layout repeats campaign level ${i+1}'s (${a.toFixed(2)})`)}),n.forEach((o,i)=>{let a=r?Dr(e,o):Ue(s,dn(o));a>=(r?un:.42)&&l.push(`its layout ${r?"looks like":"repeats"} the run's level ${i+1}'s (${a.toFixed(2)})`)}),l}function Ir(e,t,n=[],r=!0){let s=ot(e),l=0;for(let o of t.features)l=Math.max(l,Ue(s,o)/.42);for(let o of n)l=Math.max(l,r?Dr(e,o)/un:Ue(s,dn(o))/.42);return l}var Sr=e=>e.charAt(0).toUpperCase()+e.slice(1);function Pe(e,t){return t.map(n=>{let r=Sr(n);return e==="purpose"?r=`A useless piece: ${n.slice(0,n.indexOf(":")>0?n.indexOf(":"):n.length)}`:n==="the plain walk to the exit wins"?r="The plain walk wins: walking straight to each relic and the exit clears it":n.startsWith("a challenge level: the line that ignores")?r="The Minotaur can be ignored: the best line without him also wins":n.startsWith("a challenge level: ")?r=Sr(n.slice(19)):e==="threat"?r=`The Minotaur is no threat: ${n}`:e==="tidy"&&(r=`Untidy: ${n}`),{rule:e,words:r}})}function*$r(e,t,n,r,s=de){let l=[],o=a=>(l.push(...a),!r&&l.length>0);if(!t.solved)return{score:null,problems:Pe("solve",gt(t))};if(o(Pe("challenge",gt(t,Fe,Ll(on(e))))))return{score:null,problems:l};if(o(Pe("shared",Xn(t,zl).filter(a=>!gt(t).includes(a)))))return{score:null,problems:l};if(o(Pe("threat",lr(e,t,"challenge"))))return{score:null,problems:l};if(o(Pe("hidden",Zn(e,t))))return{score:null,problems:l};if(o(Pe("start",rr(e))))return{score:null,problems:l};if(o(Pe("tidy",an(e))))return{score:null,problems:l};if(yield{expanded:0,stored:0,bestF:0,startH:0},o(mr(e,t)))return{score:null,problems:l};let i=yield*et(e,t);return o(yield*pr(e,i,s))?{score:i,problems:l}:o(yield*br(e,t,typeof n=="function"?n(i):n,s))?{score:i,problems:l}:(o(Pe("purpose",yield*nr(e,t,s))),{score:i,problems:l})}function Br(e,t,n,r=[],s=!0){let l=[];return t.explored>nt&&l.push(`stored ${t.explored} situations, more than ${nt}`),[...l,...cn(e,n,r,s)]}function jr(e,t){return e.total<t.least||e.total>t.most?[`scored ${e.total}, the band is ${t.least} to ${t.most}`]:[]}var _r=3e6,fn=12,Ji=_r*fn;function Fl(e){return{parts:fn,budget:e.budget===void 0?_r:Math.max(1,Math.floor(e.budget/fn))}}var Wr=12,Pt=120,Cl=.25,Dl=8,Il={easy:{first:[11,13],plateau:[13,19]},medium:{first:[11,15],plateau:[15,21]},hard:{first:[13,15],plateau:[15,23]}},$l=.35,Bl=6;function jl(e,t){if(e.plateau)return 1;let n=ln[t];return Math.max(0,Math.min(1,(e.least-n.first[0])/(n.plateau[0]-n.first[0])))}var qe=e=>Math.max(7,Math.floor(e)%2?Math.floor(e):Math.floor(e)-1);function Gl(e,t,n,r=null){let{first:s,plateau:l}=Il[t],o=qe(r?r[0]:s[0]+(l[0]-s[0])*n+1),i=Math.max(o,qe(r?r[1]:s[1]+(l[1]-s[1])*n+1)),a=(u,c)=>u+2*e.int((c-u)/2+1);if(e.next()<$l){let u=a(i,qe(i+Bl)),c=a(o,qe((o+i)/2+1));return e.next()<.5?[c,u]:[u,c]}return[a(o,i),a(o,i)]}function Hl(e,t,n,r,s=null,l=0,o=null){let i=tn(t).filter(p=>!Ke.includes(p));n==="hard"&&s!=="cow"&&e.int(Dl)!==0&&(i=i.filter(p=>p!=="cow"));let a=i.filter(p=>Mt[p]===Math.min(t,9)),u=(n==="hard"?4:3)+e.int(2),c=[];s&&!Ke.includes(s)?c.push(s):a.length&&e.next()<.5&&c.push(e.pick(a)),r&&c.push(s&&Ke.includes(s)?s:e.pick(Ke));for(let p of e.shuffle(i))c.length<u+(r?1:0)&&!c.includes(p)&&c.push(p);let[h,d]=Gl(e,n,l,o),f=e.pick(wr),m=e.next();return{rows:h,cols:d,families:c,relics:(l>=.5?2:1)+e.int(2),style:f,winding:.3+.6*e.next(),braid:f==="braided"?.95+.05*e.next():.45+.45*e.next(),chambers:m<.85?0:m<.97?1:2}}var pn=.6931471805599453;function At(e){let t=0;for(;e>=2;)e/=2,t++;for(;e<1;)e*=2,t--;let n=(e-1)/(e+1),r=n*n,s=n,l=0;for(let o=1;o<60;o+=2)l+=s/o,s*=r;return 2*l+t*pn}function _l(e){if(!(e>=0))return 1;if(e>60)return 0;let t=0;for(;e>=pn;)e-=pn,t++;let n=1,r=1;for(let s=1;s<30;s++)n*=-e/s,r+=n;for(;t>0;t--)r/=2;return r}var Gr=Math.ceil(nt*1.05),hn=Rr,Wl=2e3;function Nl(e,t,n,r=()=>0){if(!e.minotaur)return 1/0;let s=an(e).length;if(s)return 14+s;let l=r(e);if(l>=1)return 13+10*(l-1);if(Yt(e))return n(0,"cheap:walk"),12.5;if(or(e))return n(0,"cheap:penned"),12.5;let o=ee(e),i=Ze(o,Gr);if(!i.solved)return n(i.explored,i.capped?"solve:capped":"solve:lost"),i.capped?12:30;n(i.explored,"solve");let a=0,u=Lr(on(e));i.explored<u.explored&&(a+=3*At(u.explored/i.explored)),i.line.length<u.shortest&&(a+=.2*(u.shortest-i.line.length));let c=o,h=0;for(let b of i.line){let w=q(c,b);c=w.state,ce(w.events,c)&&h++}a+=3*h;let d=qt(e,{line:Oe(i.line)});if(a+=6*Math.max(0,_e.challenge.share-d.live/Math.max(1,d.turns)),a+=6*Math.max(0,d.quiet/Math.max(1,d.turns)-_e.challenge.quiet),a>0)return a;let f=Ze(ee({...e,minotaur:null}),Gr);n(f.explored,"free");let m=0;if(f.solved){m=i.line.length-f.line.length,a+=.4*Math.max(0,Fe.minotaurDelta-m);let b=o;for(let w of f.line)b=q(b,w).state;b.outcome==="won"&&(a+=2)}if(a>0)return a;let p=dr(e,i.line.length).length;if(n(Wl*Je.length,"habits"),p)return 1+.5*Math.min(p,4);let g={spent:0},y=Ge(et(e,{line:Oe(i.line),minotaurDelta:m,explored:i.explored},g)).total;return n(g.spent,"score"),y<t.least&&(a+=3*At(t.least/Math.max(1,y))),y>t.most&&(a+=3*At(y/t.most)),a}function Hr(e,t){let n=ke(t),r=n.slice(n.indexOf(`
 
 `)+2).trimEnd().split(`
-`).map(o=>[...o]),s=new Map(t.hazards.map(o=>[o.at.r*t.cols+o.at.c,o.dir])),l=new Map(t.machines.map(o=>[o.at.r*t.cols+o.at.c,`${o.template}-${o.dir}`]));return{g:n,doors:e.doors,facing:s,machines:l}}function Ol(e){let t=r=>r.terrain.filter(n=>n==="wall").length;return e.reduce((r,n)=>t(n)<t(r)?n:r)}function Fl(e,t,r,n=!1){let s=t.run.slice(-In),l=e.filter(f=>f.chapter<=t.tier),o=s.map(f=>Q(f.text)),i=l.filter(f=>!s.some(m=>m.text===f.text)&&ar(Q(f.text),{features:[]},o).length===0),a=Bn(t.run)?.score??null,u=sr(Number.MAX_SAFE_INTEGER,t.grade),d=f=>Ie(Q(f.text))===n,h=[f=>d(f)&&f.score>=r.least&&f.score<=r.most,f=>f.score>=r.least&&f.score<=r.most&&!Ie(Q(f.text)),f=>a!==null&&f.score>=a*rt.least&&f.score<=a*St.most,f=>f.score>=u.least&&f.score<=u.most,()=>!0],c=f=>f[nr("endless-bank",t.seed,t.tier,t.grade,t.depth)%f.length],p=l.filter(f=>f.text!==t.run.at(-1)?.text);for(let f of h)for(let m of[i,p]){let b=m.filter(f);if(b.length)return c(b)}if(l.length)return c(l);if(e.length)return c(e);throw new RangeError("the bank is empty")}function Bn(e){for(let t=e.length-1;t>=0;t--)if(!Ie(Q(e[t].text)))return e[t];return null}function Cl(e,t,r,n,s,l,o,i,a){let u=o.by,d=(f,m="other")=>{o.spent+=f,u&&(u[m]=(u[m]??0)+f,u[m+"#"]=(u[m+"#"]??0)+1)},h=new Map,c=f=>{let m=`${f.cols}:${f.terrain.join(",")}`,b=h.get(m);return b===void 0&&(b=zn(f,n,s),h.set(m,b)),b},p={grade:t.grade,band:t.band,previous:r};for(let f=0;o.spent<l;f++){let m=mn("endless",...e,f),b=gn(m,Pl(m,t.tier,t.grade,t.hides,t.family??null,t.band.least>=Sl));if(!b){d(1e3);continue}let g=v=>{try{return Q($e(v,""))}catch{return null}},w=new Map,M=(v,D)=>{let C=$e(v,""),E=w.get(C);return E===void 0?(E=Rl(D,t.band,d,c),Number.isFinite(E)&&Ie(D)!==t.hides&&(E+=4),t.family&&Number.isFinite(E)&&!Dl(D,t.family)&&(E+=4),w.set(C,E)):u&&(u["memo#"]=(u["memo#"]??0)+1),E},T=g(b),z=T?M(b,T):1/0,F=z,q=o.spent,L=Pt;for(let v=0;v<L&&o.spent<l&&(v===L-1&&z<2&&L<3*Pt&&(L+=Pt),!(v===Math.floor(Pt/3)&&z>=8));v++){if(o.tries++,v%8===0&&i?.({tries:o.tries,spent:o.spent,budget:l}),z===0&&T){let P=Nr(T,ur);d(4*P.explored,"measure");let H=Rn(T,P,n,s),$=null;H.length||($=_e(Ln(T,P,t.grade,!1,ur)),d($.score?8*P.explored:0,"checks"));let A=H.length?H:$.problems.map(R=>R.words),y=!H.length&&$.problems.length>0&&$.problems.every(R=>R.rule==="purpose"),B=H.length?void 0:$.problems.find(R=>R.mended)?.mended;if(B){a?.(`mended: ${A.join("; ")}`),u&&(u["mended#"]=(u["mended#"]??0)+1),b=Cn(b,B),T=g(b),z=T?M(b,T):1/0;continue}if(A.length&&!y){if(a?.(`gate: ${A.join("; ")}`),u)for(let R of A){let N="gate:"+R.replace(/[0-9.,×%]+/g,"N").slice(0,50);u[N]=(u[N]??0)+1}z=1,w.set($e(b,""),z)}else if(y){d(kt(T).reduce((I,ee)=>I+ee.ignored.length,0)*2*P.explored,"useless");let R=Jr(T,P,ur,!0);if(!R.length){z=1,w.set($e(b,""),z);continue}a?.(`useless: ${R.map(I=>I.problem).join("; ")}`);let N=Ol(R[0].unit.ignored);b=Cn(b,N),T=g(b),z=T?M(b,T):1/0;continue}else{let R=$.score,N=On(R,t.band);if(!N.length)return{text:$e(b,""),d:P,score:R.total};a?.(`band: ${N.join("; ")}`),u&&(u["gate:band"]=(u["gate:band"]??0)+1),z=.5+3*Math.abs(zt(R.total<t.band.least?t.band.least/Math.max(1,R.total):R.total/t.band.most)),w.set($e(b,""),z)}}let D=wn(m,b),C=g(D);if(!C)continue;let E=M(D,C);(E<=z||Number.isFinite(E)&&m.next()<zl((E-z)/Al))&&(b=D,T=C,z=E)}a?.(`round ${f}: began ${F.toFixed(2)}, ended ${z.toFixed(2)} from passing, ${o.spent-q} spent`)}return null}function Dl(e,t){let r=l=>e.terrain.includes(l),n=l=>e.objects.includes(l),s=l=>e.hazards.some(o=>o.kind===l);switch(t){case"keys":return e.terrain.some(l=>l.startsWith("door-"));case"water":return r("water");case"fire":return r("fire");case"ice":return r("ice");case"force":return e.terrain.some(l=>l.startsWith("force-"));case"blocks":return n("block")||e.machines.some(l=>l.template==="block");case"toggle":return r("toggle-open")||r("toggle-closed");case"mirror":return n("mirror");case"cow":return n("cow");case"gravel":return r("gravel");case"popup":return r("popup");case"fake":return r("fake-wall");case"invisible":return r("invisible-wall");case"snare":return r("trap");case"teleport":return r("teleport");case"ball":return s("ball");case"glider":return s("glider");case"fireball":return s("fireball");case"thief":return r("thief");case"bomb":return r("bomb");case"clone":return r("clone")}}function $n(e){let t=e.run.at(-1)??null,r=sr(Bn(e.run)?.score??null,e.grade),n=e.depth>1&&or(e.tier).some(s=>qe.includes(s))&&nr("endless-hides",e.seed,e.tier,e.grade,e.depth)%vn===0;return{band:n?Sn(r):r,hides:n,before:t}}function jn(e,t,r,n={}){let{band:s,hides:l,before:o}=$n(e),{parts:i,budget:a}=El(e);if(!o||t<0||t>=i)throw new RangeError(`no part ${t} of a search for level ${e.depth}`);let u={tries:0,spent:0},d=e.run.slice(-In).map(p=>Q(p.text)),h=Cl([e.seed,e.tier,e.grade,e.depth,"part",t],{tier:e.tier,grade:e.grade,band:s,hides:l},{explored:o.explored},r,d,a,u,n.progress);return{found:h?{text:h.text,explored:h.d.explored,shortest:h.d.shortest,score:h.score,line:h.d.line,from:"made",tries:u.tries,spent:u.spent}:null,...u}}function Gn(e,t,r=0,n=0){let s=$n(e),l=Fl(t,e,s.band,s.hides);return{text:l.text,explored:l.explored,shortest:l.shortest,score:l.score,line:l.line,from:"bank",tries:r,spent:n}}var Il=150;function Hn(e){let t=null;return{receive(r){try{if(r.type==="bank"){e.post({type:"made",id:r.id,made:Gn(r.request,e.banks[r.request.grade],r.tries,r.spent)});return}if(r.type!=="part")return;t??=e.known();let n=-1/0,s=jn(r.request,r.part,t,{progress:l=>{let o=e.now();o-n<Il||(n=o,e.post({type:"progress",id:r.id,progress:l}))}});e.post({type:"part",id:r.id,part:r.part,result:s})}catch(n){e.post({type:"failed",id:r.id,message:n instanceof Error?n.message:String(n)})}}}}var Wn={easy:[{chapter:1,explored:3193,shortest:41,score:26,line:"rrrruurrddddddlldcdrrlluurruuuuuulluurrru",text:`title: 
+`).map(o=>[...o]),s=new Map(t.hazards.map(o=>[o.at.r*t.cols+o.at.c,o.dir])),l=new Map(t.machines.map(o=>[o.at.r*t.cols+o.at.c,`${o.template}-${o.dir}`]));return{g:r,doors:e.doors,facing:s,machines:l}}function Kl(e){let t=n=>n.terrain.filter(r=>r==="wall").length;return e.reduce((n,r)=>t(r)<t(n)?r:n)}function Ul(e,t,n,r=!1){let s=t.run.slice(-Wr),l=e.filter(y=>y.chapter<=t.tier),o=s.map(y=>J(y.text)),i=l.filter(y=>!s.some(b=>b.text===y.text)&&cn(J(y.text),{features:[]},o).length===0),a=Nr(t.run)?.score??null,u=sn(Number.MAX_SAFE_INTEGER,t.grade),c=y=>Ce(J(y.text))===r,h=[y=>c(y)&&y.score>=n.least&&y.score<=n.most,y=>y.score>=n.least&&y.score<=n.most&&!Ce(J(y.text)),y=>a!==null&&y.score>=a*Ye.least&&y.score<=a*rt.most,y=>y.score>=u.least&&y.score<=u.most],d=y=>y[en("endless-bank",t.seed,t.tier,t.grade,t.depth)%y.length],f=l.filter(y=>y.text!==t.run.at(-1)?.text),m=y=>a!==null&&y.score>=a*Ye.least&&y.score<=Math.max(a*rt.most,u.most),p=()=>!0,g=[...h.map(y=>[i,y]),[i,m],...h.map(y=>[f,y]),[i,p],[f,p]];for(let[y,b]of g){let w=y.filter(b);if(w.length)return d(w)}if(l.length)return d(l);if(e.length)return d(e);throw new RangeError("the bank is empty")}function Nr(e){for(let t=e.length-1;t>=0;t--)if(!Ce(J(e[t].text)))return e[t];return null}function Yl(e,t,n){let r=yr("endless",...e,n),s=Hl(r,t.tier,t.grade,t.hides,t.family??null,jl(t.band,t.grade),t.sides??null);return{rng:r,plan:s,sketch:kr(r,s)}}function ql(e,t,n,r,s,l,o,i,a){let u=o.by,c=(m,p="other")=>{o.spent+=m,u&&(u[p]=(u[p]??0)+m,u[p+"#"]=(u[p+"#"]??0)+1)},h=new Map,d=m=>{let p=`${m.cols}:${m.terrain.join(",")}`,g=h.get(p);return g===void 0&&(g=Ir(m,r,s,t.look??!0),h.set(p,g)),g},f={grade:t.grade,band:t.band,previous:n};for(let m=0;o.spent<l;m++){let{rng:p,plan:g,sketch:y}=Yl(e,t,m),b=y;if(!b){c(1e3);continue}let w=$=>{try{return J(Ie($,""))}catch{return null}},E=new Map,L=($,S)=>{let R=Ie($,""),T=E.get(R);return T===void 0?(T=Nl(S,t.band,c,d),Number.isFinite(T)&&Ce(S)!==t.hides&&(T+=4),t.family&&Number.isFinite(T)&&!Vl(S,t.family)&&(T+=4),E.set(R,T)):u&&(u["memo#"]=(u["memo#"]??0)+1),T},P=w(b);if(!P||d(P)>=1){c(1e3,"like");continue}let O=L(b,P),v=O,I=o.spent,D=Pt;for(let $=0;$<D&&o.spent<l&&($===D-1&&O<2&&D<3*Pt&&(D+=Pt),!($===Math.floor(Pt/3)&&O>=8));$++){if(o.tries++,$%8===0&&i?.({tries:o.tries,spent:o.spent,budget:l}),O===0&&P){let B=Yn(P,hn);c(4*B.explored,"measure");let A=Br(P,B,r,s,t.look??!0),M=null;A.length||(M=Ge($r(P,B,t.grade,!1,hn)),c(M.score?8*B.explored:0,"checks"));let j=A.length?A:M.problems.map(F=>F.words),W=!A.length&&M.problems.length>0&&M.problems.every(F=>F.rule==="purpose"),ne=A.length?void 0:M.problems.find(F=>F.mended)?.mended;if(ne){a?.(`mended: ${j.join("; ")}`),u&&(u["mended#"]=(u["mended#"]??0)+1),b=Hr(b,ne),P=w(b),O=P?L(b,P):1/0;continue}if(j.length&&!W){if(a?.(`gate: ${j.join("; ")}`),u)for(let F of j){let N="gate:"+F.replace(/[0-9.,×%]+/g,"N").slice(0,50);u[N]=(u[N]??0)+1}O=1,E.set(Ie(b,""),O)}else if(W){c(xt(P).reduce((X,xe)=>X+xe.ignored.length,0)*2*B.explored,"useless");let F=tr(P,B,hn,!0);if(!F.length){O=1,E.set(Ie(b,""),O);continue}a?.(`useless: ${F.map(X=>X.problem).join("; ")}`);let N=Kl(F[0].unit.ignored);b=Hr(b,N),P=w(b),O=P?L(b,P):1/0;continue}else{let F=M.score,N=jr(F,t.band);if(!N.length)return{text:Ie(b,""),d:B,score:F.total,plan:g};a?.(`band: ${N.join("; ")}`),u&&(u["gate:band"]=(u["gate:band"]??0)+1),O=.5+3*Math.abs(At(F.total<t.band.least?t.band.least/Math.max(1,F.total):F.total/t.band.most)),E.set(Ie(b,""),O)}}let S=Tr(p,b),R=w(S);if(!R)continue;let T=L(S,R);(T<=O||Number.isFinite(T)&&p.next()<_l((T-O)/Cl))&&(b=S,P=R,O=T)}a?.(`round ${m}: began ${v.toFixed(2)}, ended ${O.toFixed(2)} from passing, ${o.spent-I} spent`)}return null}function Vl(e,t){let n=l=>e.terrain.includes(l),r=l=>e.objects.includes(l),s=l=>e.hazards.some(o=>o.kind===l);switch(t){case"keys":return e.terrain.some(l=>l.startsWith("door-"));case"water":return n("water");case"fire":return n("fire");case"ice":return n("ice");case"force":return e.terrain.some(l=>l.startsWith("force-"));case"blocks":return r("block")||e.machines.some(l=>l.template==="block");case"toggle":return n("toggle-open")||n("toggle-closed");case"mirror":return r("mirror");case"cow":return r("cow");case"gravel":return n("gravel");case"popup":return n("popup");case"fake":return n("fake-wall");case"invisible":return n("invisible-wall");case"snare":return n("trap");case"teleport":return n("teleport");case"ball":return s("ball");case"glider":return s("glider");case"fireball":return s("fireball");case"thief":return n("thief");case"bomb":return n("bomb");case"clone":return n("clone")}}function Kr(e){let t=e.run.at(-1)??null,n=sn(Nr(e.run)?.score??null,e.grade),r=e.depth>1&&tn(e.tier).some(s=>Ke.includes(s))&&en("endless-hides",e.seed,e.tier,e.grade,e.depth)%Or===0;return{band:r?Fr(n):n,hides:r,before:t}}function Ur(e,t,n,r={}){let{band:s,hides:l,before:o}=Kr(e),{parts:i,budget:a}=Fl(e);if(!o||t<0||t>=i)throw new RangeError(`no part ${t} of a search for level ${e.depth}`);let u={tries:0,spent:0},c=e.run.slice(-Wr).map(f=>J(f.text)),h=ql([e.seed,e.tier,e.grade,e.depth,"part",t],{tier:e.tier,grade:e.grade,band:s,hides:l},{explored:o.explored},n,c,a,u,r.progress);return{found:h?{text:h.text,explored:h.d.explored,shortest:h.d.shortest,score:h.score,line:h.d.line,from:"made",tries:u.tries,spent:u.spent}:null,...u}}function Yr(e,t,n=0,r=0){let s=Kr(e),l=Ul(t,e,s.band,s.hides);return{text:l.text,explored:l.explored,shortest:l.shortest,score:l.score,line:l.line,from:"bank",tries:n,spent:r}}var Zl=150;function qr(e){let t=null;return{receive(n){try{if(n.type==="bank"){e.post({type:"made",id:n.id,made:Yr(n.request,e.banks[n.request.grade],n.tries,n.spent)});return}if(n.type!=="part")return;t??=e.known();let r=-1/0,s=Ur(n.request,n.part,t,{progress:l=>{let o=e.now();o-r<Zl||(r=o,e.post({type:"progress",id:n.id,progress:l}))}});e.post({type:"part",id:n.id,part:n.part,result:s})}catch(r){e.post({type:"failed",id:n.id,message:r instanceof Error?r.message:String(r)})}}}}var Vr={easy:[{chapter:1,explored:3193,shortest:41,score:26,line:"rrrruurrddddddlldcdrrlluurruuuuuulluurrru",text:`title: 
 intro: 
 
 ##########E##
@@ -169,6 +169,26 @@ intro:
 #.#.#.###.#F#.#
 #.#....P..#h..#
 ###############
+`},{chapter:1,explored:2980,shortest:52,score:47,line:"rrddllwllllllulluuduurrudlluulluuuurrrrrruulluullllu",text:`title: 
+intro: 
+
+#####E#############
+#......F..#.......#
+#<#####.#.#.#.#.#.#
+#.......#...#.#.#.#
+#.#.#######...#...#
+#.#.#....*..#...#.#
+#...#<###.#.#.###.#
+#.#.......#.......#
+#.#.#.#####.##.##.#
+#...#...#.........#
+#.#.#F#.#*#.#.#.###
+#.#...#...#.#.#.M.#
+#.#.#...###.#...###
+#...#<#h#.....#P..#
+#.###.#...###.###.#
+#.......#.........#
+###################
 `},{chapter:1,explored:2074,shortest:45,score:51,line:"wrrwlldlluullddllddddrrcrrrrrrlllllllluuuuuul",text:`title: 
 intro: 
 
@@ -216,6 +236,42 @@ intro:
 #.#..O.r......#
 #.##.####.###.#
 #.R....P......#
+###############
+`},{chapter:2,explored:29717,shortest:64,score:50,line:"ddlrrrrrrrlllllclddddlddrrrrrrrrddlllrrruullllllldduulllluulluul",text:`title: 
+intro: 
+
+###################
+#......P#.#.#.#.#.#
+#.#####.#.#.#.#.#.#
+#............c#...#
+##.####.#.#######.#
+E|..:.#.#...#.#...#
+#.#####.#####.#.#.#
+#...........#.#.#.#
+###.##.############
+#...*...M.........#
+#######.######:##.#
+#.....#*..#*......#
+###################
+`},{chapter:2,explored:4621,shortest:75,score:53,line:"wllllllddddddddrruurrddurrurruullwllllllddddrrddddrrddrrrruuuuuurruurruuuur",text:`title: 
+intro: 
+
+###############
+#...._*P..#...#
+#.#######.#.###
+#.....#.#.#.#.E
+#.###.#.###...#
+#...........#.#
+#.#######.###T#
+#.#...#...#.:.#
+#.#.#...###.###
+#...#*#.......#
+#.#.#.###.#.#.#
+#.#.t.#...#.#.#
+#.#.###.#:#####
+#......M#.....#
+#.###.###.###.#
+#......*......#
 ###############
 `},{chapter:3,explored:2622,shortest:49,score:52,line:"lllllldduuddrrdddddrrdrrrrrrddrrlluullluurruurrrr",text:`title: 
 intro: 
@@ -283,6 +339,26 @@ intro:
 #####.#.#.###.#
 #M..*.#.#....|E
 ###############
+`},{chapter:5,explored:4288,shortest:60,score:48,line:"dlldurruuurrrruuuurrllddddddddllrruuuullllddddddrrlluuullddl",text:`title: 
+intro: 
+
+#############
+#...#.....#.#
+#.#.#####.#.#
+#.#.........#
+#.#####.#&#.#
+#F.F....#.#.#
+#.#.###.#.#.#
+#.#.....#.#.#
+#.#.###F#...#
+#-#P#.....#.#
+#...###.#.#.#
+#h#.#*M.#...#
+E.#.#######.#
+#.#..*....#.#
+#.#.#.###.#.#
+#...#.......#
+#############
 `},{chapter:5,explored:2003,shortest:106,score:57,line:"llddddllddddddrrrrrruuuuuuddddddllllllrluuuuuullddlluuuulldduurrddddrruurrddddddrrrrrruulllluuddrrrrddllld",text:`title: 
 intro: 
 
@@ -333,6 +409,26 @@ intro:
 ###.#######.#
 #...Y.......#
 ######E######
+`},{chapter:6,explored:13704,shortest:50,score:49,line:"lluwwwuuurrddduurrllulluuuuullzddlldduullddddddlld",text:`title: 
+intro: 
+
+###################
+#@..#.#.....#.....#
+#.###.#####.#.#####
+#..P..............#
+#.##.##.###.###.#.#
+#...............#.#
+###.####.##.###.#.#
+#...#.............#
+#####.#####.#.###.#
+#...#.#.....#z..#.#
+###.#.#.#.###.#.#.#
+#.......#*#.#.#.#.#
+#####.#.###.#M..#.#
+#.....#.#...#.#...#
+#.#####...###.#.#.#
+#....|..#....@#*#.#
+#####E#############
 `},{chapter:7,explored:14398,shortest:48,score:39,line:"dullddllddrrddrrlluuclllluulllrrrddrrrrddrrddddd",text:`title: 
 intro: 
 facing: down
@@ -350,6 +446,50 @@ facing: down
 #.#.#.#####.#
 #..@#.#.....#
 ###########E#
+`},{chapter:7,explored:7944,shortest:54,score:49,line:"uulluulluullulldlllwrrruuuuruuruullllllddddllddrrlllll",text:`title: 
+intro: 
+facing: right
+
+#########################
+#...#...........#.......#
+###.#.#####.#.#.#.#.###.#
+#...#.#.....#.#...#.....#
+#.#.#.####.##.#.#####.###
+#.#.....#.....#.#.......#
+#.#.###.#.###.#.#.##.##.#
+E....*..#.#.............#
+#.#######...####.##.###.#
+#o....*...#.R...........#
+#.#.###.###.#.##.####.###
+#.#.......#.#r..........#
+###.#.#.#######.###.###.#
+#...#.#...#.......#.....#
+#.###.#.#####.###.#.#####
+#....M......#....P......#
+#########################
+`},{chapter:7,explored:7455,shortest:70,score:50,line:"rwwwlllrrrrwwlllluuuurrrruurrlluulllluurruurrrruulluurrrrddrruurrrrrrr",text:`title: 
+intro: 
+facing: left
+
+###################
+#...#.....#......|E
+#.#.#*###M#.#.###.#
+#.#.#...#...#....-#
+#.#.###.#.#.###.#.#
+#.........#.....#.#
+###.#############.#
+#...#.....#.#...#.#
+#.###.#####.#.#.#.#
+#.....#...#...#...#
+#.###.###.#.#####.#
+#o..#..*....#.....#
+###.#.##.####.###.#
+#.........#...#.#.#
+#.###.#.#.#.#.#.#.#
+#....&#.#...#.....#
+#.###########.###.#
+#..P..........#...#
+###################
 `},{chapter:7,explored:4625,shortest:45,score:63,line:"rruuddlldduurruurruuuurrrwwwwrrrlwwllllluurru",text:`title: 
 intro: 
 facing: down
@@ -403,6 +543,29 @@ facing: down
 #.#.#.#.#####.#
 #.........T...#
 ###############
+`},{chapter:8,explored:7014,shortest:52,score:57,line:"rruulllllluurrrluurruwwwwwwwwwwulluurruurruurruulllu",text:`title: 
+intro: 
+facing: left
+
+############E############
+#.#.......#.....#.......#
+#.#.#.###...###.#.###.#.#
+#...#.....#.#..*..#...#.#
+#.###.#.#.#.#.#####.###.#
+#...#.#.#.#...#.....#w..#
+#.###.#.#.#.#####.###.###
+#.#...#.#...............#
+###.#.#.#.#####.#######.#
+#...#.#.#....M#.........#
+#.###.#.###.#.#.###.#.###
+#.#...#.#...#.;.#...#...#
+#.#.#####.#######.#####.#
+#.....#...*.....#.......#
+###.#.#.#######.###.###.#
+#...#.........#.....#...#
+#.#####.#####.#####.#.###
+#..........P......#.....#
+#########################
 `},{chapter:8,explored:12010,shortest:39,score:64,line:"llllwlldddwwwddddddrruuurrrrudlddlwddld",text:`title: 
 intro: 
 facing: down down
@@ -638,6 +801,54 @@ intro:
 #.#.#.#####.#.#
 #...#.....#...#
 ###############
+`},{chapter:1,explored:8555,shortest:73,score:72,line:"lluuuuuullllllllrrrrrruurruduullllluulwlluulldddddullddddrrudrddrddddrrrd",text:`title: 
+intro: 
+
+#################
+#.....#.........#
+#.#.#.#.#####.#.#
+#.#.#....M....#.#
+#.###.####.##...#
+#.#*..#.#.....#.#
+#.#.#.#.#.#.###.#
+#..O#.....#...#.#
+###...##.##.###.#
+#...#.#.........#
+#.#.#...#####.###
+#.#...#...#.....#
+#.#*#####.#.###.#
+#...............#
+#.##.##.#.###.###
+#.#...#.#.#.#...#
+#.#.#.#...#.#.#.#
+#...#...#..~#.#.#
+#.###.#####.#.###
+#.........~....P#
+########E########
+`},{chapter:1,explored:15021,shortest:101,score:72,line:"rrrrrrrrddllddllllddddddddddlluuuullllddddzddllddrrrrlclllllllllrruurrrrrruuuuuuuulluuudddllddlluulll",text:`title: 
+intro: 
+
+#######################
+#...#.......#P........#
+#.#########.#########.#
+#.....#...........#...#
+#.###########.#####.###
+#...#...#...........#.#
+#.###.#*#.#.###.###.#.#
+#.#.#.#.#.#...#.#.#.#.#
+###.#.#.#.###.#.#.###.#
+E|..#.......#.#.#...#.#
+###.#.#.#.#####...###.#
+#.....#.#.....#.#.....#
+#.#.#.###.#.#.#.#.###.#
+#.#.#.#.#.#.#.#.#...#.#
+#.#...#.#.#.#.#.#.###.#
+#...#...#z#.......#.#.#
+#########.#.#######.#.#
+#.#...............#.#.#
+#.#.###M#######.#######
+#*.....*...c..........#
+#######################
 `},{chapter:1,explored:9252,shortest:54,score:76,line:"llddddddrrddrrrrwrrrruuuulluurruulllluulldduulluulllll",text:`title: 
 intro: 
 
@@ -674,6 +885,76 @@ intro:
 #.###.###.#.###
 #............z#
 ###############
+`},{chapter:1,explored:7623,shortest:79,score:77,line:"lllllllluulluulluulluuuuuulllluuuullrrddddrruurrrruuddddlldddlldllllddddddddrrd",text:`title: 
+intro: 
+
+#############################
+#...........#......=......#.#
+#.#.#####.#.#.#.##.##.#####.#
+#.#.#*....#.#.#.#.........#.#
+#.#.#.###.#.#.#...#.##.####.#
+#.#......k#.#...#.#.......#.#
+#.#####.#######.#.###.#####.#
+#M....#...#.....#.#...#.....#
+##.##=..#.###.#####.#.#######
+#..*..#.#...#.......#.#...#.#
+#.#.#.#.###.#####.#######.#.#
+#.#.#.#*..#.....#.#.........#
+#.#.#.###.#.###.#.#.#.###.###
+#.#...#.......#...#.#.....#.#
+#.#########.#####.#.####.##.#
+#.#...#...#...#...#.#.......#
+#.###.###.###.#####.#.###.#.#
+#....................P....#.#
+###E#########################
+`},{chapter:1,explored:4543,shortest:72,score:79,line:"uullllllddlluulllllluurruuuulluurrrrrrrrrrrrrddrdrrdullullruurlllllllllu",text:`title: 
+intro: 
+
+########E##############
+#.....................#
+#.#.###.#.#.####.####.#
+#.#...#.#.#....O..#...#
+#.###.#.####.####...###
+#.................#*..#
+#.###.#.#.#M#####.#####
+#.#...#.#.#.....#.#...#
+#.#.###.#.###########.#
+#.........#.......#.#.#
+#.#.###.#.#.###.#.#.###
+#.#...#.#..*..#.#P#.#.#
+###.#.#.#.#.#.#.#.#.#.#
+#...#...#.#.#.....#.#.#
+###.#####.###.#.###.###
+#.......#.....#.#...#.#
+###.#####.#.#.#####.#.#
+#.#.....#.#.#.......#.#
+#.#.###.#...###.###.#.#
+#.....#...#.....#.....#
+#######################
+`},{chapter:1,explored:5956,shortest:75,score:83,line:"uuuurrrrddrrddddrrrrlllluwdrruuuurruurruulluuuullllrrrrrruuuurruulllllclllu",text:`title: 
+intro: 
+
+#######E#########
+#.....#|......*c#
+#.#.#.#.#M#####.#
+#.#.#...#.......#
+#.#.#.###.###.#.#
+#.#.#.......#.#.#
+#.#.#.#####.#.#.#
+#...#..*........#
+#.#.#######.#.#.#
+#.#...#.....#.#.#
+#.###.#.###.#G#.#
+#...#.#.........#
+###.#.#.#####.###
+#..k..#...#.....#
+#.###.#.#.#.#.#.#
+#...#...#...#.#.#
+#.#.###.#.#.#.#.#
+#P#.#...#.#.#...#
+#.#.#.#.#.###.###
+#.....#..==.....#
+#################
 `},{chapter:1,explored:3645,shortest:82,score:88,line:"llddlluuuulluuluuddrddddlllllluuuuuurruulluurrrrddrluullrrddrruurrddrrddddrruuuzur",text:`title: 
 intro: 
 
@@ -692,6 +973,38 @@ intro:
 #.###.#.#.#.#.#
 #.#...#.#...#.#
 ###############
+`},{chapter:1,explored:7100,shortest:88,score:103,line:"uurruuuuuuuuuullllddllddddddddddddddddlluuuuuuuuuuuuuulllllluulluurrrruuuullluuruurrrrru",text:`title: 
+intro: 
+
+##########E##########
+#.#...........#.....#
+#.###.#######.#.###.#
+#.............#.....#
+#.##.###.####.#.#.#.#
+#...............#.#.#
+#.###.#.###.#.###.#.#
+#.....#.....#.......#
+#.#####.#####.###.###
+#.#.......#.#.......#
+###.#######.###.###.#
+#...............#...#
+#.###.#####.#.###.#.#
+#...........#...#.#.#
+###.###.###.#.#.#.#.#
+#.......#.#*..#.....#
+#.###.#.#.#.#.##.##.#
+#.....#.#...#.......#
+#.###...#.#...#.###.#
+#.....#...#.#.#.#...#
+###.###.#.#.#.#.#.#.#
+#.....#.#...#.#.#P#.#
+#.#.###.###.#...#.#.#
+#.#...#...#.#.#.#...#
+#.#.#.#.#.#.#.#.#.###
+#...#...#...#...#...#
+#.###.#####.#.#.#.#.#
+#.#....M...*..#.#.#.#
+#####################
 `},{chapter:2,explored:2145,shortest:49,score:60,line:"uulllrrrdduuuulluullllddddllddrrlluulluuuuuurrrru",text:`title: 
 intro: 
 
@@ -726,6 +1039,28 @@ E|............#
 #.#.#.###M#.#.#
 #.............#
 ###############
+`},{chapter:3,explored:2390,shortest:75,score:84,line:"rruuuulluuddlldzdlluuuulllddlddllddddrrrrddddrruuddlluulldlluuuuuuurruuruuu",text:`title: 
+intro: 
+
+####E##########
+#.......#.#z#.#
+####.##;#.#.#.#
+#.....#.#.....#
+###.#.#.#.#.#.#
+#...#.....#.#.#
+#.####.##.###.#
+#.#.....#.#P:.#
+#.#.###.#.#####
+#.....#.....#.#
+#.###.###.###.#
+#*#...#*..#...#
+#...#.#.#####.#
+#.#.#...#.#...#
+#.#.#M#.#.###.#
+#.....#.....#.#
+#.##.######.#.#
+#.........#...#
+###############
 `},{chapter:4,explored:2821,shortest:31,score:31,line:"uurruuddlcllluurruuudddlldllddl",text:`title: 
 intro: 
 
@@ -758,6 +1093,26 @@ E|.....<....#
 ###.##.##.#.#
 #.........#*#
 #############
+`},{chapter:5,explored:4030,shortest:58,score:75,line:"uurrrrrrlllllllluulldduuuurrrruuuuuudddrrzdddrrruuluuuullu",text:`title: 
+intro: 
+
+###########E#####
+#.......#z#|.*..#
+#.###.###.#.#.#.#
+#.........#.#.#.#
+#.###.###...#.#.#
+#.......#M#.#...#
+#.#.#####.#*##.##
+#.#........-....#
+#.###.#########&#
+#.#.......#.....#
+#.#.#.#.###.#####
+#...#*#.........#
+#.###.###.###.###
+#.#.....#P..#...#
+#.#####.#.#.###.#
+#.........#.....#
+#################
 `},{chapter:5,explored:9555,shortest:91,score:102,line:"uurruuuuuulluurruullrrddllddrrddddddlllzllllluuuulluuddrrddddrrrrrrrruuuurrudlluulluurruulu",text:`title: 
 intro: 
 
@@ -808,6 +1163,30 @@ intro:
 #.###.#####.#
 E|........#.#
 #############
+`},{chapter:6,explored:2932,shortest:58,score:73,line:"uullllddlldddddulldlldddrrrrrrrrrrrrrruuuulluullwlluulluuu",text:`title: 
+intro: 
+
+#########E#########
+#.......#...;*.@..#
+###.#####.###.#.#.#
+#.#...#.....#P#@#.#
+#.###...#.#.###.###
+#.....#.#.#.....#.#
+#.#.###.#.#.###.#.#
+#.#.#...#...#..M..#
+#..*..#.###...###.#
+#.#.#.#.....#...#.#
+#.#.#.###.###.###.#
+#.#...............#
+#.#.###.###.#.###.#
+#.....#...#.#...#.#
+#.###.###.#.###.#.#
+#.............#...#
+#.##.####.#.###.###
+#.#.....#.#.......#
+#.#.###.#.###.###.#
+#.............#...#
+###################
 `},{chapter:7,explored:6032,shortest:37,score:53,line:"ddwuuuullrwluullddllllulldddddrrddlld",text:`title: 
 intro: 
 facing: up
@@ -844,6 +1223,25 @@ facing: down
 #.#.#####.###.#
 #.#...........#
 ###############
+`},{chapter:7,explored:14970,shortest:54,score:83,line:"uuuullddddllddlluulwwwwwwwwlwrruuuullllllddddddcdrrddd",text:`title: 
+intro: 
+facing: down
+
+#####################
+#..........M....#...#
+#.#.#####.#######.#.#
+#.#...*c......#...#.#
+#####.###.#.#.#*#.###
+#...#.#.#.#.#.#.#...#
+#.#.#v#.#.#.#.#.#.###
+#.#v..#.#..o#...#P..#
+#.###.#.#.#.#.###.#.#
+#.#v.-#...#...#...#.#
+#.###.#.#...#.#.#.#.#
+#&#.....#.#.#.#.#...#
+#.#.###.#.#.#...#.###
+#...#..|..#...#.....#
+#######E#############
 `},{chapter:8,explored:9617,shortest:53,score:53,line:"duddrrddddlllllluurrlllwwwwrddlllluuuuuuuurruulluurru",text:`title: 
 intro: 
 facing: left
@@ -901,6 +1299,85 @@ facing: right
 #:###.###.#.###
 #...G.....#...#
 ##E############
+`},{chapter:8,explored:17739,shortest:59,score:70,line:"rrrrlllldddwdlluullllddddddrrddllddddrrddrrrrrruuddddddrrrd",text:`title: 
+intro: 
+facing: right
+
+###################
+#.#...#P..........#
+#.#T###.#####.###.#
+#.....#.#.#.......#
+#.###.#.#.#.##.##.#
+#.#...............#
+#.###.#.#.##.##.###
+#.#...#.#..M......#
+#.#.#.#.#.###.###.#
+#_..#......F#.#...#
+###.###.#.#.#.###.#
+#...#...#.#FF..e#.#
+#.###.#.#.###.###.#
+#.....#.........#.#
+#.###.#####.#.###.#
+#*..#....*..#.....#
+###.#.###.#.###.###
+#.........#.......#
+###.##T##...###.#.#
+#.......#.#.#.#.#.#
+#.###.#.#.#.#.#.#.#
+#.....#.......#...#
+############E######
+`},{chapter:8,explored:27442,shortest:63,score:74,line:"llddllllwrrllddddlllllllrrrrrrrdwwwwdddddddllddllddlllllluuuuul",text:`title: 
+intro: 
+facing: right
+
+#######################
+#.........#...#*.P....#
+#.###.#####.###.#.###.#
+#.........#.....#.....#
+#.#.#######.###.#####.#
+#.#.#...#...#.....#...#
+#.#.###.###.#.#.###.#.#
+#.#.*.......#.#.....#.#
+#.#########.#.#.###.#.#
+#.............#...#...#
+###.#.#.###.#.###.#####
+#...#.#.....#.#.#.#...#
+#.#####.###.###.#.###.#
+#.M...........#.#.....#
+E.#.#.#.###.#.###.###.#
+#.#.#.#.....#.#.......#
+#.#.#.###.###.#.###.#.#
+#.#.#.#......e#.#.#.#.#
+#.###.#.#.###.#.#.#.#.#
+#.....*.#.....#.......#
+#######################
+`},{chapter:8,explored:5605,shortest:61,score:96,line:"uuuurrrruuuuddddrrdddwwwwwwwwwwwwwwdrrddddrrrrrrddddddddrrrrd",text:`title: 
+intro: 
+facing: down
+
+#####################
+#.#..*#...........#.#
+#.#.#.#.###.#####.#.#
+#.#.#.#...#.#...#...#
+#.#.#.###.#.#.#.#.###
+#.......#...#.#.#...#
+#.#####.#####.#.###.#
+#...#.#.#.....#.....#
+#.#.#.#.#.#.###.###.#
+#P#.......#.#.......#
+#####.#.#.#####.###.#
+#.....#.#.....#.....#
+#.#.#.###.###.#######
+#.#.#......e....#...#
+#########.#.###.###.#
+#.......#M#.#..*..#.#
+#.#.#######.#.#.#.#.#
+#.#.#.....#.#.#.#...#
+#.#.#######.#.#.###.#
+#.....#.#...#.#.....#
+###.#.#.#.#.#.#.###.#
+#...#...#.#.#.......#
+###################E#
 `},{chapter:9,explored:2077,shortest:33,score:53,line:"duddddlwwwwwrllllllddllddrlllddrd",text:`title: 
 intro: 
 facing: up
@@ -973,6 +1450,28 @@ intro:
 #.#####.#.###.#
 #...#..-...*#.#
 ###############
+`},{chapter:9,explored:4779,shortest:87,score:92,line:"llddddddrrddddrrrrrrlllllluuuuddrrrrddrrrddddlluuuuurruuuulluuuurrrrrrrllddrddddddrrddr",text:`title: 
+intro: 
+
+#########################
+#.......#.....=.#.#.....#
+#.#.#####.#######.#.###.#
+#.#......P....#.$.....*.#
+#.#.###.###.###*####.##.#
+#.....:.#.#.#...#.......#
+#.###.#.#.#####.#.###.###
+#...#.#.......#...#.#...#
+###.###.###.#####.#.#.#.#
+#...#...........#.....#M#
+###.#.#.#.###.#.#.###.#.#
+#.....#.#.....#.....#...#
+#.###.###.###:#.###.#.#.#
+#.#..........=.=..#...#.E
+###.##.##.#.###.#.#.#.#.#
+#.#.=.....#...#.#.#.#.#.#
+#.#.#####.#.###.#.#.###.#
+#.......#.....#.........#
+#########################
 `}],hard:[{chapter:1,explored:26152,shortest:53,score:53,line:"uuuurrrrddrddddrrddrrlzluuuuurruuuuulluullrrddrrddddr",text:`title: 
 intro: 
 
@@ -1117,6 +1616,24 @@ ER###.#.#.###R#
 #F##.##.###.#.#
 #=.......~.~~.#
 ###############
+`},{chapter:1,explored:3181,shortest:70,score:112,line:"uullulluuurrlzldddlldddllllllddddrrrrddrrlluulluuddllddllulluuullddlll",text:`title: 
+intro: 
+
+#######################
+#...........#.......#.#
+#####.#.#.#.#.###.#.#.#
+#.....#.#.#.....#z#...#
+#.###...#.#.#.#.....###
+#.....#.....#.#.#.#...#
+###.####.##.#.#.#.###.#
+#.................#.#P#
+#M##.##.#.#.#.###.#.###
+#.......#.#*#O..#.....#
+###.#.#.#.#.###.#.#.#.#
+E|..#.#.#*........#.#~#
+###~#...#.#.#.###.#.#.#
+#.....#...#.#..*......#
+#######################
 `},{chapter:1,explored:6996,shortest:86,score:112,line:"uuuullrrddddllluurlluuurruuurzruullllllllllllddrrddlldduurruulluurrrrddddddllddllddddl",text:`title: 
 intro: 
 
@@ -1153,6 +1670,38 @@ intro:
 #.###########.#
 #.._.....P^.R.#
 ###############
+`},{chapter:2,explored:21698,shortest:84,score:111,line:"rrddrrddddddddrrrrrrddurruuulllluuuulluuuuddllllddddddddddzddlldddddddrruddrrrrddddd",text:`title: 
+intro: 
+
+#####################
+#P..#.#*............#
+###.#.#.##.##.#######
+#...............#...#
+#.#.#.#.#######.#.#.#
+#.#.#.#.........#.#.#
+#.#.#.#.#.###.###.#.#
+#...#...#...#.......#
+###.#.###.#####.#.###
+#...#...#.......#...#
+#.#.#.#######.###.#.#
+#.#.#.......#.#...#.#
+#.#.#.#.###:..###.#.#
+#...M.#...#z#.......#
+###.#.###.#.###.###.#
+#...#...#.......#...#
+#.#.###.#.#.###.#.###
+#.#...#.#.#.........#
+#.#.###.###.###.#.###
+#...#....O..#.#.#...#
+#.###.#.#.###.#.#.###
+#.#*..#.#...#.......#
+#...#######.#.#####.#
+#.#.....#.#.#.......#
+#.#.#.#.#.#.###.#.#.#
+#.#.#.#.#...#...#.#.#
+#####.#.#.#.#.#####.#
+#.....#.#.#.........#
+#######E#############
 `},{chapter:2,explored:9938,shortest:68,score:115,line:"rddrddlldduurruurrrrddrrdddrrddduuuuuullrzrdddwlldlldduullrrrrurrddr",text:`title: 
 intro: 
 
@@ -1171,6 +1720,64 @@ intro:
 ###.#######.#.#
 #....F....:.#.#
 ###############
+`},{chapter:2,explored:2077,shortest:74,score:128,line:"lluuuurrllrruuuurrrruurrrrddwdduuuulllllluulllluuuuuulllluurruuuulllluurru",text:`title: 
+intro: 
+
+###E#################
+#..*....#...#...#...#
+#.#####.#.#.#.###.#.#
+#.....#...#.#...#.#.#
+#####...#...#.#.#.###
+#.....#.#.#...#F....#
+#.###:#.#.#####.###.#
+#.....#........F..#.#
+#.#.#####.#.#####.#.#
+#.#.....#.#.....#...#
+#.#.###.#.###.#.#.###
+#.#.F...#...#.#.....#
+#.#.###.#.#.#.#.###.#
+#...#M..#.#.#.......#
+#.#.###.#.#.#.###.###
+#.#......*..#.......#
+#####.###.#.#.#####.#
+#...:.....#.........#
+#.#####.#.###.###.###
+#.#.#...#.....F.#...#
+#.#.#.###.#.#.###.###
+#.#.......#.#...#...#
+#.###.###.#.###.#.#.#
+#.#.#...........#.#.#
+#.#.###.###.#####.#.#
+#.#...........#.#...#
+#####.#.###.#.#.#.###
+#.....#..P..#...#...#
+#####################
+`},{chapter:2,explored:14964,shortest:84,score:131,line:"llllddlllluulllluuuurruuuuuulluurrlluuluurlluullrrddrddlrrddllllddddddlluuuddddddddl",text:`title: 
+intro: 
+
+#####################
+#.....#.............#
+#.#.#:###.##.##.#.#.#
+#.#.#.....#...#.#.#.#
+#.#.##.##.#.#.###.###
+#....f....#.#...#...#
+#.#####.###.#.#...#.#
+#........*....#.#.#.#
+###.###.#####.#.#.#.#
+#.#*#.......#.#.....#
+#*#.#.#.#.#.#.#######
+#.#...#.#.#.........#
+#.#.#.#.#.###.#.#.#.#
+#~.~#.#.M.....#.#.#.#
+#.#...###.###.#.#.#.#
+#.#.#.#.....#.....#.#
+#.#.#~..#####.#.#...#
+#.#...#.......#.#.#.#
+E.#####.###.#.#.#.#.#
+#...........#......P#
+#.###.#.#.#.###.#.###
+#.....#.#.#.....#...#
+#####################
 `},{chapter:3,explored:3556,shortest:35,score:52,line:"ddrrrruuuuwdullullzddlluuuuulllludl",text:`title: 
 intro: 
 
@@ -1189,6 +1796,78 @@ E.....#.....#
 #M#########v#
 #.....#.....#
 #############
+`},{chapter:3,explored:2116,shortest:125,score:126,line:"ddddllddrzrddrrrrrruurrddrrrrrruuuurruuuuddddllddddlllllluullddlllllluudduurrrruurrrruuuulluuurruuuuuuulllllllluuuulllllldddl",text:`title: 
+intro: 
+
+#########################
+#...*...#.#.#...#.......#
+#.###.#.#.#.###.#####.###
+#.....#...#.#.#...#.....#
+E.#.###.###.#.#.###.###.#
+#.#...#.........#.....#.#
+#.###...###.###.#.###...#
+#...#.#...#...........#.#
+#.###.###.###.#.###.#.#.#
+#.............#...#.#...#
+#####.#########.#.#####.#
+#<#...#.#.#...#.#.#...#.#
+#.#####.#.#.#...#.###.###
+#.....#.#.#.#.#.....#.#.#
+#####.#.#####.#####.###.#
+#.#.#.#P#...#.....#.#..*#
+#.#.###.#####.#.#####.#.#
+#.#.....#...<.#.......#.#
+#.#####.#.#####.#.#####.#
+#......z#.#.....#.#.....#
+#####;###<#.#.###.###.###
+#...#....*..#M..#...#.#.#
+#.###.#.#####.#.#.###.#.#
+#.....#.......#.......#.#
+#########################
+`},{chapter:3,explored:23780,shortest:122,score:134,line:"urrdrrrrrruuuurruuuuruurrrrrudddllddddddddlllludrrrruuulluuuuuluulullulluullllulluuurrrrrrrrllrrddddrrrruuuurrddrrdddddddr",text:`title: 
+intro: 
+
+###################
+#...........#.Y...#
+#.#.###.#;#.#.#.###
+#*#.....#.#...#..*#
+#...###.#.###.#.#.#
+#.#.....#y....#.#O#
+#.#.###.#.#.###.#.#
+#.#.#.....#.#...Y.#
+#.#...###...#####.#
+#...#.#...#.......#
+#:#.#.#.#.##.####.E
+#.#...~M#.#...#...#
+#########.#.#.#.#.#
+#......y#...#.#.#~#
+#.###.#####...#...#
+#...#...#.:.#.#.#.#
+#.#.#####.#.#...#.#
+#.#.....#.#..O#...#
+#...###.#.#.###.###
+#P#.......~.......#
+###################
+`},{chapter:3,explored:3344,shortest:113,score:157,line:"urrdrrrruuuuuurruurrruuruurrllddlddrddllllllllllllllddrrdduulluuuuuurruuurrduurrrrrrddrrrrddlddrddddllrrddrrddrrd",text:`title: 
+intro: 
+
+#####################
+#...#......~.~......#
+#.#...#####.###.###.#
+#.#.#*#...#.......#.#
+#.#.#v#.#######.#.#.#
+#.~.......#.....#.#.#
+#.###.#.###.##.##.###
+#.#...#.#........v..#
+#.#.###.###.###.#.###
+#..............f#v..#
+#.#####.#.#####.#.#.#
+#.....#.#.#..*.M#.#.#
+###.#####.#####.#.#.#
+#...#...#.........#.#
+#.#;v.###.###~###.###
+#.#P#.......#...#*..#
+###################E#
 `},{chapter:4,explored:2295,shortest:55,score:37,line:"rlrruurrdduulluuddddduddddzddlllllluurruuuuuullllddlldl",text:`title: 
 intro: 
 
@@ -1261,6 +1940,28 @@ E......*......#
 #.#.#####*###.#
 #...#..P......#
 ###############
+`},{chapter:5,explored:6682,shortest:136,score:110,line:"ddddllllllllllrrllrrrruurruurrrruuuuuuddddddllllddllddlllluurruullulldddddlluuuuuuuuruurrrdulllddrdddrrdrrddllddrrrruurruurrrruurruuuuur",text:`title: 
+intro: 
+
+#######################
+#.............#.......#
+#.###.#.###.#.#.#######
+#.....#.#..M#...#...#.#
+#.###...#.###.###.###.#
+#.#...#.......t...#..-#
+#.#.#.#.###.###.###.#.E
+#.#.#...........#&..#.#
+#.#.##T##*#######.#.#.#
+#...#...#.........#.#.#
+#.#.#.#.######.##.#.#.#
+#.#...#.#.........#...#
+#.###.#...#########.###
+#.....#.#...#.#.....#P#
+#.#.#...###.#.#.#####.#
+#.#.#.#.#...#...#.....#
+#.#.#.#.#.###.#######.#
+#....*._#......=....=.#
+#######################
 `},{chapter:5,explored:2471,shortest:94,score:112,line:"ddllllddrrrrrruurrrruullrrddddrruuuuuuuuuulllllllluulllldddddduuuuuurrrrddddddrrrruurrrruuuulu",text:`title: 
 intro: 
 
@@ -1279,6 +1980,58 @@ intro:
 #.#####.###.#.#
 #...._..#.....#
 ###############
+`},{chapter:5,explored:2442,shortest:122,score:121,line:"rrddrrrruuuurruuuurrrruurrwllddllllddddllddddllllllddddddddrrddrrrrrruulluurruurrrrrruulluurruurrllddrrrrddlrddddddddlllld",text:`title: 
+intro: 
+
+#####################
+#..-................#
+#.##.##.#####.###.#.#
+#.....#.......#...#.#
+###.#.#.#.#########.#
+#...#...#.#.#.......#
+#####.###.#.###.#.###
+#...#.#.....#.#&#.#.#
+#.###.#.#####.#.###.#
+#P..#.#.#........*..#
+###.###.#.#####.#####
+#.......#...#.......#
+#.###.###.#.#.#####.#
+#...#.#...#.#M....*.#
+#.#.#.#.###.###.#.#.#
+#.#.#.#.........#.#.#
+#.#.#.###.###.#####.#
+#.#...#.....#.#.#...#
+#.#####;###.###.#.#.#
+#...#.....#...#.#.#.#
+#.#.#####.###.#.#.#.#
+#.#...........#.....#
+###############E#####
+`},{chapter:5,explored:2912,shortest:101,score:123,line:"uuuurrdddddddddurrrrrrrrddddrrrrrruuuulluulluuddrrddrrddddllllrrlllluuuuuuuurrrruuuurruuuuuudddrrdddr",text:`title: 
+intro: 
+
+#####################
+#.............#..*..#
+#.#.###.##.##.#.#.#.#
+#.#...........#.#.#.#
+#.#.#.###.#.###.#...#
+#...#.....#.#.....#.#
+###.#.###.#.F.###.#.#
+#.......#...#.....#.E
+#.#.###...#.###.#####
+#.#.....#.#.#.......#
+#.#.#####.#####.#.#.#
+#P#.#.......M...#.#.#
+###.###.#.#.#.###..F#
+#...#.#.#.#.#.....#.#
+#.#.#.###.#.###.###.#
+#.#.........#&......#
+#.#*###.#.#.#.#.#.###
+#...#...#.#...#.#...#
+#.###.#.#.#.#####.#.#
+#.#...#...#......-#.#
+#####.#.###.###.#.#.#
+#...#...#..F....#...#
+#####################
 `},{chapter:6,explored:5427,shortest:76,score:95,line:"ddddddddrrrrrrrruuuuuulllllllrrrrrrrddddddllluuruulzludrrddlddrrruuuurrrrddr",text:`title: 
 intro: 
 
@@ -1297,6 +2050,24 @@ intro:
 #.#.##.##.###.#
 #...........#.#
 ###############
+`},{chapter:6,explored:22253,shortest:83,score:116,line:"dduuuuuuuuduuuuddddllllullullllddddddlllldduuuurrrrzllllddrrrrddrrlluulllllluuuuuuu",text:`title: 
+intro: 
+
+#######################
+#....<........#.....#.#
+#.###.###.#.###.#####.#
+#........M#.#.#.#@...@#
+E<#.##.##.#.#.#.#.###~#
+#.#.#......*#.#.#...#.#
+#.###<#.###...###.#...#
+#.....#.....#.....#.#.#
+#.#####.#.###.###.#.#.#
+#.#..*..#.#.........#.#
+#.#.###.#.#.#.#.#.#.#.#
+#~.~........#.#.#.#..P#
+#.#.###.###.#.#.#.###.#
+#.#z#....*#.#........f#
+#######################
 `},{chapter:6,explored:3126,shortest:85,score:161,line:"rlllllllllddlldduuddrrrrddrddlllulldurrurrrddrrrrrwwwllwrrwwwlluulluuuurrddrruurrdddr",text:`title: 
 intro: 
 
@@ -1334,6 +2105,31 @@ facing: left
 #########.#####
 #....|.....*..#
 #####E#########
+`},{chapter:7,explored:10386,shortest:97,score:111,line:"rrddllddrrllddddddlluullddlllrlluuuulluuuuuurrrruuuuuuuurrlwwwwlwrrddrwlddrrddllddzddlldddlldlldl",text:`title: 
+intro: 
+facing: down
+
+#######################
+#......o#.#...#...#...#
+#.#.#.#.#.#.###.#.#####
+#.#.#.#...#.....#...#.#
+#...#.#.#####.###.###.#
+#.#..*#..*#...........#
+#.###.###.####.####.###
+#.#.#.#..z#P......#.#.#
+#.#.#.#.#.###.###.#.#.#
+#.....M.#.#...........#
+#.#####.#.#.###.#.###.#
+#.#.......#..v#.#.....#
+#.#.#.#######v#.#.###.#
+#.#.#...#.#..v#.....#.#
+#.#...###.#.#########.#
+#...#.....#...#...#...#
+E.#.###.###.#####.#.###
+#.#.#.#...#.#.....#.#.#
+#.#.#.#.#.#.#####.###.#
+#.......#..*#.........#
+#######################
 `},{chapter:7,explored:14240,shortest:78,score:114,line:"uuuullddddllllrrrruuuurrllrlddddllddlllldddwduulluulluuddrrddrrddddrrrrrrrruur",text:`title: 
 intro: 
 facing: up
@@ -1372,6 +2168,52 @@ facing: down
 #.#.#.#.#######
 #.#.~P#.......#
 ###############
+`},{chapter:8,explored:10314,shortest:68,score:111,line:"lllluurruulllllluulllwwwwwwwlrrrrllllddddlllldwwdddrrrrlllluuuuuuuul",text:`title: 
+intro: 
+facing: left up
+
+#####################
+E...#..*.........w#.#
+#.#.#.###.###.###.#.#
+#.#.............#.#.#
+#.###.#########.#.#.#
+#.........#.....#.#.#
+#.#.#####.#.#.#####.#
+#.#.......#.#....P#.#
+#.#####.#.#.#.#####.#
+#*.M.*..#.#.#.......#
+#######.#.#.###.###.#
+#.#.....#.#.......#.#
+#.#######.#.#.###.#.#
+#.#.......#.#...#.#.#
+#.#.#########.###.#.#
+#.#...#...#.#.#...#.#
+#.#.#.#.#.#.#.#^###.#
+#...#.#.#...#.#.....#
+#####.#.##.##.#.###.#
+#...#....^.^#.....#.#
+#.#.#.#.#####.###.#.#
+#.#...#......e......#
+#####################
+`},{chapter:8,explored:9401,shortest:56,score:115,line:"uuuuuurrrddrrrrddldwwwwwwdrrrrrrrrddrrdwwuuudwdddllddrrd",text:`title: 
+intro: 
+facing: up
+
+###################
+#.................#
+#.##.##.###.###.#.#
+#..O.......O..#.#.#
+#.#.####.##.#.#.###
+#.#...#....w#...#.#
+#.#.#M#.#########.#
+#P..#...........#.#
+######.##.###.#*#.#
+#.......#.....#.*.#
+#.###.#.#.#.#.###.#
+#.....#...#.#.....#
+#.###...###.###.###
+#.....#.......#..|#
+#################E#
 `},{chapter:8,explored:17438,shortest:68,score:120,line:"ddrrrruuwwwwwwwwlluudlwrdwrrurrdddrruuuurrwluuddlddddddddrrrruulruur",text:`title: 
 intro: 
 facing: up
@@ -1391,6 +2233,89 @@ facing: up
 #.###.###.###.#
 #.#<......#...#
 ###############
+`},{chapter:8,explored:14191,shortest:72,score:122,line:"llllllllddrrddrruurrdwwdrwwruuddrwllluullddllddrrrrrrddrrddrrrrddrruurrr",text:`title: 
+intro: 
+facing: left
+
+#####################
+#........P#.........#
+#.###################
+#...#...#*....#.....#
+#.#.#.#.#.###.#.#.###
+#.#...#......w#.#...#
+###.###.###.#.#.###.#
+#.........#.#.#.#...#
+#.#######.#.###...#.#
+#...#.#....M#.#.#.#.#
+###.#.#.###.#.#.#.#.#
+#.#...#.........#..*E
+#.###.#.#####.#.#.###
+#.......#...#.#.....#
+#.###.###.#.#.#.###.#
+#.........#.....#...#
+#.###.###.#.###.#.###
+#.#.#...#.......#...#
+###.#.#...##.##.#.###
+#...#.#.#.......#.#.#
+#.#####.#.##.##.#.#.#
+#...................#
+#####################
+`},{chapter:8,explored:19769,shortest:83,score:126,line:"uurddrruuwwwwwwwwwwwwwwwwuuuuurrddrruurruulluullllllllllulluuuuuudddddllllddddddddl",text:`title: 
+intro: 
+facing: left
+
+#####################
+#.......#.#.....#...#
+#.#.#*###.#.###.#.###
+#.#.#.#.............#
+#.#.#.###.#.#####.#.#
+#...#...#.#.......#.#
+#.###.#...###.###.#.#
+#F....#.#.......#...#
+#.###...#.#########.#
+#F..#.#..e...*.h....#
+#F#.#.###########.###
+#.#.#.#...#...#.....#
+#.#.#.#######&#####.#
+#...#.....#.....#...#
+#.#####.#.#.#.#.#.###
+E|#.#...#...#-#.....#
+#.#.#########.#.###F#
+#...#.........#...#.#
+#####.#.###.#.###=#.#
+#.....#.#.=.#=#.#...#
+#M#####.#.#.#.#.#.###
+#........P#..=#.....#
+#####################
+`},{chapter:8,explored:21942,shortest:68,score:130,line:"ddllllllllddllllddllddlldwwwwwwwwwwwwwwwwwwdddddddddrruurrddddrrrrrd",text:`title: 
+intro: 
+facing: left
+
+#######################
+#.....#...........#...#
+###.#.#.###.#####.#.#.#
+#.#.#...........#P#.#.#
+#.#:#.#####.###.#.#.#.#
+#.......#.............#
+#.#####.#.#.##.##.###.#
+#...#.....#.......#...#
+#.#.#:###########.#.###
+#.#.....#.........#...#
+#.#.###.#############.#
+#.**#.....#...#.....#.#
+#.###.#.###.#.#.###.#.#
+#.....#...#.#.#.....#.#
+#.#.#.#.#########.#.###
+#.#.#.#....M..#.#.#...#
+#.#.#.##.####.#.#####.#
+#...#.#.............#.#
+#.###...#####.#.#.#.#.#
+#.#...#.#.....#.#.#...#
+#.#.#.#.#.#.###.#.###.#
+#...#.#...#....e#.#.#.#
+#.###.###.#.#.#.#.#.#.#
+#.#.........#.#.......#
+##########E############
 `},{chapter:9,explored:2514,shortest:39,score:73,line:"uuuurrrrddrrurwwwwwrdrruuuulldurruuurrr",text:`title: 
 intro: 
 facing: left
@@ -1447,6 +2372,31 @@ E|#.#..*#.#...#
 #.#####.#####.#
 #.#..........r#
 ###############
+`},{chapter:9,explored:3181,shortest:89,score:110,line:"uuuurrrrrrrrrrddrrdrrdrrdduuuuuullllrwrllddlllllllllldddduuuurrrrrrrrrrddurrdrrddrrrrdddr",text:`title: 
+intro: 
+machines: ball-right
+
+#########################
+#.#..*........#.....#.#.#
+#.#.#########.#.#~#.#.#.#
+#.#.#...........#.#....~#
+##C.#.#.####.##...#.###.#
+#.#P#.#.......#*#..+..#~#
+#.#.#.#######.#.###.###.#
+#.#.#*............#.....#
+#####.#.#.#.##.####.###.#
+#.#...#.#.#.....#.....#.#
+#.#.#.#...#####.#.###.#.E
+#...#...#.....#.#...#...#
+#####.#.##.##.#.#.#####.#
+#...#.#.......#.#.....#.#
+###.#.###.###.#.#.###.#.#
+#.......#...#....M#.....#
+#.#####.#~###.###...###.#
+#.#...#.#.#...#.#.#...#.#
+#.#.#.#.###.#.#.#.###.###
+#...#.......#...........#
+#########################
 `},{chapter:9,explored:3227,shortest:67,score:113,line:"rrllllddrrrrrrrrllddddllllllddwlldudddrruurrdddrrrrrrrrudllllllllld",text:`title: 
 intro: 
 machines: block-up
@@ -1466,7 +2416,26 @@ machines: block-up
 #...#.#.C####*#
 #@#!.M...+....#
 ####E##########
-`}]};var _n=[{id:"trial-1",text:`title: The Mouth of the Labyrinth
+`},{chapter:9,explored:17520,shortest:59,score:145,line:"uwwwwwwwwwullllllllddrrrrddllddwuullrrddllddrrrrrrrrddddlld",text:`title: 
+intro: 
+facing: right up
+
+#################
+#.._............#
+#.###.#.#.#.#.#.#
+#.....#.#P#.#.#.#
+#####.#.#####.#.#
+#*...w#.#...#.!M#
+###.###.#.###.#.#
+#....o#.#.....#.#
+#.###.#####.#.#.#
+#........*..#.#.#
+###.###.#.###.###
+#.#...t.#.t.....#
+#.###.#.#.###.###
+#.....#.........#
+#######E#########
+`}]};var Zr=[{id:"trial-1",text:`title: The Mouth of the Labyrinth
 intro: Ariadne's thread is in your hand, Theseus. The beast runs two steps to your one: do not run at him, let the walls hold him.
 
 #######
@@ -1590,7 +2559,7 @@ pages: ch1-chalk
 ##########.######F.#
 ##########hFFFFFFF##
 ####################
-`}];var Nn=[{id:"ch2-1",text:`title: The Loose Stone
+`}];var Xr=[{id:"ch2-1",text:`title: The Loose Stone
 intro: Daedalus strewed these ways with loose stone. You can cross it; the beast's hooves cannot. Leave him the open hall and take the stony way round.
 
 ###########
@@ -1724,7 +2693,7 @@ pages: ch2-black-sail
 #.##M#.....#.#..~.*#
 #*..:..##.f...FF#.|E
 ####################
-`}];var Kn=[{id:"ch3-1",text:`title: The Rising Floor
+`}];var Jr=[{id:"ch3-1",text:`title: The Rising Floor
 intro: These stones bear you once. Step off one and it rises into wall behind you. The beast waits on the short way; take the long way, under him.
 
 ###########
@@ -1859,7 +2828,7 @@ pages: ch3-thread
 #.##..##....##.x#..#
 #*#.#....#.##...;.|E
 ####################
-`}];var Un=[{id:"ch4-1",text:`title: The Wall That Gives
+`}];var Qr=[{id:"ch4-1",text:`title: The Wall That Gives
 intro: The high way runs past the beast. The low way ends in a wall, and one of its stones is only painted: walk into it and it gives way, and you are through.
 
 ###########
@@ -1989,7 +2958,7 @@ pages: ch4-queen
 ###..#.#..:.#####.##
 #.##M..#.#...##.#|E#
 ####################
-`}];var Yn=[{id:"ch5-1",text:`title: The Snare
+`}];var eo=[{id:"ch5-1",text:`title: The Snare
 intro: The beast stands between you and the way out. A snare of Daedalus lies in the west hall: lead him into it and it will hold him while you pass.
 
 ###########
@@ -2128,7 +3097,7 @@ pages: ch5-gate
 #####.#...#.#.#|#
 ##########.####E#
 #################
-`}];var qn=[{id:"ch6-1",text:`title: The Teleport
+`}];var to=[{id:"ch6-1",text:`title: The Teleport
 intro: The way out lies in a sealed hall. Two teleports join it to the rest: step into the one in the south hall and you step out of the other, still walking the way you went in.
 
 ###########
@@ -2262,7 +3231,7 @@ pages: ch6-arts
 #r.........#
 #.##p.##.|E#
 ############
-`}];var Vn=[{id:"ch7-1",text:`title: The Bronze Ball
+`}];var no=[{id:"ch7-1",text:`title: The Bronze Ball
 intro: One bronze ball rolls along the hall between you and the way out, straight ahead, and turns back at each end. Touch it and it costs a heart: step into the niche off the hall and let it roll past.
 facing: right
 
@@ -2404,7 +3373,7 @@ facing: down
 #.@###.FF*..R..#
 #E|######...####
 ################
-`}];var Zn=[{id:"ch8-1",text:`title: The Harpy
+`}];var ro=[{id:"ch8-1",text:`title: The Harpy
 intro: One Harpy flies the halls ahead, straight on, and turns left at every wall that stops it. Touch it and it costs a heart: wait in the niche while it passes, and keep clear of the beast.
 facing: right
 
@@ -2553,7 +3522,7 @@ facing: right left down
 #.#######...#.#
 #*.....*...M#|E
 ###############
-`}];var Xn=[{id:"ch9-1",text:`title: The Thief
+`}];var oo=[{id:"ch9-1",text:`title: The Thief
 intro: A thief waits beside you: step on it and it takes all your gear. Take the flippers first, then go round the thief, over the top, and swim the pool to the way out. Keep clear of the beast.
 
 ###########
@@ -2701,7 +3670,7 @@ machines: block-right
 #.......#....P#
 #...#...#....##
 ###############
-`}];var Jn=[{id:"ch10-1",text:`title: The Wooden Cow
+`}];var lo=[{id:"ch10-1",text:`title: The Wooden Cow
 intro: Daedalus's wooden cow lies beside you: set it down and the beast goes to it, not to you. A snare waits in the top hall, with no button to loose it. Lead him round to it.
 
 ###########
@@ -2851,5 +3820,5 @@ pages: ch10-oak
 #..##.....#..#..#
 #..#.....##..#*.#
 #################
-`}];var Bl=[..._n,...Nn,...Kn,...Un,...Yn,...qn,...Vn,...Zn,...Xn,...Jn];function Qn(){return Bl.map(e=>Q(e.text))}var $l=Hn({post:e=>self.postMessage(e),banks:Wn,known:()=>Pn(Qn()),now:()=>performance.now()});self.onmessage=e=>$l.receive(e.data);})();
+`}];var Xl=[...Zr,...Xr,...Jr,...Qr,...eo,...to,...no,...ro,...oo,...lo];function so(){return Xl.map(e=>J(e.text))}var Jl=qr({post:e=>self.postMessage(e),banks:Vr,known:()=>Cr(so()),now:()=>performance.now()});self.onmessage=e=>Jl.receive(e.data);})();
 //# sourceMappingURL=endless-worker.js.map

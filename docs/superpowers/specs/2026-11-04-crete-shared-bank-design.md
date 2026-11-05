@@ -42,14 +42,39 @@ budget, not a whole level's search. The server hands a verifier the tuple only, 
 echo the answer back; the server compares what the verifier sends with what the uploader sent. A client's own claim
 that it verified something counts for nothing: only the server's comparison does.
 
-**The trusted verifier.** Peers need traffic; with one player there is no second device. So a verifier we run
-ourselves checks the bank whatever the traffic: `.github/workflows/crete-verify.yml`, every six hours and by hand from
-the Actions tab, runs `games/crete/tools/verify-bank.ts` on main's generator. Over HTTPS only (never ssh or sftp, which
-the host's fail2ban punishes), it lists up to 25 waiting levels (`trusted-list`, which gives it the tuple and the
-uploaded level), makes each again, and posts a match or a mismatch (`trusted-verify`, with what it made); it stops
-after 25 levels or 45 minutes, and a failed run only leaves levels for the next. The server still compares the level
-itself: a "match" whose level differs is a mismatch. One trusted match admits a level at once; peer verifications
-count as before. A level of another generator version is left for the players' devices.
+**The trusted runner.** Peers need traffic; with one player there is no second device. So a runner we run
+ourselves works on the bank whatever the traffic: `.github/workflows/crete-verify.yml`, every six hours and by hand
+from the Actions tab, on main's generator, over HTTPS only (never ssh or sftp, which the host's fail2ban punishes),
+within one budget of 47 minutes of a 60-minute job. It does two things, in order:
+
+1. **Verify.** `games/crete/tools/verify-bank.ts` lists up to 25 waiting levels (`trusted-list`, which gives it the
+   tuple and the uploaded level), makes each again, and posts a match or a mismatch (`trusted-verify`, with what it
+   made); it stops after 25 levels or 12 minutes, and a failed run only leaves levels for the next. The server still
+   compares the level itself: a "match" whose level differs is a mismatch. One trusted match admits a level at once;
+   peer verifications count as before. A level of another generator version is left for the players' devices.
+2. **Generate.** `games/crete/tools/generate-bank.ts` spends the rest of the budget making new levels with main's
+   generator, one worker thread per core as memory allows (each with a heap limit), and posts each straight into the
+   served pool (`trusted-add`). The runner is our own code on our own infrastructure, so a level it made is as trusted
+   as a verdict it gives. The level still goes up with its full provenance tuple, which the server checks like any
+   upload's and keeps beside it, so it can be made again later.
+
+**What the runner makes.** It first reads how full each grade is (`trusted-counts`: served and waiting counts, the
+cap, and each served level's score, chapter, size and whether it hides walls) and makes the scarcest level next. The
+grade is the one with the most empty room, weighted Hard 3, Medium 2, Easy 1, so Hard comes first and Medium and Easy
+follow as Hard fills. Within a grade it makes plateau levels until three quarters of the grade is on the plateau,
+where a run spends most of its levels, and on the plateau large boards (a long side of 21 at Hard, 19 at Medium, 17
+at Easy) until half of Hard's plateau is large (a third at Medium, a quarter at Easy): those are what a run's own
+search seldom finds in time, and what sends a run to the bundled bank. Each level is one part of a search
+(`makePart`, `PART_BUDGET`) from a tuple of its own: a fresh seed (`ci-` and eight letters), a tier, the grade, a
+depth, a part, and as run memory one plain level from the grade's bundled bank whose score sets the place, on the
+plateau or on the climb. For a large board it tries seeds until the plans of the part's first three rounds are large
+(the plan alone, no search), which leans the part toward a large level. A part finds a large board far less often
+than a plain one, so while large boards are wanted only one plateau part in three leans large; the rest keep the
+plateau filling. It never makes more than fits: a grade's room
+is its cap less its served and waiting levels, a part that makes nothing gives its room back, and the server refuses
+an add that would pass the cap (409 `full`), so the runner never rolls out a level a player sent. It adds no strike
+and reads none. It stops starting parts when its time is spent, ends those still running, and stops altogether when
+the bank's hourly share for it is spent (429) or the bank fails three times running.
 
 It authenticates with a bearer token in the `X-Crete-Verifier` header (a custom header, since Apache in front of
 PHP-FPM may drop `Authorization`). The token is `CRETE_BANK_VERIFIER_TOKEN`, a secret of the `production` environment,
@@ -58,7 +83,8 @@ cannot read it. Disputed levels are listed to it first. The repository is
 public, so the token is never committed: the deploy (`deploy.sh`, from the same secret, which `deploy.yml` passes in)
 stages `games/crete/bank/verifier.json` holding only the token's SHA-256, and the server compares hashes. Without the
 secret nothing is staged and the trusted calls are refused; the workflow does nothing. The token is never echoed in a
-response or written to a log. `bank/.htaccess` denies the whole folder to browsers.
+response or written to a log, and the scripts never print it. Without the secret the workflow skips both steps with a
+notice saying the token is not set. `bank/.htaccess` denies the whole folder to browsers.
 
 **A device's own levels.** A level a device's own search made is trusted on that device: it is the device's own
 computation. Every level its search makes is kept in local storage (`crete-endless-own-<grade>`, up to 150), and a run
@@ -89,7 +115,7 @@ The rules:
 
 **Throttling.** Three strikes (trusted mismatches) in 24 hours against an install, or against a network, and the server refuses that
 source's submissions for the rest of those 24 hours. Rate limits per network: 30 submissions, 20 claims, 20 verdicts,
-20 reports and 120 level fetches an hour.
+20 reports and 120 level fetches an hour; the trusted runner's calls share 600 an hour.
 
 **What this does and does not stop.** A hand-made level with a made-up tuple fails its first verification: the part
 the tuple names makes another level, or none. To get one through, a person must also control both verifiers: two
@@ -112,11 +138,11 @@ help: they throw away drafts, they never draw walls.
 **Allowed versions.** The server's config (`games/crete/bank/config.json`) lists the generator versions it accepts,
 `accept`. A change that alters what the generator makes for the same tuple (such as the variety work) bumps
 `ENDLESS_VERSION` and adds the new number to `accept`; `test/shared-version.test.ts` pins one part's output to the
-version, so such a change fails the test until the version is bumped. Levels already served stay served, whatever
-their version: they were verified when they came in. Submissions for a version not in `accept` are refused, and
-pending levels of such a version are dropped, since no verifier runs that generator any more. A device verifies only
-pending levels of its own version, so retiring an old version from `accept` once old copies of the page are gone
-retires its pending levels with it.
+version, so such a change fails the test until the version is bumped. A version taken out of `accept` is retired
+whole: submissions for it are refused (403 `version`), no device is handed one of its levels to check, and its
+served and pending levels are dropped from a grade's store the next time any request touches that grade, so the next
+write leaves them out. No separate clean-up runs on the host. Version 1, the old repetitive 15 × 15 mazes, is
+retired this way: `accept` holds version 2 alone.
 
 ## Upload
 
@@ -152,7 +178,9 @@ The bank lives in `games/crete/data/` on the host, a folder the deploy makes gro
 and never uploads into; PHP falls back to `/var/tmp/<account>-crete-bank` when it cannot write there (the docker
 copy). `StoreDir` (`games/_kit/php/store-dir.php`) checks the folder and writes its `.htaccess` deny file. Per
 grade: `served-<grade>.json` and `pending-<grade>.json`; plus `keys.json` (the network key) and the guard's rate
-store. Every change to a grade takes an exclusive `flock` on `<grade>.lock` and writes each file whole to a new
+store, and one small `prov-<grade>-<hash>.json` per level the trusted runner added, holding its tuple, deleted once
+the level has left the served pool (when the runner next reads the counts). Every change to a grade takes an
+exclusive `flock` on `<grade>.lock` and writes each file whole to a new
 temporary file in the same folder, then renames it over the old one, so a reader never sees half a file.
 
 **The cap.** 1,500 served levels per grade and 300 pending. A served entry is the text with its line and numbers,
@@ -260,12 +288,16 @@ store files.
   two matching verifications from distinct installs and a second network admit a level, the uploader's own
   verdicts and a stranger's ticket count for nothing, strikes throttle, version accept, the cap and weighted
   roll-out, reports retire, locking under concurrent writers, the size of a full store, and the trusted calls: only
-  with the token, the token never in a response or the log, one trusted match admits, a false "match" is a mismatch.
+  with the token, the token never in a response or the log, one trusted match admits, a false "match" is a mismatch;
+  the trusted add needs the token, is served at once with its tuple kept, refuses version 1, a duplicate and an add
+  past the cap, and strikes nobody; the counts summarise each grade and forget the tuples of levels gone; and the
+  shipped config retires version 1 from a live store (served and pending) and refuses its submissions.
 - **node:test**: upload on make (with the tuple, never for a spec budget), taking from the shared cache (band, tier,
   hides, run likeness, never twice), the replay check, skipping and reporting a bad level, offline fallback, seeded
   runs never sharing, **a verifier rejects a text that does not match its tuple**, the version pin, the PHP
   character list against the game's tiles, the trusted verifier's script posting a mismatch for a tampered text and
-  never printing its token, a device's own levels played again, and checking never starting while the solver
+  never printing its token, the trusted generator's grade priority (Hard's plateau and large boards first, never past
+  the room), its tuples, its stop when its time is spent, and its quiet failures, a device's own levels played again, and checking never starting while the solver
   searches or with the setting off.
 - **e2e**: a New Run takes level 1 from a shared bank seeded through the page's network layer, at once, and its
   card says "From the shared bank."
@@ -277,4 +309,5 @@ store files.
    production, Add environment secret; or `gh secret set CRETE_BANK_VERIFIER_TOKEN --env production`).
 3. Run the deploy workflow once from the Actions tab (or merge anything): the deploy puts the token's hash on the
    server.
-4. Optionally run crete-verify from the Actions tab to see it list and check the waiting levels.
+4. Optionally run crete-verify from the Actions tab to seed the bank at once: it checks the waiting levels, then
+   makes new ones for the rest of its run.

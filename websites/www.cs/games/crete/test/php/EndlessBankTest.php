@@ -96,7 +96,7 @@ final class EndlessBankTest extends TestCase
     private static function tuple(array $over = []): array
     {
         return array_replace([
-            'v' => 1, 'seed' => 'olive-42', 'tier' => 1, 'grade' => 'easy', 'depth' => 3, 'k' => 0,
+            'v' => 2, 'seed' => 'olive-42', 'tier' => 1, 'grade' => 'easy', 'depth' => 3, 'k' => 0,
             'run' => [['text' => self::level(999, 9, 'An earlier title'), 'explored' => 10, 'score' => 50]],
         ], $over);
     }
@@ -106,7 +106,7 @@ final class EndlessBankTest extends TestCase
         return $bank->submit(['op' => 'submit', 'install' => self::install($who), 'tuple' => self::tuple($tuple), 'made' => self::made($text, $made)], $addr);
     }
 
-    private function claim(Bank $bank, string $who, string $addr, int $v = 1): array
+    private function claim(Bank $bank, string $who, string $addr, int $v = 2): array
     {
         return $bank->claim(['op' => 'claim', 'install' => self::install($who), 'v' => $v], $addr);
     }
@@ -472,12 +472,33 @@ final class EndlessBankTest extends TestCase
         self::assertSame([403, ['error' => 'version']], self::refusal(fn() => $this->submit($later, self::level(24), tuple: ['v' => 1])));
     }
 
-    public function testAServedLevelOfARetiredVersionStaysServed(): void
+    public function testTheShippedConfigRetiresVersionOneFromALiveStore(): void
     {
-        $bank = $this->bank(['accept' => [1, 2]]);
-        $this->admit($bank, self::level(25));
-        $later = $this->bank(['accept' => [2]]);
-        self::assertCount(1, $later->levels('easy', 1, 16));
+        // The store as the live host may hold it: served and pending levels of both versions.
+        $served = [];
+        $pending = [];
+        foreach ([[40, 1], [41, 2], [42, 1]] as [$seed, $v]) {
+            $served[] = Bank::servedEntry(self::made(Bank::blank(self::level($seed))), Bank::layoutHash(self::level($seed)), $v, $this->now - 60);
+        }
+        $bank = $this->bank();
+        $this->submit($bank, self::level(43));
+        $pending = $this->stored('pending-easy.json');
+        $old = $pending[0];
+        $old['v'] = 1;
+        $old['h'] = Bank::layoutHash(self::level(44));
+        $old['tuple']['v'] = 1;
+        $pending[] = $old;
+        file_put_contents("{$this->dir}/served-easy.json", Bank::encode($served));
+        file_put_contents("{$this->dir}/pending-easy.json", Bank::encode($pending));
+
+        self::assertSame([2], self::config()['accept']);
+        $got = $bank->levels('easy', 10, 16);
+        self::assertSame([Bank::blank(self::level(41))], array_column($got, 'text'), 'a version-1 level is never served again');
+        self::assertSame([2], array_column($this->stored('served-easy.json'), 'v'), 'and leaves the store at the next request');
+        self::assertSame([2], array_column($this->stored('pending-easy.json'), 'v'), 'a pending version-1 level goes too');
+        self::assertSame(['none' => true], $this->claim($bank, 'old-page', self::B, 1), 'no version-1 level is handed out to check');
+        self::assertSame([403, ['error' => 'version']], self::refusal(fn() => $this->submit($bank, self::level(45), 'old-page', self::B, ['v' => 1])), 'a version-1 submission is refused');
+        self::assertSame([], $this->stored('strikes.json'), 'with no strike');
     }
 
     public function testARotatedOrFlippedCopyIsADuplicate(): void
@@ -554,7 +575,7 @@ final class EndlessBankTest extends TestCase
             $seed = [];
             foreach (['old' => [9, 0], 'busy' => [0, 9], 'fresh1' => [0, 0], 'fresh2' => [0, 0]] as $name => [$days, $served]) {
                 $made = self::made(Bank::blank($texts[$name]));
-                $seed[] = ['h' => Bank::layoutHash($texts[$name]), 'n' => $served] + Bank::servedEntry($made, Bank::layoutHash($texts[$name]), 1, $this->now - $days * 86400 - 5);
+                $seed[] = ['h' => Bank::layoutHash($texts[$name]), 'n' => $served] + Bank::servedEntry($made, Bank::layoutHash($texts[$name]), 2, $this->now - $days * 86400 - 5);
             }
             file_put_contents("{$this->dir}/served-easy.json", Bank::encode($seed));
             $bank = $this->bank(['servedCap' => 4]);
@@ -579,7 +600,7 @@ final class EndlessBankTest extends TestCase
         $entries = [];
         foreach ([[60, 1, 0], [61, 1, 999], [62, 5, 0]] as [$seed, $chapter, $served]) {
             $text = Bank::blank(self::level($seed));
-            $entries[] = ['n' => $served] + Bank::servedEntry(self::made($text, ['chapter' => $chapter]), Bank::layoutHash($text), 1, $this->now);
+            $entries[] = ['n' => $served] + Bank::servedEntry(self::made($text, ['chapter' => $chapter]), Bank::layoutHash($text), 2, $this->now);
         }
         file_put_contents("{$this->dir}/served-easy.json", Bank::encode($entries));
         $bank = $this->bank();
@@ -740,7 +761,7 @@ final class EndlessBankTest extends TestCase
             $rows[4] = substr_replace($rows[4], 'C', 2, 1);
             $text = Bank::checkText(self::text($rows, 'x', ['hearts: 4', 'facing: up down left', 'machines: fireball-right']), 'made.text');
             $made = self::made($text, ['line' => $line, 'shortest' => 400, 'score' => 9999, 'explored' => 9_999_999, 'chapter' => 10, 'hides' => true]);
-            $entries[] = ['n' => 123456] + Bank::servedEntry($made, Bank::layoutHash($text), 1, $this->now);
+            $entries[] = ['n' => 123456] + Bank::servedEntry($made, Bank::layoutHash($text), 2, $this->now);
         }
         $bytes = Bank::encode($entries);
         file_put_contents("{$this->dir}/served-hard.json", $bytes);
@@ -770,9 +791,9 @@ final class EndlessBankTest extends TestCase
     public function testTheShippedConfigIsValid(): void
     {
         $config = self::config();
-        self::assertSame([1, 2], $config['accept']);
+        self::assertSame([2], $config['accept']);
         self::assertSame(1500, $config['servedCap']);
-        self::assertSame(['submit' => 30, 'claim' => 20, 'verify' => 20, 'report' => 20, 'levels' => 120, 'trusted' => 120], $config['perHour']);
+        self::assertSame(['submit' => 30, 'claim' => 20, 'verify' => 20, 'report' => 20, 'levels' => 120, 'trusted' => 600], $config['perHour']);
         self::assertSame('crete_bank_csrf', $config['guard']['csrfCookie']);
     }
 
@@ -919,8 +940,81 @@ final class EndlessBankTest extends TestCase
         self::assertSame([Bank::layoutHash(self::level(310)), Bank::layoutHash(self::level(311)), Bank::layoutHash(self::level(312))], array_column($items, 'h'));
         self::assertCount(4, $this->trusted($bank, ['op' => 'trusted-list', 'limit' => 50])['items'], 'the served level is not listed');
         self::assertSame([404, ['error' => 'gone']], self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-verify', 'grade' => 'medium', 'h' => Bank::layoutHash(self::level(310)), 'verdict' => 'match', 'found' => null])), 'the right h in the wrong grade');
-        $retired = $this->bank(['accept' => [2]]);
+        $retired = $this->bank(['accept' => [3]]);
         self::assertSame([], $this->trusted($retired, ['op' => 'trusted-list', 'limit' => 50])['items'], 'only accepted versions');
+    }
+
+    private function add(Bank $bank, string $text, array $tuple = [], ?string $token = self::TOKEN): array
+    {
+        return $this->trusted($bank, ['op' => 'trusted-add', 'tuple' => self::tuple($tuple), 'made' => self::made($text)], $token);
+    }
+
+    public function testATrustedAddNeedsTheTokenAndIsServedAtOnceWithItsTuple(): void
+    {
+        $bank = $this->bank();
+        $text = self::level(330, 15, 'Made on the runner');
+        $unauthorized = [401, ['error' => 'unauthorized']];
+        self::assertSame($unauthorized, self::refusal(fn() => $this->add($bank, $text)), 'no verifier file trusts nobody');
+        $this->verifierFile();
+        foreach (['a wrong token' => 'tok_Wrong-verifier_0123456789abcdefXYZ', 'no token' => null, 'the hash itself' => hash('sha256', self::TOKEN)] as $what => $token) {
+            self::assertSame($unauthorized, self::refusal(fn() => $this->add($bank, $text, [], $token)), $what);
+            self::assertSame($unauthorized, self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-counts'], $token)), $what);
+        }
+        self::assertSame([], $this->stored('served-easy.json'), 'nothing came in');
+
+        $h = Bank::layoutHash($text);
+        self::assertSame(['ok' => true, 'h' => $h], $this->add($bank, $text, ['seed' => 'ci-abc']));
+        $served = $bank->levels('easy', 1, 16);
+        self::assertSame([Bank::blank($text)], array_column($served, 'text'), 'served at once, its title blanked');
+        self::assertSame([], $this->stored('pending-easy.json'), 'never in quarantine');
+        $kept = json_decode((string) file_get_contents("{$this->dir}/prov-easy-$h.json"), true);
+        self::assertSame('ci-abc', $kept['seed'], 'its provenance tuple is kept beside it');
+        self::assertSame('title: ', explode("\n", $kept['run'][0]['text'])[0]);
+        self::assertSame([409, ['error' => 'duplicate']], self::refusal(fn() => $this->add($bank, $text)));
+        self::assertSame([403, ['error' => 'version']], self::refusal(fn() => $this->add($bank, self::level(331), ['v' => 1])), 'never version 1');
+        self::assertSame([400, ['error' => 'invalid', 'field' => 'made.text']], self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-add', 'tuple' => self::tuple(), 'made' => self::made("title: x\n")])));
+        self::assertSame([], $this->stored('strikes.json'), 'the runner\'s refusals strike nobody');
+    }
+
+    public function testTrustedAddsStopAtTheCapAndNeverRollOutAPlayersLevel(): void
+    {
+        $bank = $this->bank(['servedCap' => 3]);
+        $this->verifierFile();
+        $this->admit($bank, self::level(340));
+        $this->submit($bank, self::level(341), 'waiting', self::A);
+        self::assertTrue($this->add($bank, self::level(342))['ok']);
+        // One served, one pending and one added fill the cap of three.
+        self::assertSame([409, ['error' => 'full']], self::refusal(fn() => $this->add($bank, self::level(343))));
+        self::assertSame([Bank::layoutHash(self::level(340)), Bank::layoutHash(self::level(342))], array_column($this->stored('served-easy.json'), 'h'), 'the player\'s level stays');
+        self::assertFalse(is_file("{$this->dir}/prov-easy-" . Bank::layoutHash(self::level(343)) . '.json'));
+        self::assertTrue($this->add($bank, self::level(344), ['grade' => 'hard'])['ok'], 'another grade has room');
+        // A uploader's strikes are the peers' business as before: the runner's adds never change them.
+        $h = Bank::layoutHash(self::level(341));
+        $this->trusted($bank, ['op' => 'trusted-verify', 'grade' => 'easy', 'h' => $h, 'verdict' => 'mismatch', 'found' => null]);
+        self::assertSame([Bank::installHash(self::install('waiting'))], array_column($this->stored('strikes.json'), 'i'));
+    }
+
+    public function testTrustedCountsSummariseEachGradeAndForgetRetiredProvenance(): void
+    {
+        $bank = $this->bank(['servedCap' => 2]);
+        $this->verifierFile();
+        $this->add($bank, self::level(350, 15));
+        $this->add($bank, self::level(351, 21), ['grade' => 'hard']);
+        $this->submit($bank, self::level(352), tuple: ['grade' => 'hard']);
+        $counts = $this->trusted($bank, ['op' => 'trusted-counts'])['grades'];
+        self::assertSame(['easy', 'medium', 'hard'], array_keys($counts));
+        self::assertSame(['served' => 1, 'pending' => 0, 'cap' => 2, 'levels' => [[120, 1, 15, 15, 0]]], $counts['easy']);
+        self::assertSame(['served' => 0, 'pending' => 0, 'cap' => 2, 'levels' => []], $counts['medium']);
+        self::assertSame(['served' => 1, 'pending' => 1, 'cap' => 2, 'levels' => [[120, 1, 21, 21, 0]]], $counts['hard']);
+        // Two reports retire the easy level; the next counts forget its tuple.
+        $h = Bank::layoutHash(self::level(350, 15));
+        $bank->report(['op' => 'report', 'install' => self::install('r1'), 'grade' => 'easy', 'h' => $h], self::A);
+        $bank->report(['op' => 'report', 'install' => self::install('r2'), 'grade' => 'easy', 'h' => $h], self::B);
+        self::assertTrue(is_file("{$this->dir}/prov-easy-$h.json"));
+        self::assertSame(0, $this->trusted($bank, ['op' => 'trusted-counts'])['grades']['easy']['served']);
+        self::assertFalse(is_file("{$this->dir}/prov-easy-$h.json"));
+        self::assertTrue(is_file("{$this->dir}/prov-hard-" . Bank::layoutHash(self::level(351, 21)) . '.json'));
+        self::assertSame([400, ['error' => 'invalid', 'field' => 'extra']], self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-counts', 'extra' => 1])));
     }
 
     public function testTheTrustedEndpointNeverEchoesOrLogsTheToken(): void
@@ -954,6 +1048,12 @@ final class EndlessBankTest extends TestCase
             self::assertSame([200, ['ok' => true, 'verdict' => 'match']], array_slice($call(['op' => 'trusted-verify', 'grade' => 'easy', 'h' => $body['items'][0]['h'], 'verdict' => 'match', 'found' => self::made($text)], $trusted), 0, 2));
             self::assertCount(1, self::http('GET', "$base?grade=easy&tier=1&n=4")[1]['levels']);
             self::assertSame(403, $call(['op' => 'claim', 'install' => self::install('x'), 'v' => 1], $trusted)[0], 'the token is no CSRF pass for browser ops');
+            $add = ['op' => 'trusted-add', 'tuple' => self::tuple(), 'made' => self::made(self::level(321))];
+            self::assertSame([401, ['error' => 'unauthorized']], array_slice($call($add, $json), 0, 2), 'no adding without the token');
+            self::assertSame([401, ['error' => 'unauthorized']], array_slice($call($add, [...$json, 'Origin: http://127.0.0.1', 'X-Crete-Verifier: tok_Wrong-verifier_0123456789abcdefXYZ']), 0, 2));
+            self::assertSame([200, ['ok' => true, 'h' => Bank::layoutHash(self::level(321))]], array_slice($call($add, $trusted), 0, 2));
+            [$status, $body] = $call(['op' => 'trusted-counts'], $trusted);
+            self::assertSame([200, 2], [$status, $body['grades']['easy']['served']]);
             foreach ($seen as $answer) {
                 self::assertStringNotContainsString(self::TOKEN, $answer);
             }

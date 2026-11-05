@@ -1,15 +1,19 @@
 name: crete-verify
 
-# The shared Endless bank's trusted verifier (websites/www.cs/games/crete/tools/verify-bank.ts). Every six hours,
-# and by hand from the Actions tab, it asks www.cs's bank endpoint over HTTPS for the levels waiting in quarantine,
-# makes each again from its tuple with main's generator, and posts a match or a mismatch; one trusted match admits
-# a level, so the bank grows even when only one player visits. It never uses ssh or sftp (the host's fail2ban bans
-# repeated logins). Each run checks at most 25 levels in at most 45 minutes, and a failed run only leaves levels for
-# the next one.
+# The shared Endless bank's trusted runner. Every six hours, and by hand from the Actions tab, it talks to www.cs's
+# bank endpoint (websites/www.cs/games/crete/endless-bank.php) over HTTPS only, never ssh or sftp (the host's fail2ban
+# bans repeated logins), in two steps within one fixed budget of 47 minutes:
+#
+# 1. tools/verify-bank.ts checks the levels waiting in quarantine: it makes each again from its tuple with main's
+#    generator and posts a match or a mismatch; one trusted match admits a level. At most 25 levels, 12 minutes.
+# 2. tools/generate-bank.ts spends the rest of the budget making new Endless levels on every core, scarcest first
+#    (Hard's plateau, large boards especially, then Medium and Easy), and posts each straight into the served pool
+#    with its provenance tuple, never past a grade's cap.
 #
 # The one secret is CRETE_BANK_VERIFIER_TOKEN, a secret of the `production` environment (which only admits runs
 # from main), the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). A workflow on
-# another branch cannot read it. Without it the run does nothing.
+# another branch cannot read it, and it is never printed. Without it the run skips both steps and says so. A failed
+# step only leaves the bank as it was.
 
 on:
   schedule:
@@ -24,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
+  verify-and-generate:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 60
@@ -38,8 +42,34 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Check the levels waiting in the shared bank
-        continue-on-error: true
+      - name: Look for the token
+        id: token
         env:
           CRETE_BANK_VERIFIER_TOKEN: ${{ secrets.CRETE_BANK_VERIFIER_TOKEN }}
-        run: node websites/www.cs/games/crete/tools/verify-bank.ts --items 25 --minutes 45
+        run: |
+          echo "CRETE_START=$(date +%s)" >> "$GITHUB_ENV"
+          if [ -n "$CRETE_BANK_VERIFIER_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CRETE_BANK_VERIFIER_TOKEN is not set in the production environment; skipping verification and generation."
+          fi
+
+      - name: Check the levels waiting in the shared bank
+        if: steps.token.outputs.present == 'true'
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          CRETE_BANK_VERIFIER_TOKEN: ${{ secrets.CRETE_BANK_VERIFIER_TOKEN }}
+        run: node websites/www.cs/games/crete/tools/verify-bank.ts --items 25 --minutes 12
+
+      - name: Make new levels for the shared bank
+        if: steps.token.outputs.present == 'true'
+        continue-on-error: true
+        timeout-minutes: 45
+        env:
+          CRETE_BANK_VERIFIER_TOKEN: ${{ secrets.CRETE_BANK_VERIFIER_TOKEN }}
+        run: |
+          left=$(( 47 - ( $(date +%s) - CRETE_START ) / 60 ))
+          if [ "$left" -lt 2 ]; then echo "generate-bank: no time left in this run"; exit 0; fi
+          node websites/www.cs/games/crete/tools/generate-bank.ts --minutes "$left"

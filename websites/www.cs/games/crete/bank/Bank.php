@@ -4,7 +4,8 @@
 // made it and waits in quarantine (pending) until two other installs, one on
 // another network, regenerate it from that tuple byte for byte; only then is it
 // served to players. One mismatch rejects it and strikes its uploader. The
-// design is docs/superpowers/specs/2026-11-04-crete-shared-bank-design.md.
+// trusted runner (our own CI) may also add levels it made itself, served at
+// once. The design is docs/superpowers/specs/2026-11-04-crete-shared-bank-design.md.
 declare(strict_types=1);
 
 namespace Crete;
@@ -49,8 +50,8 @@ final class Bank
     /** The rate-limit kinds endless-bank.php takes: one per browser op, the level fetch, and the trusted verifier's ops. */
     public const RATE_KINDS = ['submit', 'claim', 'verify', 'report', 'levels', 'trusted'];
 
-    /** The ops only the trusted verifier may call, with the X-Crete-Verifier header. */
-    public const TRUSTED_OPS = ['trusted-list', 'trusted-verify'];
+    /** The ops only the trusted runner may call, with the X-Crete-Verifier header. */
+    public const TRUSTED_OPS = ['trusted-list', 'trusted-verify', 'trusted-counts', 'trusted-add'];
 
     /** The form a trusted verifier token takes; deploy.sh refuses any other. */
     public const TOKEN = '/^[A-Za-z0-9_-]{32,128}\z/';
@@ -447,6 +448,8 @@ final class Bank
         return match ($body['op'] ?? null) {
             'trusted-list' => $this->trustedList($body),
             'trusted-verify' => $this->trustedVerify($body),
+            'trusted-counts' => $this->trustedCounts($body),
+            'trusted-add' => $this->trustedAdd($body),
             default => throw Refusal::invalid('op'),
         };
     }
@@ -516,6 +519,81 @@ final class Bank
             throw new Refusal(404, ['error' => 'gone']);
         });
         return ['ok' => true, 'verdict' => $verdict];
+    }
+
+    /**
+     * Each grade's served and pending counts, its cap, and a summary of every
+     * served level ([score, chapter, rows, cols, hides as 0 or 1]): the trusted
+     * runner works out from them which levels are scarce. It also forgets the
+     * provenance of levels no longer served.
+     * @param array<string, mixed> $body {op}
+     * @return array{grades: array<string, array{served: int, pending: int, cap: int, levels: list<list<int>>}>}
+     */
+    private function trustedCounts(array $body): array
+    {
+        self::fields($body, ['op'], '');
+        $keys = $this->keys();
+        $out = [];
+        foreach (self::GRADES as $grade) {
+            $out[$grade] = $this->withGrade($grade, $keys, function (array &$served, array &$pending) use ($grade): array {
+                $kept = array_flip(array_column($served, 'h'));
+                foreach (glob("{$this->dir}/prov-$grade-*.json") ?: [] as $file) {
+                    if (preg_match('/-([a-f0-9]{16})\.json\z/', $file, $m) && !isset($kept[$m[1]])) {
+                        @unlink($file);
+                    }
+                }
+                $levels = [];
+                foreach ($served as $entry) {
+                    $rows = self::rows($entry['made']['text']);
+                    $levels[] = [$entry['made']['score'], $entry['made']['chapter'], count($rows), strlen($rows[0] ?? ''), $entry['made']['hides'] ? 1 : 0];
+                }
+                return ['served' => count($served), 'pending' => count($pending), 'cap' => $this->config['servedCap'], 'levels' => $levels];
+            });
+        }
+        return ['grades' => $out];
+    }
+
+    /**
+     * A level the trusted runner made itself with main's generator: our own
+     * code on our own machine, as trusted as its verdicts, so it is served at
+     * once. Its tuple is checked like any upload's and kept beside it
+     * (prov-<grade>-<h>.json), so it can be made again later. Never past the
+     * cap: a grade whose served and pending levels fill it answers 409 full,
+     * so the runner never rolls out a level a player sent. No strike either way.
+     * @param array<string, mixed> $body {op, tuple, made}
+     * @return array{ok: true, h: string}
+     */
+    private function trustedAdd(array $body): array
+    {
+        self::fields($body, ['op', 'tuple', 'made'], '');
+        $tuple = $this->tuple($body['tuple']);
+        $made = self::made($body['made'], 'made');
+        if (!in_array($tuple['v'], $this->config['accept'], true)) {
+            throw new Refusal(403, ['error' => 'version']);
+        }
+        $grade = $tuple['grade'];
+        $h = self::layoutHash($made['text']);
+        $now = ($this->clock)();
+        $this->withGrade($grade, $this->keys(), function (array &$served, array &$pending) use ($h, $tuple, $made, $grade, $now): void {
+            foreach ([$served, $pending] as $pool) {
+                if (in_array($h, array_column($pool, 'h'), true)) {
+                    throw new Refusal(409, ['error' => 'duplicate']);
+                }
+            }
+            if (count($served) + count($pending) >= $this->config['servedCap']) {
+                throw new Refusal(409, ['error' => 'full']);
+            }
+            $this->writeIfChanged("{$this->dir}/prov-$grade-$h.json", '', $tuple);
+            $served[] = self::servedEntry($made, $h, $tuple['v'], $now);
+        });
+        return ['ok' => true, 'h' => $h];
+    }
+
+    /** @return list<string> a checked text's grid rows */
+    private static function rows(string $text): array
+    {
+        $lines = explode("\n", rtrim($text, "\n"));
+        return array_slice($lines, (int) array_search('', $lines, true) + 1);
     }
 
     // ---- Validation ------------------------------------------------------
@@ -600,9 +678,7 @@ final class Bank
      */
     public static function layoutHash(string $text): string
     {
-        $lines = explode("\n", rtrim($text, "\n"));
-        $rows = array_slice($lines, (int) array_search('', $lines, true) + 1);
-        $bits = array_map(static fn(string $row): string => strtr($row, self::wallMap()), $rows);
+        $bits = array_map(static fn(string $row): string => strtr($row, self::wallMap()), self::rows($text));
         $best = null;
         foreach ([$bits, array_reverse($bits)] as $shape) {
             for ($turn = 0; $turn < 4; $turn++) {
@@ -962,9 +1038,11 @@ final class Bank
 
     /**
      * Runs $fn on a grade's served and pending stores under the grade's lock
-     * and writes back whichever it changed. Pending levels past pendingDays,
-     * of a version no longer accepted, or made under a deleted network key
-     * leave first.
+     * and writes back whichever it changed. Served levels of a version no
+     * longer accepted leave first, so retiring a version from `accept` retires
+     * its levels at the grade's next request; so do pending levels past
+     * pendingDays, of a version no longer accepted, or made under a deleted
+     * network key.
      * @param array<string, array{id: string, key: string, at: int}> $keys
      */
     private function withGrade(string $grade, array $keys, \Closure $fn): mixed
@@ -974,11 +1052,12 @@ final class Bank
             $pendingPath = "{$this->dir}/pending-$grade.json";
             $servedRaw = self::read($servedPath);
             $pendingRaw = self::read($pendingPath);
-            $served = self::decodeList($servedRaw, $servedPath);
+            $accepted = fn(array $e): bool => in_array($e['v'] ?? null, $this->config['accept'], true);
+            $served = array_values(array_filter(self::decodeList($servedRaw, $servedPath), $accepted));
             $since = ($this->clock)() - $this->config['pendingDays'] * self::DAY;
             $pending = array_values(array_filter(
                 self::decodeList($pendingRaw, $pendingPath),
-                fn(array $p): bool => $p['at'] >= $since && in_array($p['v'], $this->config['accept'], true) && isset($keys[$p['kid']]),
+                fn(array $p): bool => $p['at'] >= $since && $accepted($p) && isset($keys[$p['kid']]),
             ));
             // Reports are kept for pendingDays only, then forgotten with the install and network codes they hold.
             foreach ($served as $k => $entry) {

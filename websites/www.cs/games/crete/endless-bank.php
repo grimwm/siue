@@ -11,18 +11,22 @@
  * POST { "op": "verify", "install", "ticket", "found" } -> { "ok": true, "verdict": "match" | "mismatch" }
  * POST { "op": "report", "install", "grade", "h" } -> { "ok": true }
  *
- * The trusted verifier (a scheduled GitHub Actions job) sends header
- * X-Crete-Verifier: <token> instead of Origin and CSRF:
+ * The trusted runner (a scheduled GitHub Actions job that verifies, then
+ * generates) sends header X-Crete-Verifier: <token> instead of Origin and CSRF:
  * POST { "op": "trusted-list", "limit": 1..50 } -> { "items": [{ "grade", "h", "tuple", "made" }] }
  * POST { "op": "trusted-verify", "grade", "h", "verdict": "match" | "mismatch", "found" }
  *      -> { "ok": true, "verdict": "match" | "mismatch" }, or 404 { "error": "gone" }
+ * POST { "op": "trusted-counts" }
+ *      -> { "grades": { <grade>: { "served", "pending", "cap", "levels": [[score, chapter, rows, cols, hides]] } } }
+ * POST { "op": "trusted-add", "tuple", "made" } -> { "ok": true, "h" } (served at once),
+ *      or 409 { "error": "duplicate" | "full" }, 403 { "error": "version" }
  * Its token is checked before a rate slot is taken (a stranger's guesses write
  * nothing), against the sha256 in bank/verifier.json, which deploy.sh writes
  * from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the path
  * (tests). Without the file every trusted call is 401 { "error": "unauthorized" }.
  *
  * Refusals: 400 { "error": "invalid", "field" }, 400 { "error": "ticket" }, 401 { "error": "unauthorized" },
- *   403 { "error": "forbidden" }, 403 { "error": "version" }, 409 { "error": "duplicate" },
+ *   403 { "error": "forbidden" }, 403 { "error": "version" }, 409 { "error": "duplicate" | "full" },
  *   429 { "error": "rate" | "throttled" }, 405 { "error": "method not allowed" }, 500 { "error": "server error" }.
  *
  * Every rule and store is bank/Bank.php's; settings are bank/config.json

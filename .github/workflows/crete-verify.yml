@@ -2,14 +2,16 @@ name: crete-verify
 
 # The shared Endless bank's trusted runner. Every six hours, and by hand from the Actions tab, it talks to www.cs's
 # bank endpoint (websites/www.cs/games/crete/endless-bank.php) over HTTPS only, never ssh or sftp (the host's fail2ban
-# bans repeated logins), in two steps within one fixed budget of 47 minutes:
+# bans repeated logins), in two steps within one fixed budget of 47 minutes, each through the site's make target
+# (websites/www.cs/Makefile), the same one a person runs on their own machine:
 #
-# 1. tools/verify-bank.ts checks the levels waiting in quarantine: it makes each again from its tuple with main's
-#    generator and posts a match or a mismatch; one trusted match admits a level. At most 25 levels, 12 minutes.
-# 2. tools/generate-bank.ts spends the rest of the budget making new Endless levels on every core, its time
-#    shared among the grades with room (Hard 50%, Medium 30%, Easy 20%), the scarcest first within each (the plateau,
-#    large boards especially), and posts each straight into the served pool
-#    with its provenance tuple, never past a grade's cap. Once every grade is full it turns each over: up to 1.5% of a
+# 1. make crete-verify-levels (tools/verify-bank.ts) checks the levels waiting in quarantine: it makes each again from
+#    its tuple with main's generator and posts a match or a mismatch; one trusted match admits a level. At most 25
+#    levels, 12 minutes.
+# 2. make crete-levels (tools/generate-bank.ts) spends the rest of the budget making new Endless levels on every core,
+#    its time shared among the grades with room (Hard 50%, Medium 30%, Easy 20%), the scarcest first within each (the
+#    plateau, large boards especially), and posts each straight into the served pool with its provenance tuple, never
+#    past a grade's cap. Once every grade is full it turns each over: up to 1.5% of a
 #    grade's cap per run, each new level replacing one served level the server picks, one out for each one in.
 #
 # The token, CRETE_BANK_VERIFIER_TOKEN, is the bank-verifier field of the item "Crete Config" in the SIUE 1Password
@@ -68,7 +70,7 @@ jobs:
         if: steps.token.outputs.present == 'true'
         continue-on-error: true
         timeout-minutes: 15
-        run: node websites/www.cs/games/crete/tools/verify-bank.ts --items 25 --minutes 12
+        run: make -C websites/www.cs crete-verify-levels COUNT=25 MINUTES=12
 
       - name: Make new levels for the shared bank
         if: steps.token.outputs.present == 'true'
@@ -77,4 +79,4 @@ jobs:
         run: |
           left=$(( 47 - ( $(date +%s) - CRETE_START ) / 60 ))
           if [ "$left" -lt 2 ]; then echo "generate-bank: no time left in this run"; exit 0; fi
-          node websites/www.cs/games/crete/tools/generate-bank.ts --minutes "$left"
+          make -C websites/www.cs crete-levels MINUTES="$left"

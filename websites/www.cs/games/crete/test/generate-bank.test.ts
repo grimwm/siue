@@ -2,11 +2,12 @@
 // never starving Medium and Easy), makes what is scarcest within one (the plateau, large boards especially), never
 // more than fits under a grade's cap, turns a full grade
 // over by replacing a small share of it with what it made, stops when its time is spent, posts with its token in the
-// header only, and fails quietly.
+// header only, and fails quietly. On a machine of our own it makes only the difficulties named, a count of each
+// (replacing once a grade is full), and sizes its workers by the run's memory cap.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateAll, nextWant, safeUrl, tallyOf, tupleFor, isLarge, LARGE_SIDE } from '../tools/generate-bank.ts';
-import type { Counts, GenerateDeps, Shelf, Want } from '../tools/generate-bank.ts';
+import { difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, totalLines, tupleFor, isLarge, workersIn, LARGE_SIDE } from '../tools/generate-bank.ts';
+import type { Counts, GenerateDeps, RunOptions, Shelf, Want } from '../tools/generate-bank.ts';
 import { ENDLESS_VERSION, requestOf, sharedOf } from '../src/endless/provenance.ts';
 import type { SharedMade } from '../src/endless/provenance.ts';
 import { placeOf, planOf, reachOf } from '../src/endless/generate.ts';
@@ -181,4 +182,96 @@ test('it fails quietly, posts to HTTPS only, and never prints its token', async 
   await generateAll(g.deps, { ms: 60_000 });
   assert.ok(g.lines.some(l => /keeps failing/.test(l)));
   assert.ok(!g.lines.join('\n').includes(TOKEN));
+});
+
+test('--difficulties takes easy, medium and hard in any order and case, each once, and nothing else', () => {
+  assert.deepEqual(difficultiesOf('hard,medium,easy'), ['hard', 'medium', 'easy']);
+  assert.deepEqual(difficultiesOf(' Easy, hard '), ['easy', 'hard'], 'in the order named');
+  assert.match(difficultiesOf('easy,hard,easy') as string, /easy named twice/);
+  assert.match(difficultiesOf('hard,nightmare') as string, /unknown difficulty nightmare/);
+  assert.match(difficultiesOf(',') as string, /no difficulty/);
+  assert.match(optionsOf(['--difficulties', 'Hard,extreme'], 8, 16_000) as string, /extreme/);
+  assert.match(optionsOf(['--memory-mb', '12g'], 8, 16_000) as string, /--memory-mb/);
+});
+
+test('--count is one number for every difficulty, or one per difficulty in order, and nothing else', () => {
+  assert.deepEqual(quotaOf('100', ['easy', 'medium', 'hard']), { easy: 100, medium: 100, hard: 100 });
+  assert.deepEqual(quotaOf('100,100,50', ['easy', 'medium', 'hard']), { easy: 100, medium: 100, hard: 50 });
+  assert.deepEqual(quotaOf('7, 3', ['hard', 'easy']), { hard: 7, easy: 3 }, 'matched by position');
+  const short = quotaOf('100,50', ['easy', 'medium', 'hard']) as string;
+  assert.match(short, /--count 100,50 for --difficulties easy,medium,hard/, 'it names both lists');
+  assert.match(short, /one count for all, or 3/);
+  for (const bad of ['0', '-1', '2.5', 'x', '10,', '1,,2', '']) assert.match(quotaOf(bad, ['easy', 'medium', 'hard']) as string, /whole number/, bad);
+  // Without --difficulties a list of three is easy, medium, hard.
+  const o = optionsOf(['--count', '10,20,30'], 8, 16_384) as RunOptions;
+  assert.deepEqual(o.count, { easy: 10, medium: 20, hard: 30 });
+  assert.equal(planLine(o), '10 easy, 20 medium, 30 hard; 7 worker(s) for no time limit');
+  assert.match(optionsOf(['--difficulties', 'hard', '--count', '1,2'], 8, 16_384) as string, /--count 1,2 for --difficulties hard/);
+  assert.match(optionsOf(['--count', '0'], 8, 16_384) as string, /--count 0/);
+});
+
+test('with none of the new options a run is the runner\'s: every grade, 35 minutes, the workers the machine holds', () => {
+  const o = optionsOf([], 4, 16_384) as RunOptions;
+  assert.deepEqual(o, { minutes: 35, grades: ['easy', 'medium', 'hard'], count: null, workers: 4, memoryMb: null, plan: false });
+  assert.deepEqual(optionsOf(['--minutes', '20', '--workers', '99'], 8, 16_384), { ...o, minutes: 20, workers: 7 }, '--workers never past the machine');
+  assert.equal((optionsOf(['--minutes', '0'], 8, 16_384) as { minutes: number }).minutes, 1);
+  // A count alone has no time limit; with --minutes, whichever comes first.
+  assert.equal((optionsOf(['--count', '10'], 8, 16_384) as { minutes: number }).minutes, Infinity);
+  assert.equal((optionsOf(['--count', '10', '--minutes', '30'], 8, 16_384) as { minutes: number }).minutes, 30);
+});
+
+test('the memory cap sets the workers, 2 GB each, and an explicit --workers may not pass it', () => {
+  assert.equal(workersIn(8192, 8, 16_000), 4);
+  assert.equal(workersIn(12_288, 8, 16_000), 6);
+  assert.equal(workersIn(1000, 8, 16_000), 1, 'always one');
+  assert.equal(workersIn(12_288, 2, 16_000), 2, 'never past the cores');
+  assert.equal(workersIn(65_536, 8, 16_000), 6, 'never past what the machine holds');
+  assert.equal((optionsOf(['--memory-mb', '12288'], 8, 16_000) as { workers: number }).workers, 6);
+  assert.equal((optionsOf(['--memory-mb', '12288', '--workers', '3'], 8, 16_000) as { workers: number }).workers, 3);
+  assert.match(optionsOf(['--memory-mb', '8192', '--workers', '6'], 8, 16_000) as string, /6 workers need 12288 MB; 8192 MB allows 4/);
+});
+
+test('named grades share the time by their own weights; the others get none', () => {
+  const t = limitedTally(counts(shelf(0), shelf(0), shelf(0)), ['hard', 'easy'], null);
+  assert.equal(t.medium.room, 0);
+  const order: string[] = [];
+  for (let i = 0; i < 14; i++) { const w = nextWant(t)!; order.push(w.grade); t[w.grade].running++; }
+  // 50:20, renormalized to 5:2: five Hard parts to two Easy.
+  assert.equal(order.filter(g => g === 'hard').length, 10);
+  assert.equal(order.filter(g => g === 'easy').length, 4);
+  assert.ok(!order.includes('medium'));
+});
+
+test('a count makes that many of each named grade and stops it, replacing on a full grade, filling room first', async () => {
+  const f = fake({ counts: async () => counts(shelf(0), shelf(1500), shelf(1498)) });
+  // The server takes a level into room first and retires one only once the grade is full.
+  const served = { easy: 0, medium: 1500, hard: 1498 } as Record<string, number>;
+  f.deps.upload = async (tuple, made, replace) => {
+    f.posted.push({ tuple, made, replace });
+    if (served[tuple.grade]! < 1500) { served[tuple.grade]!++; return 'ok'; }
+    return replace ? 'replaced' : 'full';
+  };
+  const made = await generateAll(f.deps, { ms: Infinity, grades: ['hard', 'medium'], count: { hard: 5, medium: 5 } });
+  assert.deepEqual(made.added, { easy: 0, medium: 5, hard: 5 }, 'the count is honoured on a full grade, past turnover');
+  assert.deepEqual(made.replaced, { easy: 0, medium: 5, hard: 3 }, 'Hard filled its two empty places first');
+  const posted = f.posted as { replace: boolean }[];
+  assert.ok(posted.every(p => p.replace), 'every count post may replace');
+  assert.deepEqual(totalLines(made, ['hard', 'medium']), ['hard: made 5, added 2, replaced 3', 'medium: made 5, added 0, replaced 5']);
+  // A part that makes nothing does not count: the grade goes on until it has its count.
+  const g = fake({ empty: i => i % 3 === 0 });
+  const some = await generateAll(g.deps, { ms: Infinity, grades: ['easy'], count: { easy: 4 } });
+  assert.deepEqual(some.added, { easy: 4, medium: 0, hard: 0 });
+  assert.deepEqual(some.found, { easy: 4, medium: 0, hard: 0 });
+  assert.ok(some.empty > 0);
+});
+
+test('with a count and a time limit, whichever comes first ends the run', async () => {
+  const f = fake({ partMs: 1000 });
+  const made = await generateAll(f.deps, { ms: 3500, count: { easy: 100, medium: 100, hard: 100 } });
+  assert.ok(made.added.hard + made.added.medium + made.added.easy < 10, 'time came first');
+  // A count met long before the time: the run ends then, and a grade with its count passes its share on.
+  const g = fake({ partMs: 1000 });
+  const done = await generateAll(g.deps, { ms: 3_600_000, count: { easy: 3, medium: 2, hard: 1 } });
+  assert.deepEqual(done.added, { easy: 3, medium: 2, hard: 1 }, 'each difficulty its own count');
+  assert.equal(done.tried, 6);
 });

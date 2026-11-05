@@ -160,10 +160,11 @@ export interface Look { rows: number; cols: number; dead: number; forks: number;
 
 export function lookOf(lv: Level): Look {
   const { rows: R, cols: C } = lv;
-  const f = featuresOf(lv);
+  // Walls as the terrain has them (featuresOf leaves out a wall buried in walls, which is no floor).
   const inside = (r: number, c: number) => r >= 1 && c >= 1 && r < R - 1 && c < C - 1;
-  const open = (r: number, c: number) => inside(r, c) && f[r - 1]![c - 1] !== 'wall';
-  const wall = (r: number, c: number) => inside(r, c) && f[r - 1]![c - 1] === 'wall';
+  const isWall = (r: number, c: number) => { const t = lv.terrain[r * C + c]; return t === 'wall' || t === 'exit' || t === 'gate'; };
+  const open = (r: number, c: number) => inside(r, c) && !isWall(r, c);
+  const wall = (r: number, c: number) => inside(r, c) && isWall(r, c);
   let cells = 0, dead = 0, forks = 0, joins = 0;
   // Straight stretches of floor across, of floor down, and of wall: how many, and their cells.
   const runs = [[0, 0], [0, 0], [0, 0]] as [number, number][];

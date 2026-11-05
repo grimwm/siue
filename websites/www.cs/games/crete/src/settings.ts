@@ -13,6 +13,7 @@ export const LOOK_KEY = "crete-look";
 export const WALLS_KEY = "crete-walls";
 export const PAD_KEY = "crete-pad";
 export const MINIMAP_KEY = "crete-minimap";
+export const HELP_CHECK_KEY = "crete-help-check";
 
 /** How the board is drawn: the painted 3D look, or the flat tiles. */
 export type Look = "modern" | "classic";
@@ -35,6 +36,8 @@ export interface Settings {
   pad: Pref<PadSide>;
   /** Only the modern look shows the mini map, and only when this is on. */
   minimap: Pref<OnOff>;
+  /** Whether this device checks Endless levels other players made, in its spare time (src/endless/verifier.ts). */
+  helpCheck: Pref<OnOff>;
 }
 
 export function createSettings(storage: StorageLike | null): Settings {
@@ -47,5 +50,6 @@ export function createSettings(storage: StorageLike | null): Settings {
     walls: pref<WallMode>(WALLS_KEY, "ghosted", oneOf<WallMode>(["solid", "ghosted", "low"], "ghosted"), storage),
     pad: pref<PadSide>(PAD_KEY, "left", oneOf<PadSide>(["left", "right"], "left"), storage),
     minimap: pref<OnOff>(MINIMAP_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
+    helpCheck: pref<OnOff>(HELP_CHECK_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
   };
 }

@@ -36,6 +36,8 @@ export interface MenuProps {
   pad: PadSide;
   /** Whether the mini map shows: a switch shown only while the look is modern. */
   minimap: boolean;
+  /** Whether Help Check Endless Levels is on. */
+  helpCheck: boolean;
   log: LogLine[];
   help: Seg[][];
   onSound: () => void;
@@ -45,6 +47,7 @@ export interface MenuProps {
   onWalls: (walls: WallMode) => void;
   onPad: (side: PadSide) => void;
   onMinimap: () => void;
+  onHelpCheck: () => void;
   /** Whether Show View Tips shows: in the modern look, and on a touch screen in either look (the touch tour). */
   viewTips: boolean;
   onViewTips: () => void;
@@ -110,6 +113,10 @@ export function Menu(p: MenuProps) {
               </Button>
               <Button id="fullscreen" class="menu-row" checked={p.fullscreen} keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>
                 <span class="menu-row-name">Full Screen</span><span class="switch" aria-hidden="true" />
+              </Button>
+              <Button id="help-check" class="menu-row" checked={p.helpCheck} onClick={p.onHelpCheck}>
+                <span class="menu-row-name">Help Check Endless Levels<small>Uses this device's spare time to check mazes other players made</small></span>
+                <span class="switch" aria-hidden="true" />
               </Button>
             </div>
           </section>

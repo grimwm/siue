@@ -1,346 +1,347 @@
-// A shared link on the game page: the card it opens (name, rating, best), a bad link's message, Play before the rating
-// is in (the thread follows the link's line), Edit a copy, Q, another link or the page going away cancelling the
-// rating, and the rating taking turns with the editor's Check in the one worker.
-import { test, afterEach } from 'node:test';
+// The shared bank on the page's side (src/endless/shared.ts): uploads with their tuple, the cache and its top-ups,
+// taking a level that fits the run's place (never twice, never one like the run's), the checks before a shared level
+// is played (its line replayed, the gate's cheap rules), skipping and reporting a bad one, and play from the cache
+// offline. The mode's side: a seeded run never takes one, New Run does, made levels go up with their part, and a
+// search that ran dry takes a shared level before the bundled bank's. The verifier (src/endless/verifier.ts).
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { importTsx } from '../../_kit/test/tsx.ts';
-import { byId, click, document, fireDocument, installDocument, makeEl, maybeById } from '../../_kit/test/dom-stub.ts';
-import { manualClock } from '../../_kit/test/clock.ts';
-import { createGame } from '../src/game.ts';
-import type { Game } from '../src/game.ts';
-import { createOutside } from '../src/outside.ts';
-import { createFoundPages } from '../src/pages.ts';
-import type { Progress } from '../src/progress.ts';
-import type { SheetBoard } from '../src/sheet-board.ts';
-import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
-import { createRater } from '../src/share/rating.ts';
-import { createVisit, fragmentKind } from '../src/share/visit.ts';
-import { LINK_MESSAGES, encodeLink } from '../src/share/link.ts';
-import { levelCode, sharedName } from '../src/share/name.ts';
-import { fromLevel, toText } from '../src/editor/model.ts';
+import { createSharedBank, sharedProblems, sharedKey, TAKEN_KEY, DEVICE_KEY, CACHE_LOW, FETCH_GAP_MS } from '../src/endless/shared.ts';
+import type { Served } from '../src/endless/shared.ts';
+import { createVerifier, mayCheck, IDLE_MS, WAIT_MS } from '../src/endless/verifier.ts';
+import type { CheckStanding } from '../src/endless/verifier.ts';
+import { ENDLESS_VERSION, sharedOf } from '../src/endless/provenance.ts';
+import type { SharedMade, Tuple } from '../src/endless/provenance.ts';
+import { createEndlessMode } from '../src/endless/mode.ts';
+import type { EndlessAbout } from '../src/endless/mode.ts';
+import type { EndlessClient, MadeAt, MakeJob, WorkerLike } from '../src/endless/client.ts';
+import { createEndlessSaved } from '../src/endless/saved.ts';
+import type { RunLevel } from '../src/endless/saved.ts';
+import { BANKS } from '../src/endless/bank.ts';
+import type { BankLevel, Made, Request } from '../src/endless/generate.ts';
+import { hidesWalls } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
-import { TRIALS } from '../src/puzzle/trials.ts';
-import { solve } from '../src/puzzle/solver.ts';
-import { initial } from '../src/puzzle/state.ts';
-import { step } from '../src/puzzle/step.ts';
-import type { Difficulty } from '../src/puzzle/difficulty.ts';
-import { ANSWER, atlas, fakeSearches, installEditorWindow } from './editor-fakes.ts';
+import type { StorageLike } from '../../_kit/ports.ts';
 
-installDocument();
-const stored = new Map<string, string>();
-installEditorWindow(stored);
-const mods = await importTsx<{
-  page: typeof import('../src/ui.ts');
-  card: typeof import('../src/ui/shared.tsx');
-  editor: typeof import('../src/editor/editor.ts');
-}>(import.meta.dirname, { page: '../src/ui.ts', card: '../src/ui/shared.tsx', editor: '../src/editor/editor.ts' });
+const memory = (init: Record<string, string> = {}): StorageLike & { data: Record<string, string> } => {
+  const data = { ...init };
+  return { data, getItem: k => data[k] ?? null, setItem: (k, v) => { data[k] = v; }, removeItem: k => { delete data[k]; } };
+};
 
-const settle = () => new Promise<void>(r => setImmediate(r));
+/** Medium's bank levels that fit a Medium run's first place (its score band 35 to 55, no hidden walls, Chapter 1). */
+const FIRST: BankLevel[] = BANKS.medium.filter(b => b.chapter === 1 && b.score >= 35 && b.score <= 55 && !hidesWalls(parse(b.text)));
+const served = (b: BankLevel, h: string): Served => ({ ...sharedOf(b), h });
+const firstReq = (over: Partial<Request> = {}): Request => ({ seed: 'abc', tier: 10, grade: 'medium', depth: 1, run: [], ...over });
 
-/** Trial `n` with no title, intro or pages, as a link carries it, and its link. */
-async function linkOf(n: number, best: number | null) {
-  const text = toText({ ...fromLevel(parse(TRIALS[n]!.text)), id: '', title: '', intro: '' }, true);
-  const r = solve(initial(parse(text)));
-  assert.ok(r.solved);
-  const fragment = await encodeLink({ text, line: r.line, initials: 'ABC', best: best === null ? null : r.line.length + best });
-  return { text, line: r.line, fragment, name: sharedName(await levelCode(text), 'ABC') };
-}
-const ONE = await linkOf(0, 2);
-const TWO = await linkOf(1, null);
-
-/* The page as main.ts wires it: the game, the slot for an outside level, the rating in a fake worker, the visit and
-   the editor, whose Check goes through the rating's turns. */
-const progress: Progress = { get: () => ({ cleared: false, assisted: false, best: null }), record: () => ({ cleared: true, assisted: false, best: 1 }) };
-const found = createFoundPages(null);
-const m = manualClock();
-const fake = fakeSearches();
-let solves = 0;
-const outside = createOutside(CAMPAIGN_LEVELS, {
-  open: i => game.open(i),
-  settle: () => game.settle(),
-  closeLayers: () => ui.closeLayers(),
-  showEditor: () => ui.showEditor(),
-  bestWon: (text, moves) => editor.tryWon(text, moves),
-});
-const ui = mods.page.createUi({ atlas, board: { size() {}, frame() {}, paint() {} } as SheetBoard, progress, pages: found, levels: outside.levels });
-const game: Game = createGame({
-  sfx() {}, say: ui.say, progress, pages: found, levels: outside.levels, timers: m.timers, clock: m.clock,
-  reducedMotion: () => true, changed: () => ui.render(game),
-  solve: ((...a: Parameters<typeof solve>) => { solves++; return solve(...a); }) as typeof solve,
-});
-const rater = createRater(fake.start, () => ui.refresh());
-const editorRoot = makeEl('editor-root');
-const holder = makeEl('editor-board');
-holder.appendChild(makeEl('editor-stage'));
-editorRoot.appendChild(holder);
-const editor = mods.editor.createEditor({
-  root: editorRoot as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
-  tryIt() {}, changed() {}, start: rater.check,
-});
-const visit = createVisit({
-  rater,
-  play: (level, about, line) => outside.play(level, about, line),
-  edit: draft => ui.showEditor(draft),
-  show: () => ui.showShared(),
-  refuse: message => ui.refuseLink(message),
-});
-ui.bindControls({ game, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play() {}, editor, shared: visit });
-
-const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
-const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
-const el = (id: string) => maybeById(rootOf(id), id);
-const text = (id: string) => byId(rootOf(id), id).textContent;
-
-afterEach(() => {
-  visit.leave();
-  ui.showTitle(false);
-  solves = 0;
-});
-
-test('a bad link shows its message in the toast and on the title card, never a board', async () => {
-  const run = game.run;
-  const searches = fake.searches.length;
-  for (const [fragment, error] of [['L1.not*base64', 'damaged'], ['L2.abc', 'newer'], ['edit-me', 'not-a-link']] as const) {
-    await visit.open(fragment);
-    assert.equal(ui.top(), 'title', fragment);
-    assert.equal(document.getElementById('toast').textContent, LINK_MESSAGES[error]);
-    assert.equal(text('title-note'), LINK_MESSAGES[error]);
-  }
-  assert.equal(game.run, run, 'no level was opened');
-  assert.equal(fake.searches.length, searches, 'no rating was started');
-  ui.showTitle(false);
-  assert.equal(el('title-note'), undefined, 'the title card shown again some other way has no message');
-});
-
-test('a link opens its card: the generated name, rating… and the best to beat', async () => {
-  await visit.open(ONE.fragment);
-  assert.equal(ui.top(), 'shared');
-  assert.equal(text('shared-title'), ONE.name);
-  assert.equal(text('shared-rating'), 'rating…');
-  assert.equal(text('shared-best'), `beat ${ONE.line.length + 2}`);
-  assert.equal(fake.searches.at(-1)!.text, ONE.text, 'the rating searches the link\'s level text');
-  await visit.open(TWO.fragment);
-  assert.equal(el('shared-best'), undefined, 'a link with no best names none');
-});
-
-test('Escape on the shared card does nothing: the card stays up', async () => {
-  await visit.open(ONE.fragment);
-  assert.equal(key('Escape').prevented, false);
-  assert.equal(ui.top(), 'shared');
-});
-
-test('only a fragment L<digits>… is a link; #edit opens the editor, and any other fragment is ignored', () => {
-  assert.equal(fragmentKind(`#${ONE.fragment}`), 'link');
-  assert.equal(fragmentKind('#L2.abc'), 'link', 'a newer version is still a link, refused with its message');
-  assert.equal(fragmentKind('#edit'), 'edit');
-  assert.equal(fragmentKind(''), 'empty');
-  assert.equal(fragmentKind('#'), 'empty');
-  for (const h of ['#foo', '#L', '#Lx.abc', '#l1.abc', '#top']) assert.equal(fragmentKind(h), 'other', h);
-});
-
-test('a link still decoding when the address moves on shows no card', async () => {
-  ui.showEditor();
-  const opening = visit.open(ONE.fragment);
-  visit.forget();
-  await opening;
-  assert.equal(ui.top(), 'editor', 'the editor stays up');
-});
-
-test('while an editor Check holds the worker, the card says the rating waits for it', async () => {
-  const check = rater.check('CHECK');
-  await visit.open(ONE.fragment);
-  assert.equal(text('shared-rating'), 'Rating waits for your Check in the editor.');
-  check.cancel();
-  await settle();
-  assert.equal(text('shared-rating'), 'rating…', 'the rating starts once the Check ends');
-});
-
-test('play starts before the rating finishes', async () => {
-  await visit.open(ONE.fragment);
-  const rating = fake.searches.at(-1)!;
-  click(byId(rootOf('shared-play'), 'shared-play'));
-  assert.equal(game.trial, outside.at);
-  assert.deepEqual(outside.levels.outside!(outside.at), { kind: 'shared', name: ONE.name, best: ONE.line.length + 2 });
-  assert.equal(ui.top(), 'start');
-  key('Enter');
-  assert.equal(ui.top(), null, 'closing the start card leaves no shared card beneath it');
-  game.hint();
-  assert.equal(game.run!.now.moves, 1);
-  assert.deepEqual(game.run!.now.player, step(initial(parse(ONE.text)), ONE.line[0]!).state.player, 'the hint is the link\'s first move');
-  assert.equal(solves, 0, 'the thread follows the link\'s line without solving');
-  assert.deepEqual(rating.calls, [], 'the rating search runs on during play');
-});
-
-test('the card shows the rating the next time it opens, from the menu during play', async () => {
-  await visit.open(ONE.fragment);
-  click(byId(rootOf('shared-play'), 'shared-play'));
-  fake.searches.at(-1)!.answer(ANSWER);
-  await settle();
-  key('Enter');
-  click(byId(document.getElementById('status-root'), 'btn-menu'));
-  click(byId(rootOf('menu-shared'), 'menu-shared'));
-  assert.equal(ui.top(), 'shared');
-  assert.equal(text('shared-rating'), 'Chase · quickest win 54 moves · 24,086 situations');
-});
-
-test('the menu offers Shared level only while the open link\'s level is in play', async () => {
-  const menuShared = () => {
-    ui.closeLayers();
-    click(byId(document.getElementById('status-root'), 'btn-menu'));
-    return el('menu-shared');
+/** A fake server: it answers GETs with `levels` and a CSRF token, and records every POST's body. */
+function server(levels: Served[] = [], over: { offline?: boolean } = {}) {
+  const posts: Record<string, unknown>[] = [];
+  const gets: string[] = [];
+  let online = !over.offline;
+  const fetch = async (url: string, init?: { method?: string; body?: string; headers?: Record<string, string> }) => {
+    if (!online) throw new TypeError('offline');
+    if (init?.method === 'POST') {
+      posts.push(JSON.parse(init.body!) as Record<string, unknown>);
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    gets.push(url);
+    return { ok: true, status: 200, json: async () => ({ csrf: 'c'.repeat(32), levels: url.includes('n=0') ? [] : levels }) };
   };
-  game.open(0);
-  key('Enter');
-  assert.equal(menuShared(), undefined, 'not during a campaign level');
-  await visit.open(ONE.fragment);
-  click(byId(rootOf('shared-play'), 'shared-play'));
-  key('Enter');
-  assert.equal(menuShared()?.textContent, 'Shared Level');
-  await visit.open('L1.not*base64');
-  assert.equal(menuShared(), undefined, 'not after a bad link: there is no card');
-  await visit.open(ONE.fragment);
-  click(byId(rootOf('shared-play'), 'shared-play'));
-  key('Enter');
-  await visit.open(TWO.fragment);
-  assert.equal(menuShared(), undefined, 'not when the open link is another level');
+  return { fetch, posts, gets, goOffline: () => { online = false; } };
+}
+
+function bank(levels: Served[] = [], storage = memory(), over: { offline?: boolean } = {}) {
+  const srv = server(levels, over);
+  let now = 1_000_000;
+  const b = createSharedBank({ fetch: srv.fetch, storage, now: () => now, random: () => 0.5, url: 'endless-bank.php' });
+  return { b, srv, storage, later: (ms: number) => { now += ms; } };
+}
+const flush = () => new Promise(r => setTimeout(r, 0));
+
+test('the bank fixture holds levels that pass the checks a shared level must pass', () => {
+  assert.ok(FIRST.length >= 3);
+  for (const b of FIRST) assert.deepEqual(sharedProblems(sharedOf(b)), [], `bank level ${b.score}`);
 });
 
-test('Q on the shared card goes to the title card', async () => {
-  await visit.open(ONE.fragment);
-  const ev = key('q');
-  assert.equal(ev.prevented, true);
-  assert.equal(ui.top(), 'title');
-  assert.equal(el('title-note'), undefined);
+test('a level the search made goes up with its tuple; a run\'s first level and a spec\'s budget never do', async () => {
+  const { b, srv } = bank();
+  const run = BANKS.medium.slice(0, 14).map(l => ({ text: l.text, explored: l.explored, score: l.score }));
+  const made = BANKS.medium[5]!;
+  b.upload({ seed: 'up1', tier: 4, grade: 'medium', depth: 15, run }, 3, made);
+  b.upload({ seed: 'up1', tier: 4, grade: 'medium', depth: 1, run: [] }, 0, made);
+  b.upload({ seed: 'up1', tier: 4, grade: 'medium', depth: 15, run, budget: 1000 }, 0, made);
+  await flush(); await flush();
+  assert.equal(srv.posts.length, 1, 'one upload: the others cannot be shared');
+  const p = srv.posts[0]! as { op: string; install: string; tuple: Tuple; made: SharedMade };
+  assert.equal(p.op, 'submit');
+  assert.match(p.install, /^[a-f0-9]{32}$/);
+  assert.deepEqual({ ...p.tuple, run: p.tuple.run.length }, { v: ENDLESS_VERSION, seed: 'up1', tier: 4, grade: 'medium', depth: 15, k: 3, run: 12 });
+  assert.deepEqual(p.made, sharedOf(made));
 });
 
-test('another link, a bad link or the page going away cancels the rating', async () => {
-  await visit.open(ONE.fragment);
-  const first = fake.searches.at(-1)!;
-  await visit.open(TWO.fragment);
-  assert.deepEqual(first.calls, ['cancel']);
-  const second = fake.searches.at(-1)!;
-  assert.equal(second.text, TWO.text);
-  await visit.open('L1.not*base64');
-  assert.deepEqual(second.calls, ['cancel']);
-  await visit.open(ONE.fragment);
-  const third = fake.searches.at(-1)!;
-  visit.leave();
-  assert.deepEqual(third.calls, ['cancel']);
+test('the device keeps one random id', () => {
+  const st = memory();
+  const a = bank([], st).b.device();
+  assert.match(a, /^[a-f0-9]{32}$/);
+  assert.equal(bank([], st).b.device(), a);
+  assert.equal(JSON.parse(st.data[DEVICE_KEY]!), a);
 });
 
-test('Edit a copy opens the editor on the level, with no initials or best carried over; U brings back the draft before', async () => {
-  const before = fromLevel(parse(TWO.text));
-  ui.showEditor(before);
-  await visit.open(ONE.fragment);
-  click(byId(rootOf('shared-edit'), 'shared-edit'));
-  assert.equal(ui.top(), 'editor');
-  assert.deepEqual(editor.draft, fromLevel(parse(ONE.text)));
-  assert.equal(editor.bestFor(ONE.text), null);
-  assert.equal(byId(editorRoot, 'share-initials').value, '');
-  assert.equal(stored.get('crete-initials'), undefined);
-  key('u');
-  assert.deepEqual(editor.draft, before, 'the copy is one undo step');
+test('a top-up fills the cache once it is low, no more than once a minute; a run takes a level that fits, never twice', async () => {
+  const levels = FIRST.slice(0, 3).map((l, i) => served(l, `${i}`.repeat(16)));
+  const { b, srv, later } = bank(levels);
+  await b.refill('medium', 10);
+  assert.equal(b.size('medium'), 3);
+  await b.refill('medium', 10);
+  assert.equal(srv.gets.length, 1, 'not again within the minute');
+  const one = b.take(firstReq())!;
+  assert.equal(one.from, 'shared');
+  assert.ok(levels.some(l => l.text === one.text), 'a cached level, title and intro blank');
+  assert.equal(parse(one.text).title, '');
+  const two = b.take(firstReq())!;
+  assert.notEqual(two.text, one.text, 'never the same level twice');
+  later(FETCH_GAP_MS);
+  await b.refill('medium', 10);
+  assert.equal(b.size('medium'), 1, 'the levels already taken are not cached again');
+  assert.ok(CACHE_LOW > 1);
 });
 
-/* ---------- the rating and the editor's Check, one search at a time in the one worker ---------- */
-
-test('a rating waits for the editor\'s Check, stopped or not, and never cancels it', async () => {
-  const f = fakeSearches();
-  const r = createRater(f.start, () => {});
-  const check = r.check('CHECK');
-  check.stop();
-  r.rate('LINK');
-  assert.equal(f.searches.length, 1, 'no rating starts while the Check holds the worker');
-  assert.deepEqual(r.state, { kind: 'waiting', text: 'LINK' });
-  f.searches[0]!.answer(ANSWER);
-  await settle();
-  assert.deepEqual(f.searches[0]!.calls, ['stop'], 'the Check was never cancelled');
-  assert.equal(f.searches.length, 2);
-  assert.equal(f.searches[1]!.text, 'LINK');
-  assert.deepEqual(r.state, { kind: 'running', text: 'LINK' });
-  f.searches[1]!.answer(ANSWER);
-  await settle();
-  assert.deepEqual(r.state, { kind: 'done', text: 'LINK', d: ANSWER });
+test('a level outside the place\'s band, past the tier, or like one of the run\'s stays in the cache', async () => {
+  const lv = FIRST[0]!;
+  const { b } = bank([served(lv, 'a'.repeat(16))]);
+  await b.refill('medium', 10);
+  assert.equal(b.take(firstReq({ grade: 'medium', depth: 2, run: [{ text: FIRST[1]!.text, explored: 9000, score: 200 }] })), null, 'the plateau band is above it');
+  const ch5 = BANKS.medium.find(x => x.chapter === 5)!;
+  const { b: b5 } = bank([served(ch5, 'b'.repeat(16))]);
+  await b5.refill('medium', 10);
+  assert.equal(b5.take(firstReq({ tier: 4 })), null, 'its pieces come after the run\'s tier');
+  assert.equal(b.take(firstReq({ depth: 1, run: [{ text: lv.text, explored: lv.explored, score: lv.score }] })), null, 'its layout is the run\'s own');
+  assert.equal(b.size('medium'), 1);
+  assert.equal(b.take(firstReq())!.text.length > 0, true);
 });
 
-test('a Check takes the worker from a rating, which starts again once the Check ends', async () => {
-  const f = fakeSearches();
-  const r = createRater(f.start, () => {});
-  r.rate('LINK');
-  const check = r.check('CHECK');
-  assert.deepEqual(f.searches[0]!.calls, ['cancel'], 'the rating gives the worker up');
-  assert.equal(f.searches[1]!.text, 'CHECK');
-  assert.deepEqual(r.state, { kind: 'waiting', text: 'LINK' });
-  check.cancel();
-  await settle();
-  assert.equal(f.searches.length, 3);
-  assert.equal(f.searches[2]!.text, 'LINK');
-  f.searches[2]!.fail('the solver worker failed to run');
-  await settle();
-  assert.deepEqual(r.state, { kind: 'failed', text: 'LINK', message: 'the solver worker failed to run' });
+test('a shared level whose line does not win, or wins in other moves, is skipped and reported; the next is taken', async () => {
+  const good = FIRST[1]!;
+  const bad = { ...served(FIRST[0]!, 'd'.repeat(16)), line: FIRST[0]!.line.slice(0, -1) + (FIRST[0]!.line.endsWith('u') ? 'd' : 'u') };
+  const short = { ...served(FIRST[2]!, 'e'.repeat(16)), shortest: FIRST[2]!.shortest - 1 };
+  assert.ok(sharedProblems(bad).length > 0, 'the edited line does not win');
+  assert.ok(sharedProblems(short).length > 0, 'a line of other length than its fewest moves');
+  const { b, srv } = bank([bad, short, served(good, 'f'.repeat(16))]);
+  await b.refill('medium', 10);
+  const got = b.take(firstReq())!;
+  assert.equal(got.text, good.text);
+  await flush(); await flush();
+  assert.deepEqual(srv.posts.filter(p => p.op === 'report').map(p => p.h).sort(), ['d'.repeat(16), 'e'.repeat(16)]);
+  assert.equal(b.size('medium'), 0, 'the bad levels are dropped from the cache');
 });
 
-test('rating the same text again keeps its search; cancel ends it', async () => {
-  const f = fakeSearches();
-  const r = createRater(f.start, () => {});
-  r.rate('LINK');
-  r.rate('LINK');
-  assert.equal(f.searches.length, 1);
-  r.cancel();
-  assert.deepEqual(f.searches[0]!.calls, ['cancel']);
-  assert.deepEqual(r.state, { kind: 'none' });
-  const check = r.check('CHECK');
-  f.searches[1]!.answer(ANSWER);
-  await check.result;
-  await settle();
-  assert.equal(f.searches.length, 2, 'a cancelled rating does not start again after a Check');
+test('a hand-drawn level the gate\'s cheap rules refuse is never played, whatever its line', () => {
+  // A level with a wide open floor: the plain walk wins it and it is far too open.
+  const text = 'title: \nintro: \n\n#########\n#P.....E#\n#.......#\n#...M...#\n#########\n';
+  const s: SharedMade = { text, line: 'rrrrrr', shortest: 6, score: 40, explored: 3000, chapter: 1, hides: false };
+  assert.ok(sharedProblems(s).length > 0);
+  assert.ok(sharedProblems({ ...s, text: 'not a level' }).length > 0);
 });
 
-test('ratingText words the label, the quickest win and the situations searched', () => {
-  assert.equal(mods.card.ratingText(ANSWER), 'Chase · quickest win 54 moves · 24,086 situations');
-  const solo: Difficulty = { ...ANSWER, label: 'solo', shortest: 41, explored: 12161 };
-  assert.equal(mods.card.ratingText(solo), 'Solo · quickest win 41 moves · 12,161 situations');
-  const capped: Difficulty = { ...ANSWER, label: 'unknown', shortest: 'unknown', explored: 1 };
-  assert.equal(mods.card.ratingText(capped), 'Chase or solo not known · quickest win not known · 1 situation');
+test('offline: a top-up fails quietly, uploads too, and the cache still serves', async () => {
+  const st = memory();
+  const { b, srv } = bank([served(FIRST[0]!, 'a'.repeat(16)), served(FIRST[1]!, 'b'.repeat(16))], st);
+  await b.refill('medium', 10);
+  srv.goOffline();
+  b.upload({ seed: 'x', tier: 1, grade: 'medium', depth: 3, run: [{ text: FIRST[0]!.text, explored: 1, score: 40 }] }, 0, FIRST[0]!);
+  await assert.doesNotReject(b.refill('medium', 10));
+  const again = bank([], st, { offline: true }).b;
+  assert.ok(again.take(firstReq()), 'a cached level plays without the server');
+  assert.equal(await again.claim(ENDLESS_VERSION), null);
+  assert.ok(JSON.parse(st.data[TAKEN_KEY]!).length === 1);
+  assert.ok(st.data[sharedKey('medium')]);
 });
 
-test('leaving the shared card for the title card keeps the installed-app close hint', async () => {
-  ui.showTitle(true);
-  await visit.open(ONE.fragment);
-  assert.equal(ui.top(), 'shared');
-  ui.leaveShared();
-  assert.equal(ui.top(), 'title');
-  assert.equal(text('title-hint'), 'Swipe the app away to close it.');
-  ui.showTitle(false);
-  await visit.open(ONE.fragment);
-  ui.leaveShared();
-  assert.equal(el('title-hint'), undefined, 'no hint when there was none');
-  ui.leaveShared();
-  assert.equal(ui.top(), 'title', 'with no shared card up, nothing changes');
+/** A client whose every job answers `answer(request)`, recording the requests. */
+function scripted(answer: (r: Request) => MadeAt) {
+  const asked: Request[] = [];
+  const client: EndlessClient = {
+    make(r): MakeJob { asked.push(r); return { progress: () => {}, cancel: () => {}, result: Promise.resolve(answer(r)) }; },
+    cancel: () => {},
+    resize: () => {},
+  };
+  return { client, asked };
+}
+const madeOf = (b: BankLevel, from: Made['from'], part?: number): MadeAt => ({ ...b, from, tries: 1, spent: 1, ...(part !== undefined ? { part } : {}) });
+
+function modeWith(answer: (r: Request) => MadeAt, take: (r: Request) => RunLevel | null) {
+  const saved = createEndlessSaved(memory(), 'medium');
+  const { client, asked } = scripted(answer);
+  const opened: { about: EndlessAbout; intro: string }[] = [];
+  const uploads: { req: Request; part: number; made: MadeAt }[] = [];
+  const takes: Request[] = [];
+  const mode = createEndlessMode({
+    saved: () => saved, grade: () => 'medium', setGrade: () => {}, client, tier: () => 3, newSeed: () => 'fresh1',
+    play: (level, about) => opened.push({ about, intro: level.intro }), changed: () => {},
+    shared: { take: r => { takes.push(r); return take(r); } },
+    made: (req, part, made) => uploads.push({ req, part, made }),
+  });
+  return { mode, saved, asked, opened, uploads, takes };
+}
+const sharedLevel = (b: BankLevel): RunLevel => ({ text: b.text, explored: b.explored, shortest: b.shortest, score: b.score, line: b.line, from: 'shared' });
+
+test('New Run opens a shared level at once; its card says so', async () => {
+  const m = modeWith(() => madeOf(FIRST[1]!, 'made', 0), () => sharedLevel(FIRST[0]!));
+  m.mode.newRun();
+  assert.equal(m.opened.length, 1, 'opened without waiting on a worker');
+  assert.match(m.opened[0]!.intro, /From the shared bank\.$/);
+  assert.equal(m.saved.run()!.levels[0]!.from, 'shared');
+  assert.equal(m.saved.run()!.seeded, undefined);
 });
 
-test('Q on the card opened from the menu goes back to the menu over the level, not to the title card', async () => {
-  await visit.open(ONE.fragment);
-  click(byId(rootOf('shared-play'), 'shared-play'));
-  key('Enter');
-  const run = game.run;
-  click(byId(document.getElementById('status-root'), 'btn-menu'));
-  click(byId(rootOf('menu-shared'), 'menu-shared'));
-  assert.equal(ui.top(), 'shared');
-  key('q');
-  assert.equal(ui.top(), 'menu');
-  assert.equal(game.run, run, 'the level in play is untouched');
-  assert.equal(game.trial, outside.at);
-  key('q');
-  assert.equal(ui.top(), null, 'Q closes the menu onto the level');
-  await visit.open(ONE.fragment);
-  key('q');
-  assert.equal(ui.top(), 'title', 'a card opened by a link still goes to the title card');
+test('a seeded run never takes a shared level, and its made levels still go up with their part', async () => {
+  const m = modeWith(r => madeOf(FIRST[r.depth % FIRST.length]!, r.depth === 1 ? 'bank' : 'made', r.depth === 1 ? undefined : 2), () => sharedLevel(FIRST[0]!));
+  m.mode.newRun('given');
+  await flush(); await flush(); await flush();
+  assert.equal(m.takes.length, 0, 'no shared level asked for');
+  assert.equal(m.saved.run()!.seeded, true);
+  assert.equal(m.saved.run()!.levels[0]!.from, 'bank');
+  assert.ok(m.uploads.length >= 1, 'levels 2 on, made ahead, go up');
+  assert.equal(m.uploads[0]!.part, 2);
+  assert.equal(m.uploads[0]!.req.seed, 'given');
 });
 
-test('the editor\'s Check starts its own kind of search: a shared level\'s rating measures, Check rates', () => {
-  const rating = fakeSearches(), checks = fakeSearches();
-  const r = createRater(rating.start, () => {}, checks.start);
-  r.check('DRAFT');
-  assert.deepEqual([rating.searches.length, checks.searches.map(s => s.text)], [0, ['DRAFT']]);
+test('a search that ran dry takes a shared level before the bundled bank\'s; Next Level with nothing made takes one at once', async () => {
+  let shared = 0;
+  const m = modeWith(r => madeOf(FIRST[1]!, r.depth === 1 ? 'bank' : 'bank'), r => (r.depth > 1 && shared++ < 1 ? sharedLevel(FIRST[2]!) : null));
+  m.mode.newRun();
+  await flush(); await flush(); await flush();
+  const run = m.saved.run()!;
+  assert.equal(run.levels[0]!.from, 'bank', 'no shared level fit the first place');
+  assert.equal(run.next!.from, 'shared', 'level 2: the search ran dry, a shared level came in');
+  assert.equal(m.uploads.length, 0, 'nothing the search did not make goes up');
+
+  // Next Level with nothing made: a shared level, at once, while the search for it is still going.
+  const saved = createEndlessSaved(memory(), 'medium');
+  const opened: EndlessAbout[] = [];
+  const client: EndlessClient = {
+    make: r => ({ progress: () => {}, cancel: () => {}, result: r.depth === 1 ? Promise.resolve(madeOf(FIRST[1]!, 'bank')) : new Promise<MadeAt>(() => {}) }),
+    cancel: () => {}, resize: () => {},
+  };
+  const mode = createEndlessMode({
+    saved: () => saved, grade: () => 'medium', setGrade: () => {}, client, tier: () => 3, newSeed: () => 'fresh2',
+    play: (_, about) => opened.push(about), changed: () => {},
+    shared: { take: r => (r.depth === 2 ? sharedLevel(FIRST[2]!) : null) },
+  });
+  mode.newRun();
+  await flush(); await flush();
+  assert.equal(opened.length, 1);
+  assert.equal(saved.run()!.next, null, 'level 2 is still being made');
+  mode.won(30, false);
+  mode.next();
+  assert.equal(opened.length, 2, 'level 2 opened at once');
+  assert.equal(saved.run()!.levels.at(-1)!.from, 'shared');
+  assert.equal(mode.view().finding, null);
+});
+
+/** A worker that answers a part message with `found`, or never when `found` is undefined. */
+function partWorker(found: Made | null | undefined) {
+  const w: WorkerLike & { terminated: boolean; posted: unknown[] } = {
+    terminated: false, posted: [], onmessage: null, onerror: null,
+    terminate() { w.terminated = true; },
+    postMessage(m) {
+      w.posted.push(m);
+      if (found !== undefined) setTimeout(() => { if (!w.terminated) w.onmessage?.({ data: { type: 'part', id: 1, part: 0, result: { found, tries: 1, spent: 1 } } }); }, 0);
+    },
+  };
+  return w;
+}
+const TUPLE: Tuple = { v: ENDLESS_VERSION, seed: 'abc', tier: 1, grade: 'easy', depth: 2, k: 4, run: [{ text: FIRST[0]!.text, explored: 3000, score: 30 }] };
+
+function verifierWith(found: Made | null | undefined, claim: () => Promise<{ ticket: string; tuple: Tuple } | null>) {
+  let now = 0;
+  const sent: { ticket: string; found: SharedMade | null }[] = [];
+  const workers: ReturnType<typeof partWorker>[] = [];
+  const timers: { at: number; f: () => void }[] = [];
+  const v = createVerifier({
+    spawn: () => { const w = partWorker(found); workers.push(w); return w; },
+    claim, send: async (ticket, f) => { sent.push({ ticket, found: f }); },
+    now: () => now, setTimeout: (f, ms) => { const t = { at: now + ms, f }; timers.push(t); return t; },
+    clearTimeout: t => { const i = timers.indexOf(t as never); if (i >= 0) timers.splice(i, 1); },
+  });
+  return { v, sent, workers, timers, later: (ms: number) => { now += ms; for (const t of timers.filter(t => t.at <= now)) { timers.splice(timers.indexOf(t), 1); t.f(); } } };
+}
+
+test('the verifier runs the claimed part and sends what it made; it never claims while not allowed', async () => {
+  const made: Made = { ...FIRST[0]!, from: 'made', tries: 1, spent: 1 };
+  let claims = 0;
+  const h = verifierWith(made, async () => { claims++; return { ticket: 't'.repeat(32), tuple: TUPLE }; });
+  await flush();
+  assert.equal(claims, 0);
+  h.v.allow(true);
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(claims, 1);
+  assert.deepEqual(h.workers[0]!.posted[0], { type: 'part', id: 1, request: { seed: 'abc', tier: 1, grade: 'easy', depth: 2, run: TUPLE.run }, part: 4 });
+  assert.deepEqual(h.sent, [{ ticket: 't'.repeat(32), found: sharedOf(made) }]);
+  assert.equal(h.workers[0]!.terminated, true);
+  h.later(WAIT_MS - 1);
+  await flush();
+  assert.equal(claims, 1, 'it waits between claims');
+  h.later(1);
+  await flush();
+  assert.equal(claims, 2);
+});
+
+test('the verifier stops its worker when the page needs it, sends nothing, and waits long when there is nothing to check', async () => {
+  const h = verifierWith(undefined, async () => ({ ticket: 't'.repeat(32), tuple: TUPLE }));
+  h.v.allow(true);
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(h.v.busy(), true);
+  h.v.allow(false);
+  assert.equal(h.workers[0]!.terminated, true);
+  assert.equal(h.v.busy(), false);
+  assert.deepEqual(h.sent, []);
+
+  let claims = 0;
+  const idle = verifierWith(null, async () => { claims++; return null; });
+  idle.v.allow(true);
+  await flush(); await flush();
+  idle.later(WAIT_MS);
+  await flush();
+  assert.equal(claims, 1, 'nothing to check: it waits IDLE_MS');
+  idle.later(IDLE_MS);
+  await flush();
+  assert.equal(claims, 2);
+});
+
+test('a claimed tuple of another version or shape is never run', async () => {
+  const h = verifierWith(null, async () => ({ ticket: 't'.repeat(32), tuple: { ...TUPLE, v: ENDLESS_VERSION + 1 } }));
+  h.v.allow(true);
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(h.workers.length, 0);
+  const bad = verifierWith(null, async () => ({ ticket: 't'.repeat(32), tuple: { ...TUPLE, seed: 'NO SPACES' } }));
+  bad.v.allow(true);
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(bad.workers.length, 0);
+});
+
+test('checking runs on any idle page, never while the solver searches (a hint, Check, a rating), and the setting turns it off', () => {
+  const idle: CheckStanding = { run: false, warm: true, shown: true, solving: false, battery: null, endlessIdle: true, on: true, sendsNothing: false, specBudget: false };
+  assert.equal(mayCheck(idle), true, 'the campaign, the menus, the editor: idle and quiet');
+  assert.equal(mayCheck({ ...idle, solving: true }), false, 'the solver is searching');
+  assert.equal(mayCheck({ ...idle, on: false }), false, 'Help Check Endless Levels is off');
+  assert.equal(mayCheck({ ...idle, endlessIdle: false }), false, 'Endless is making its own levels: they take turns');
+  assert.equal(mayCheck({ ...idle, run: true }), false, 'an Endless run takes the workers');
+  assert.equal(mayCheck({ ...idle, warm: false }), false, 'not before the quiet start');
+  assert.equal(mayCheck({ ...idle, shown: false }), false, 'not while the tab is hidden');
+  assert.equal(mayCheck({ ...idle, battery: { level: 0.1, charging: false } }), false, 'not on a low battery that is draining');
+  assert.equal(mayCheck({ ...idle, battery: { level: 0.1, charging: true } }), true);
+  assert.equal(mayCheck({ ...idle, sendsNothing: true }), false, 'Do Not Track');
+});
+
+test('a device keeps its own levels and plays them again in its own runs when no shared level fits, the oldest played first', () => {
+  const { b } = bank();
+  assert.equal(b.take(firstReq()), null);
+  b.keep('medium', FIRST[0]!);
+  b.keep('medium', FIRST[1]!);
+  const one = b.take(firstReq())!;
+  assert.equal(one.from, 'own');
+  assert.equal(one.text, FIRST[0]!.text, 'the one played longest ago');
+  assert.equal(b.take(firstReq({ run: [{ text: FIRST[1]!.text, explored: 1, score: 40 }] })), null, 'never one of the run\'s own levels');
+  b.keep('hard', FIRST[2]!);
+  assert.equal(b.take(firstReq({ grade: 'easy' })), null, 'each grade keeps its own');
 });

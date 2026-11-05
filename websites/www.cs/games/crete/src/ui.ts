@@ -119,6 +119,7 @@ export interface Controls {
   setPad?(side: PadSide): void;
   /** The Mini map switch, shown while the look is modern. */
   toggleMinimap?(): void;
+  toggleHelpCheck?(): void;
   /** Show View Tips: the modern board's tips by the compass again (the menu, the ? key). */
   showViewTips?(): void;
   toggleFullscreen(): void;
@@ -158,6 +159,8 @@ export interface Ui {
   setPad(side: PadSide): void;
   /** Shows the Mini map switch's state. */
   setMinimap(on: boolean): void;
+  /** Shows the Help Check Endless Levels switch's state. */
+  setHelpCheck(on: boolean): void;
   /** Whether the modern board shows: it fills the board's space, so the classic canvas is not fitted and nothing
    *  scrolls. */
   setModernBoard(on: boolean): void;
@@ -257,6 +260,7 @@ export function createUi(deps: UiDeps): Ui {
   let walls: WallMode = "solid";
   let pad: PadSide = "left";
   let minimap = false;
+  let helpCheck = true;
   /** The strip as last drawn: a phone's, and whether its Thread panel is open. */
   let compact = false;
   let threadOpen = false;
@@ -704,6 +708,7 @@ export function createUi(deps: UiDeps): Ui {
       walls,
       pad,
       minimap,
+      helpCheck,
       log,
       help: helpLines(KEYS, TOOLS),
       onSound: () => {
@@ -722,6 +727,7 @@ export function createUi(deps: UiDeps): Ui {
       onWalls: (w) => controls?.setWalls?.(w),
       onPad: (side) => controls?.setPad?.(side),
       onMinimap: () => controls?.toggleMinimap?.(),
+      onHelpCheck: () => controls?.toggleHelpCheck?.(),
       viewTips: look === "modern" || touchScreen(),
       onViewTips: () => {
         layers.close("menu");
@@ -1937,6 +1943,10 @@ export function createUi(deps: UiDeps): Ui {
     },
     setMinimap: (on) => {
       minimap = on;
+      drawLayers();
+    },
+    setHelpCheck: (on) => {
+      helpCheck = on;
       drawLayers();
     },
     setModernBoard: (on) => {

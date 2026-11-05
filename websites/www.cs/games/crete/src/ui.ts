@@ -447,7 +447,18 @@ export function createUi(deps: UiDeps): Ui {
   /** Demo started or ended, or its words changed. Once it ends, what it played stays as it was: its last level's
    *  start, end and first cards never show late. */
   function setDemo(view: DemoView | null): void {
+    const starting = !demo && !!view;
     demo = view;
+    if (starting) {
+      // Whatever stood over the board before (a banner, a toast; a rule tip hides while Demo plays) goes.
+      bannerEntries = [];
+      bannerLine = null;
+      timers.clearTimeout(bannerTimer);
+      timers.clearTimeout(toastTimer);
+      const toast = document.getElementById("toast");
+      if (toast) toast.className = "toast";
+      drawLayers();
+    }
     if (!view) {
       const g = controls?.game ?? game;
       endFor = g?.run ?? null;
@@ -1194,7 +1205,7 @@ export function createUi(deps: UiDeps): Ui {
   const tips = met ? createRuleTips(met) : null;
 
   /** The rule tip standing, while the board is in view: none under a card or the touch tour, which go first. */
-  const tipShowing = () => (tips && !tour && !layers.any() ? tips.shown() : null);
+  const tipShowing = () => (tips && !tour && !demo && !layers.any() ? tips.shown() : null);
 
   function closeTip(): void {
     tips?.close();

@@ -524,8 +524,10 @@ function leaveDemo(): void {
 const PASS_KEYS = /^(F\d{1,2}|Shift|Control|Alt|AltGraph|Meta|OS|Fn|CapsLock|NumLock|ScrollLock|Tab|ContextMenu|Audio\w*|Media\w*)$/;
 /** The key that ended Demo, held: its repeats are swallowed until it is let go. */
 let demoKey: string | null = null;
-/** Demo ended on a press: the rest of that press (its release and click) is swallowed. */
-let demoPress = false;
+/** The pointers of the gesture that ended Demo: every press in it, its releases and its clicks are swallowed, and
+ *  clicks a moment after its last release too. */
+const demoPointers = new Set<number>();
+let demoClicksUntil = 0;
 const swallow = (ev: Event): void => { ev.preventDefault(); ev.stopImmediatePropagation(); };
 window.addEventListener('keydown', ev => {
   if (demoKey !== null && ev.code === demoKey && ev.repeat) { swallow(ev); return; }
@@ -538,14 +540,21 @@ window.addEventListener('keydown', ev => {
 }, { capture: true });
 window.addEventListener('keyup', ev => { if (ev.code === demoKey) demoKey = null; }, { capture: true });
 window.addEventListener('pointerdown', ev => {
-  demoPress = false;
-  if (!demo.active()) return;
+  if (!demo.active() && demoPointers.size === 0) return;
   swallow(ev);
-  demoPress = true;
+  demoPointers.add(ev.pointerId);
   leaveDemo();
 }, { capture: true });
-for (const type of ['pointerup', 'click', 'contextmenu', 'dblclick']) {
-  window.addEventListener(type, ev => { if (demo.active() || demoPress) swallow(ev); if (type === 'click') demoPress = false; }, { capture: true });
+for (const type of ['pointerup', 'pointercancel']) {
+  window.addEventListener(type, ev => {
+    const e = ev as PointerEvent;
+    if (!demoPointers.delete(e.pointerId)) return;
+    swallow(e);
+    if (demoPointers.size === 0) demoClicksUntil = performance.now() + 500;
+  }, { capture: true });
+}
+for (const type of ['click', 'contextmenu', 'dblclick']) {
+  window.addEventListener(type, ev => { if (demo.active() || demoPointers.size > 0 || performance.now() < demoClicksUntil) swallow(ev); }, { capture: true });
 }
 window.addEventListener('wheel', ev => { if (demo.active()) swallow(ev); }, { capture: true, passive: false });
 

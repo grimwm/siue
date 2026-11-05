@@ -14,7 +14,7 @@ import { ENDLESS_VERSION } from '../src/endless/provenance.ts';
 import { readFileSync } from 'node:fs';
 
 /** Each version's fingerprint of the pinned part. */
-const PINS: Readonly<Record<number, number>> = { 1: 2177071660 };
+const PINS: Readonly<Record<number, number>> = { 1: 2177071660, 2: 1764154521 };
 
 test('the generator makes what its version says it makes', () => {
   const b = BANKS.hard[20]!;

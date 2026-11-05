@@ -13,10 +13,10 @@ interface CreteHook {
 }
 type Hooked = Window & { __creteTest: CreteHook; __demoSeen: string[] };
 
-/** What this browser keeps of the player: every key of the game's but the levels Endless makes ahead in the
- *  background (its upcoming run and the parts of its search), which go on whatever Demo does. */
+/** What this browser keeps of the player: every key of the game's but the levels Endless makes and fetches in the
+ *  background (its upcoming run, the parts of its search and the shared bank's cache), which go on whatever Demo does. */
 const kept = (page: Page) => page.evaluate(() => Object.fromEntries(Object.keys(localStorage)
-  .filter(k => k.startsWith('crete-') && k !== 'crete-endless-parts').sort()
+  .filter(k => k.startsWith('crete-') && k !== 'crete-endless-parts' && !k.startsWith('crete-endless-shared')).sort()
   .map(k => {
     const v = localStorage.getItem(k)!;
     if (!/^crete-endless-(easy|medium|hard)$/.test(k)) return [k, v];

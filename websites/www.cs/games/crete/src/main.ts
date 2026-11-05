@@ -247,12 +247,13 @@ function followEndless(): void {
   endlessClient.resize();
   const free = !inEndlessRun() && endlessWorkers() > 0;
   if (free) endless.ahead();
-  // Checking others' levels takes turns with the page's own levels: only once Endless has nothing of its own to make.
-  verifier.allow(mayCheck({
+  // Checking others' levels takes turns with the page's own levels: only once Endless has nothing of its own to make,
+  // and never while Demo plays.
+  verifier.allow(!demo.active() && mayCheck({
     run: inEndlessRun(), warm: endlessWarm, shown: pageShown, solving: solverBusy(), battery: endlessBattery,
     endlessIdle: endless.idle(), on: settings.helpCheck.get() === 'on', sendsNothing, specBudget: endlessBudget !== undefined,
   }));
-  if (endlessWarm || ui.top() === 'endless') void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS, id => progress.get(id).cleared));
+  if (!demo.active() && (endlessWarm || ui.top() === 'endless')) void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS, id => progress.get(id).cleared));
 }
 watchSolver(() => followEndless());
 /** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */

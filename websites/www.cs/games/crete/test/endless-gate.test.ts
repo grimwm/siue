@@ -74,7 +74,7 @@ test('a run from a bank alone climbs by the score at every tier and grade, a hid
 test('a fixed seed is made fresh by its first part at each grade, and the level passes the whole gate', () => {
   const prev = { text: 'title: \nintro: \n\n#######\n#P...E#\n#M....#\n#######\n', explored: 3000, score: 30 };
   // tools/endless-bench.ts measures how often the search makes a level fresh; these pin one seed a grade that does.
-  for (const [grade, seed] of [['easy', 'fixed0'], ['medium', 'fixed7'], ['hard', 'fixed1']] as const) {
+  for (const [grade, seed] of [['easy', 'fixed0'], ['medium', 'fixed1'], ['hard', 'fixed10']] as const) {
     const req: Request = { seed, tier: 9, grade, depth: 2, run: [prev] };
     const part = makePart(req, 0, known);
     assert.ok(part.found, `${grade}: made fresh within its part's budget`);

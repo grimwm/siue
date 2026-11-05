@@ -213,8 +213,14 @@ export const RUN_SAME = 0.6;
 /** How alike two levels of a run look, 0 to 1: their looks (lookLikeness), or their layouts' overlap (mazeOverlap,
  *  over the turns and flips of `b`) put on the same scale, SAME counting as RUN_SAME, whichever is more. */
 export function runLikeness(a: Level, b: Level): number {
-  return Math.max(lookLikeness(lookOf(a), lookOf(b)), mazeOverlap(a, b) * RUN_SAME / SAME);
+  return Math.max(lookLikeness(looked(a), looked(b)), overlapOf(mazeFeaturesOf(a), turned(b)) * RUN_SAME / SAME);
 }
+
+/** A run's levels are compared again and again, with every change a search tries: their looks and their features'
+ *  turns and flips are worked out once a level. */
+const looks = new WeakMap<Level, Look>(), turns = new WeakMap<Level, Features[]>();
+const looked = (lv: Level): Look => { let x = looks.get(lv); if (!x) { x = lookOf(lv); looks.set(lv, x); } return x; };
+const turned = (lv: Level): Features[] => { let x = turns.get(lv); if (!x) { x = eight(mazeFeaturesOf(lv)); turns.set(lv, x); } return x; };
 
 /** A new layout: its features overlap no campaign level's by SAME, and it looks like none of `run` (the run's
  *  earlier levels) by RUN_SAME (runLikeness); with `look` false, its layout overlaps none of `run`'s by SAME
@@ -224,7 +230,7 @@ export function newProblems(level: Level, known: Known, run: readonly Level[] = 
   const out: string[] = [];
   known.features.forEach((Bs, k) => { const x = overlapOf(A, Bs); if (x >= SAME) out.push(`its layout repeats campaign level ${k + 1}'s (${x.toFixed(2)})`); });
   run.forEach((lv, k) => {
-    const x = look ? runLikeness(level, lv) : overlapOf(A, eight(mazeFeaturesOf(lv)));
+    const x = look ? runLikeness(level, lv) : overlapOf(A, turned(lv));
     if (x >= (look ? RUN_SAME : SAME)) out.push(`its layout ${look ? 'looks like' : 'repeats'} the run's level ${k + 1}'s (${x.toFixed(2)})`);
   });
   return out;
@@ -237,7 +243,7 @@ export function likeness(level: Level, known: Known, run: readonly Level[] = [],
   const A = mazeFeaturesOf(level);
   let most = 0;
   for (const Bs of known.features) most = Math.max(most, overlapOf(A, Bs) / SAME);
-  for (const lv of run) most = Math.max(most, look ? runLikeness(level, lv) / RUN_SAME : overlapOf(A, eight(mazeFeaturesOf(lv))) / SAME);
+  for (const lv of run) most = Math.max(most, look ? runLikeness(level, lv) / RUN_SAME : overlapOf(A, turned(lv)) / SAME);
   return most;
 }
 

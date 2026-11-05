@@ -62,8 +62,9 @@ test('a run from a bank alone climbs by the score at every tier and grade, a hid
         assert.ok(chapterOf(lv) <= tier, `${grade} tier ${tier}: only pieces it offers`);
         if (i === 0) return;
         assert.notEqual(p.text, run[i - 1]!.text, 'never the same level twice in a row');
-        // With more levels than the run remembers to offer, none of its last levels comes back.
-        if (BANKS[grade].filter(b => b.chapter <= tier).length > RUN_MEMORY) {
+        // With more plateau levels than the run remembers to offer, none of its last levels comes back.
+        const plateau = GRADE_BANDS[grade].plateau;
+        if (BANKS[grade].filter(b => b.chapter <= tier && b.score >= plateau[0] && b.score <= plateau[1]).length > RUN_MEMORY) {
           assert.ok(!run.slice(Math.max(0, i - RUN_MEMORY), i).some(q => q.text === p.text), `${grade} tier ${tier} seed ${seed} level ${i + 1}: a repeat`);
         }
         // Against the last plain level before it: no cliff up, and a dip only as deep as a hidden level's ease.

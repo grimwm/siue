@@ -66,7 +66,7 @@ export function jobsOf(grade: Grade): Job[] {
 /** The sides a large bank board is drawn from (generate.ts's sidesOf, which stretches some past them). */
 const LARGE: Readonly<Record<Grade, readonly [number, number]>> = { easy: [17, 21], medium: [19, 23], hard: [21, 25] };
 /** The plateau levels each grade's bank holds past the three above. */
-const PLATEAU_MORE: Readonly<Record<Grade, number>> = { easy: 8, medium: 14, hard: 24 };
+const PLATEAU_MORE: Readonly<Record<Grade, number>> = { easy: 8, medium: 14, hard: 48 };
 export const JOBS: readonly Job[] = GRADES.flatMap(jobsOf);
 
 /** A bank job gives up past this many situations and is written as skipped. */

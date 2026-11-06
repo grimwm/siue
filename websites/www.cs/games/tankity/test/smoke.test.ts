@@ -83,6 +83,8 @@ Reflect.set(globalThis, 'window', {
   matchMedia: () => ({ matches: false }),
   localStorage: stubStorage,
 });
+// A top window, as the game's own page is: the frame-focus follower (kit audio-focus.ts) stays out of the run.
+Reflect.set(globalThis.window, 'top', globalThis.window);
 // Importing a module takes a turn of the event loop, so the boot's own requests
 // would answer before the checks below start. They wait here until the async
 // block opens the gate, as they did when the script was evaluated in place.

@@ -1,6 +1,6 @@
 /* The Island of Crete: Demo, the title card's kiosk mode. It plays an Endless run at Medium with every piece, on a
  * random seed, by itself: each level along the solver's line (the play-out Auto gives, a step every STEP_MS), and, a
- * beat after each win, the next level, without end. Its run is its own Endless (src/endless/mode.ts) over saves kept
+ * beat after each win, the next level, without end; a level whose search runs past `wait` is the bank's. Its run is its own Endless (src/endless/mode.ts) over saves kept
  * in memory (`memoryStorage`), so the player's saved runs, bests, progress and met entries stay as they were. While
  * the page is hidden it plays nothing (the page holds its workers). It asks for a screen wake lock while it runs, and
  * takes a refusal quietly. Any key or tap ends it (src/main.ts). DOM-free. */
@@ -13,9 +13,10 @@ import type { Grade } from './puzzle/rating.ts';
 /** The difficulty Demo plays. */
 export const DEMO_GRADE: Grade = 'medium';
 /** Demo's pace, in ms: a step of the line (a touch slower than Auto's), the board in view before the first step,
- *  and the beat between a win and the next level. */
-export interface DemoPace { step: number; begin: number; next: number }
-export const DEMO_PACE: DemoPace = { step: SLIDE_MS * 4, begin: 900, next: 1500 };
+ *  the beat between a win and the next level, and the longest it waits on a level being made before it plays the
+ *  bank's (a search can run for minutes). */
+export interface DemoPace { step: number; begin: number; next: number; wait: number }
+export const DEMO_PACE: DemoPace = { step: SLIDE_MS * 4, begin: 900, next: 1500, wait: 10_000 };
 /** The play-outs that may stop with the try no further along before Demo goes on to the next level. */
 export const DEMO_TRIES = 3;
 
@@ -99,6 +100,7 @@ export function createDemo(deps: DemoDeps): Demo {
   let beginTimer = 0;
   let nextTimer = 0;
   let againTimer = 0;
+  let waitTimer = 0;
   let lock: WakeLock | null = null;
   let asking = false;
 
@@ -106,7 +108,8 @@ export function createDemo(deps: DemoDeps): Demo {
     deps.timers.clearTimeout(beginTimer);
     deps.timers.clearTimeout(nextTimer);
     deps.timers.clearTimeout(againTimer);
-    beginTimer = nextTimer = againTimer = 0;
+    deps.timers.clearTimeout(waitTimer);
+    beginTimer = nextTimer = againTimer = waitTimer = 0;
   };
 
   /** Keeps the screen on while Demo runs and the page shows; the browser lets the lock go when the page hides. */
@@ -146,6 +149,8 @@ export function createDemo(deps: DemoDeps): Demo {
     mode.next();
     // A run that cannot go on (it was lost) starts again on a new seed.
     if (opens === null && !mode.view().finding) newRun();
+    // The wait on a level being made starts now.
+    update();
     deps.changed();
   }
 
@@ -173,6 +178,8 @@ export function createDemo(deps: DemoDeps): Demo {
     if (opens === null) {
       // No level could be made: a new run on another seed, after a beat.
       if (v.error && !v.finding && !againTimer) againTimer = deps.timers.setTimeout(() => { againTimer = 0; if (on) newRun(); }, pace.next);
+      // A level whose search runs long: after a while, the bank's level for it.
+      if (v.finding && !waitTimer) waitTimer = deps.timers.setTimeout(() => { waitTimer = 0; if (on) mode?.hurry(); }, pace.wait);
       deps.changed();
       return;
     }

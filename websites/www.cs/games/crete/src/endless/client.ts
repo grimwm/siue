@@ -31,6 +31,9 @@ export type MadeAt = Made & { part?: number };
 export interface MakeJob {
   progress(cb: (p: Progress) => void): void;
   cancel(): void;
+  /** The search stops where it stands and the bank answers now, as when no part finds a level: the level may then
+   *  differ from the seed's own, so only Demo, which shares nothing, asks for it. */
+  hurry?(): void;
   result: Promise<MadeAt>;
 }
 
@@ -228,11 +231,18 @@ export function createEndlessClient(spawn: () => WorkerLike, size: () => number 
       current = { id, stop: e => settleJob.reject(e), live: { pump, drop } };
       onMessage = receive;
       onError = s => { if (s.busy !== null && mine()) fail('the level worker failed'); };
-      if (!first && decide()) return { progress: () => {}, cancel: () => {}, result };
+      if (!first && decide()) return { progress: () => {}, cancel: () => {}, hurry: () => {}, result };
       pump();
       return {
         progress: cb => { listeners.push(cb); },
         cancel: () => { if (mine()) cancel(); },
+        hurry: () => {
+          if (!mine() || bankDue) return;
+          bankDue = true;
+          // The parts' workers end; a fresh one answers from the bank with what they had spent.
+          for (const s of [...slots]) if (s.busy !== null && s.busy >= 0) { drop(s.busy); end(s); }
+          pump();
+        },
         result,
       };
     },

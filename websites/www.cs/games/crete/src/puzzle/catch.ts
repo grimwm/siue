@@ -71,10 +71,12 @@ function sendHome(w: Work, x: Cell, ev: GameEvent[]): void {
   ev.push({ kind: 'sent-home', from: x, to });
 }
 
-/** A catch: a heart lost, Theseus thrown back, or the try over. */
-export function caught(w: Work, ev: GameEvent[], by: CatchCause, hazard?: HazardKind): void {
+/** A catch: a heart lost, Theseus thrown back, or the try over. `walked`: he walked into the live Minotaur. */
+export function caught(w: Work, ev: GameEvent[], by: CatchCause, hazard?: HazardKind, walked = false): void {
   w.hearts--;
-  ev.push(hazard ? { kind: 'caught', at: w.player, hearts: w.hearts, by, hazard } : { kind: 'caught', at: w.player, hearts: w.hearts, by });
+  ev.push(hazard ? { kind: 'caught', at: w.player, hearts: w.hearts, by, hazard }
+    : walked ? { kind: 'caught', at: w.player, hearts: w.hearts, by, walked: true }
+    : { kind: 'caught', at: w.player, hearts: w.hearts, by });
   if (w.hearts <= 0) {
     w.outcome = 'lost';
     ev.push({ kind: 'lost' });

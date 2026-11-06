@@ -2,9 +2,11 @@
  * a phone. `heartsNote` and `keysNote` are the long forms, for a tooltip and
  * a screen reader. Best is the level's fewest possible moves, where it is
  * known; past it the stat says by how many ("42 +3"), since a perfect clear
- * is then out of reach. DOM-free. */
+ * is then out of reach. A tool's effect at work (the Minotaur stone, the cow
+ * standing) is a chip of its own until it ends. DOM-free. */
 import { KEY_COLORS } from "./puzzle/tiles.ts";
 import type { Gear, KeyColor } from "./puzzle/tiles.ts";
+import type { Effect } from "./tool-effects.ts";
 
 export interface StatusInput {
   /** The level's place, short ("Ch 1 · 3"); empty for a level from outside the campaign. */
@@ -22,6 +24,8 @@ export interface StatusInput {
   fewest?: number;
   /** The player's own best clear of this level, when there is one: said in Best's tooltip. */
   yourBest?: number | null;
+  /** The tools' effects at work now (src/tool-effects.ts activeEffects), each a chip; none when not given. */
+  effects?: readonly Effect[];
 }
 
 export interface StatusView {
@@ -42,6 +46,8 @@ export interface StatusView {
   over: number;
   /** Best in words, for a tooltip and a screen reader. */
   bestNote: string;
+  /** The effects at work, a chip each, in order; empty when none is. */
+  effects: readonly Effect[];
 }
 
 const DOT: Record<KeyColor, string> = { red: "🔴", blue: "🔵", yellow: "🟡", green: "🟢" };
@@ -60,6 +66,7 @@ export function statusView(i: StatusInput): StatusView {
     gear: i.gear.join(", "),
     moves: String(i.moves),
     heartsNote,
+    effects: i.effects ?? [],
     ...bestOf(i),
   };
 }

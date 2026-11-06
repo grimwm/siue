@@ -16,7 +16,8 @@ export type GameEvent =
   | { kind: 'took'; what: ObjectKind; at: Cell }
   | { kind: 'sank'; at: Cell }
   | { kind: 'flipped' }
-  | { kind: 'caught'; at: Cell; hearts: number; by: 'minotaur' | 'hazard' | 'bomb'; hazard?: HazardKind }
+  /** `walked`: Theseus walked into the live Minotaur, rather than the Minotaur reaching him. */
+  | { kind: 'caught'; at: Cell; hearts: number; by: 'minotaur' | 'hazard' | 'bomb'; hazard?: HazardKind; walked?: true }
   | { kind: 'revealed'; at: Cell; what: 'fake-wall' | 'invisible-wall' }
   | { kind: 'rose'; at: Cell }
   | { kind: 'teleported'; who: 'player' | 'block'; from: Cell; via: Cell; to: Cell }

@@ -38,6 +38,7 @@ import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter, placeWord
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
+import { TOOL_EMOJI, activeEffects } from "./tool-effects.ts";
 import { centredOn, createSheetView, eye, holdTarget, keepInView, panned, project, sheetCell, unproject, wholeFrame } from "./sheet.ts";
 import type { Frame } from "./sheet.ts";
 import { createCompassButton } from "./modern/controls.ts";
@@ -218,11 +219,12 @@ export interface Ui {
   setDemo(view: DemoView | null): void;
 }
 
-const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "🐄" };
 const TOOL_KINDS = Object.keys(TOOLS) as Tool[];
 
 const LOG_LIMIT = 80;
 const TOAST_MS = 3000;
+/** A long line stays up long enough to read: about 55 ms a character, never less than TOAST_MS. */
+const toastMs = (text: string): number => Math.max(TOAST_MS, text.length * 55);
 /** A wheel line, in pixels. */
 const WHEEL_LINE_PX = 16;
 /** How long the classic view rests before the sheet is drawn again at the cell that fits it. */
@@ -875,7 +877,7 @@ export function createUi(deps: UiDeps): Ui {
     toast.textContent = text;
     toast.className = tone ? `toast show ${tone}` : "toast show";
     timers.clearTimeout(toastTimer);
-    toastTimer = timers.setTimeout(() => { toast.className = toast.className.split(" ").filter((c) => c !== "show").join(" "); }, TOAST_MS);
+    toastTimer = timers.setTimeout(() => { toast.className = toast.className.split(" ").filter((c) => c !== "show").join(" "); }, toastMs(text));
     if (layers.isOpen("menu")) drawLayers();
   }
 
@@ -1000,7 +1002,8 @@ export function createUi(deps: UiDeps): Ui {
         text: "Your last heart is gone. Undo a turn or begin the level again.", score: `${s.moves} moves`,
       };
     }
-    const how = run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.";
+    const caughtWords = g.catches === 0 ? "" : ` You were caught ${g.catches === 1 ? "once" : `${g.catches} times`}, so this win does not count toward your best.`;
+    const how = (run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.") + caughtWords;
     const help = run.assisted ? "with help" : "";
     const out = outsideOf(g);
     // A level from outside the campaign records nothing and has no chapter: its card names it and, for a shared
@@ -1009,11 +1012,11 @@ export function createUi(deps: UiDeps): Ui {
       return {
         open: true, won, hasNext: true, hasLevels: false, pages: [], kicker: `${endlessKicker(out.depth ?? 1)} cleared`, title: out.name,
         text: how,
-        score: [`${s.moves} moves`, out.fewest !== undefined ? againstFewest(s.moves, out.fewest) : "", help].filter(Boolean).join(" · "),
+        score: [`${s.moves} moves`, out.fewest !== undefined ? againstFewest(s.moves, out.fewest, g.catches) : "", help].filter(Boolean).join(" · "),
       };
     }
     if (out) {
-      const author = out.best === null ? "" : !run.assisted && s.moves < out.best ? ` You beat the author's ${out.best}.` : ` The author's best is ${out.best}.`;
+      const author = out.best === null ? "" : !run.assisted && g.catches === 0 && s.moves < out.best ? ` You beat the author's ${out.best}.` : ` The author's best is ${out.best}.`;
       return {
         open: true, won, hasNext: false, hasLevels: false, pages: [], kicker: outsideKicker(out), title: out.name,
         text: how + author, score: [`${s.moves} moves`, help].filter(Boolean).join(" · "),
@@ -1028,7 +1031,7 @@ export function createUi(deps: UiDeps): Ui {
     return {
       open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, hasLevels: true, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
       text: how,
-      score: [`${s.moves} moves`, fewest !== undefined ? againstFewest(s.moves, fewest) : "", best !== null && best !== s.moves ? `your best ${best}` : "", help]
+      score: [`${s.moves} moves`, fewest !== undefined ? againstFewest(s.moves, fewest, g.catches) : "", best !== null && best !== s.moves ? `your best ${best}` : "", help]
         .filter(Boolean).join(" · "),
     };
   }
@@ -1105,6 +1108,7 @@ export function createUi(deps: UiDeps): Ui {
         gear: s.gear,
         moves: s.moves,
         stone: s.stone,
+        effects: activeEffects(s),
         ...fewestOf(g, out),
       }),
       menuKey: KEYS.menu.label,

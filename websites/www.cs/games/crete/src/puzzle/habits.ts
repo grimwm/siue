@@ -166,8 +166,8 @@ function choose(s: State, way: Way): Action {
   if (way.mirror) want.push('mirror');
   const p = goalPlan(s, want);
   let a: Action = p ? { kind: 'move', dir: p.first } : WAIT;
-  // A move the Minotaur (or a stone one) blocks is a bump: a wait instead.
-  if (a.kind === 'move' && step(s, a).state === s) a = WAIT;
+  // A move a wall or a stone Minotaur blocks is a bump, and one into the live Minotaur a catch: a wait instead.
+  if (a.kind === 'move' && (step(s, a).state === s || (m && m.r === s.player.r + DELTA[a.dir][0] && m.c === s.player.c + DELTA[a.dir][1]))) a = WAIT;
   if (way.careful && caughtIn(step(s, a).events)) {
     // The safe action that leaves the plain distance shortest; a wait comes last on ties.
     let best: Action | null = null, bestD = Infinity;

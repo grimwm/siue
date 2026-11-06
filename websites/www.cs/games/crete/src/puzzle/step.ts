@@ -6,7 +6,8 @@
  * A bump (an action that cannot happen: a wall in the way, a tool not held or
  * of no use) returns the same state object and no events, and costs no turn.
  * A fake wall gives way as Theseus walks into it, and he steps through on that
- * same move. Bumping an invisible wall shows it and costs a turn: he stays where
+ * same move. Walking into the Minotaur is a catch, as a hazard's is (a ride or a
+ * teleport's exit stops short of him); a stone Minotaur is a wall to him (a bump). Bumping an invisible wall shows it and costs a turn: he stays where
  * he is, and the hazards and the Minotaur move as on a Wait. DOM-free. */
 import { TERRAIN } from './tiles.ts';
 import type { Cell, Dir, Gear, Hazard, KeyColor, ObjectKind, Terrain } from './tiles.ts';
@@ -81,9 +82,15 @@ export function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell | undefined,
 /** Terrain the player never enters. A fake wall gives way, and an invisible wall shows, only to a step of his own. */
 const PLAYER_WALLS: ReadonlySet<Terrain> = new Set<Terrain>(['wall', 'toggle-closed', 'fake-wall', 'invisible-wall', 'clone']);
 
-/** Whether the player may enter `to` heading `d`, pushing a block there (never while riding). Changes nothing. */
-function playerMayEnter(w: Work, to: Cell, d: Dir, riding: boolean): boolean {
-  if (!inside(w.level, to) || same(to, w.minotaur)) return false;
+/** The live Minotaur stands on `to`: Theseus walking into it is caught. */
+const liveBeastOn = (w: Work, to: Cell): boolean => same(to, w.minotaur) && w.stone === 0;
+
+/** Whether the player may enter `to` heading `d`, pushing a block there (never while riding). Changes nothing. A step
+ *  of his own (`walk`) may enter the live Minotaur's cell, and the entering is a catch (enterAsPlayer); a ride or a
+ *  teleport's exit stops short of him, and a stone Minotaur is a wall to every way in. */
+function playerMayEnter(w: Work, to: Cell, d: Dir, riding: boolean, walk = false): boolean {
+  if (!inside(w.level, to)) return false;
+  if (same(to, w.minotaur)) return walk && w.stone === 0;
   const t = tAt(w, to);
   const def = TERRAIN[t];
   if (PLAYER_WALLS.has(t)) return false;
@@ -95,11 +102,15 @@ function playerMayEnter(w: Work, to: Cell, d: Dir, riding: boolean): boolean {
   return !riding && !heldAt(w, to) && !!blockMove(w, to, d, () => true);
 }
 
-/** Whether the player enters `to` heading `d`. When they may, a door on the way opens and a block is pushed; a
- *  hazard there catches them where they stand, and they do not enter. Every refusal happens before anything is
- *  changed. */
-function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent[]): boolean {
-  if (!playerMayEnter(w, to, d, riding)) return false;
+/** Whether the player enters `to` heading `d`. When they may, a door on the way opens and a block is pushed; the
+ *  live Minotaur or a hazard there catches them where they stand, and they do not enter. Every refusal happens
+ *  before anything is changed. */
+function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent[], walk = false): boolean {
+  if (!playerMayEnter(w, to, d, riding, walk)) return false;
+  if (liveBeastOn(w, to)) {
+    caught(w, ev, 'minotaur', undefined, true);
+    return false;
+  }
   if (hazardOn(w, to)) {
     caught(w, ev, 'hazard', w.hazards.find(h => same(h.at, to))!.kind);
     return false;
@@ -207,7 +218,7 @@ function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean {
       setTerrain(w, index(w, to), 'floor');
       ev.push({ kind: 'revealed', at: to, what: t });
     }
-    if (enterAsPlayer(w, to, a.dir, false, ev)) {
+    if (enterAsPlayer(w, to, a.dir, false, ev, true)) {
       ev.push({ kind: 'moved', who: 'player', from, to });
       if (!arrive(w, to, a.dir, false, ev)) ridePlayer(w, a.dir, ev);
     } else if (!turnOver(w, ev)) return false;
@@ -253,13 +264,16 @@ export function act(s: State, a: Action): StepResult {
   return { state: share(w, s), events: ev };
 }
 
-/** A step the searches leave out: a bump (the same state back), or a turn whose move showed an invisible wall. That
- *  one is a whole turn, but it plays exactly as a Wait from the same state, which the searches try too: the wall it
- *  shows was wall to everyone already, so showing it changes nothing a later turn does. */
+/** A step the searches leave out: a bump (the same state back), a turn whose move showed an invisible wall, or a walk
+ *  into the live Minotaur. The wall's turn is a whole turn, but it plays exactly as a Wait from the same state, which
+ *  the searches try too: the wall it shows was wall to everyone already, so showing it changes nothing a later turn
+ *  does. A walk into him is a catch Theseus chooses, and fewest moves and Best are counted without catches: leaving
+ *  it out keeps every search where it was before a player could walk into him (the solver's lines, the measure's
+ *  numbers, the gate). */
 export function searchSkips(s: State, r: StepResult): boolean {
   if (r.state === s) return true;
   const e = r.events[0];
-  return e?.kind === 'revealed' && e.what === 'invisible-wall';
+  return (e?.kind === 'revealed' && e.what === 'invisible-wall') || (e?.kind === 'caught' && e.walked === true);
 }
 
 export function step(s: State, a: Action): StepResult {

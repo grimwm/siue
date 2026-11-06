@@ -21,7 +21,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     [
       "The ", { strong: "Minotaur 👹" }, " takes ", { strong: "two steps" },
-      " for every move you make. Each step goes along the horizontal gap if that cell is open to it, else along the vertical gap. If it reaches you, you lose a heart.",
+      " for every move you make. Each step goes along the horizontal gap if that cell is open to it, else along the vertical gap. If it reaches you, or you walk into it, you lose a heart.",
     ],
     [{ strong: "Safe zones 🛡️" }, " keep the Minotaur out. Hearts are all you have. Each honey cake adds one, with no limit, even past the three you began with; extra hearts last until the level ends, and every level starts at three."],
     [{ strong: "Keys 🔑" }, " open the door of their own colour. Red, blue and yellow keys are used up; a green key is kept."],

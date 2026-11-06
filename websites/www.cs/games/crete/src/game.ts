@@ -13,7 +13,7 @@ import type { FoundPages } from './pages.ts';
 import type { Progress } from './progress.ts';
 import { act, assist, restart, startRun, undo } from './puzzle/run.ts';
 import type { Run } from './puzzle/run.ts';
-import { solve } from './puzzle/solver.ts';
+import { caught as catchIn, solve, solveRefusing } from './puzzle/solver.ts';
 import { pagesTaken } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
 import { act as actAlone } from './puzzle/step.ts';
@@ -23,6 +23,8 @@ import { threadPath } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
 import type { Cell, Dir, HazardKind, ObjectKind } from './puzzle/tiles.ts';
 import { meetingsOf } from './dictionary.ts';
+import { boxedIn, boxedInLine, toolLines } from './tool-effects.ts';
+import type { Input } from './tool-effects.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
@@ -57,6 +59,8 @@ export interface GameDeps {
   /** Whether meeting this Dictionary entry (an item taken, an active tile touched) is a first, whose card the page
    *  shows: a turn's animation stops where the figure first meets each such entry. None is, when not given. */
   isFirst?(id: string): boolean;
+  /** How the player plays, for the lines that name a key or a button (src/tool-effects.ts): keys when not given. */
+  input?(): Input;
 }
 
 export interface Anim {
@@ -109,6 +113,9 @@ export interface Game {
   readonly meets: readonly string[];
   /** The last turn played; null after open, undo and restart. */
   readonly turn: TurnNote | null;
+  /** The catches in the try as it stands (Undo takes a caught turn's back). A won try with any never counts toward
+   *  Best: fewest moves and Best are counted without catches. */
+  readonly catches: number;
   /** Starts level `i` fresh (clears assisted). */
   open(i: number): void;
   press(a: Action | 'undo' | 'restart'): void;
@@ -173,6 +180,13 @@ const sameAction = (a: Action, b: Action): boolean =>
 /** A hazard by its myth name, with its article: "The Harpy", "Talos's fire". */
 const hazardName = (kind: HazardKind): string => (kind === 'fireball' ? HAZARDS[kind].name : `The ${HAZARDS[kind].name}`);
 
+/** The thread's search from a try as it stands: the shortest line with no catch, as fewest moves and Best are
+ *  counted; only where none is found, the shortest line at all. */
+export function threadSolve(s: State, cap?: number): ReturnType<typeof solve> {
+  const free = solveRefusing(s, catchIn, cap);
+  return free.solved ? free : solve(s, cap);
+}
+
 export function createGame(deps: GameDeps): Game {
   let trial = -1;
   let opens = 0;
@@ -190,7 +204,11 @@ export function createGame(deps: GameDeps): Game {
   let threadOn = false;
   /** The actions that made the try as it stands, from the level's start. */
   let played: Action[] = [];
-  const search = deps.solve ?? solve;
+  /** Whether each turn in `played` was a catch. */
+  let caughtTurns: boolean[] = [];
+  const catches = (): number => caughtTurns.filter(Boolean).length;
+  const search = deps.solve ?? threadSolve;
+  const input = (): Input => deps.input?.() ?? 'keys';
 
   const stop = (): void => {
     if (tick === null) return;
@@ -205,7 +223,8 @@ export function createGame(deps: GameDeps): Game {
     deps.changed();
   }
 
-  function voice(events: GameEvent[], before: State, after: State): void {
+  /** Plays the turn's sounds and hands its lines to `say`. */
+  function voice(events: GameEvent[], before: State, after: State, say: GameDeps['say']): void {
     let slid = false;
     for (const e of events) {
       switch (e.kind) {
@@ -232,16 +251,16 @@ export function createGame(deps: GameDeps): Game {
         case 'flipped': deps.sfx('button'); break;
         case 'caught':
           deps.sfx('caught');
-          deps.say(`${e.by === 'bomb' ? 'A bomb!' : e.hazard ? `${hazardName(e.hazard)} caught you!` : 'Caught!'} ${e.hearts} ${e.hearts === 1 ? 'heart' : 'hearts'} left.`, 'bad');
+          say(`${e.by === 'bomb' ? 'A bomb!' : e.hazard ? `${hazardName(e.hazard)} caught you!` : 'Caught!'} ${e.hearts} ${e.hearts === 1 ? 'heart' : 'hearts'} left.`, 'bad');
           break;
         case 'held':
           deps.sfx('snap');
-          if (e.who === 'player') deps.say("Daedalus's snare holds you.", 'bad');
+          if (e.who === 'player') say("Daedalus's snare holds you.", 'bad');
           break;
-        case 'revealed': deps.sfx('reveal'); deps.say(e.what === 'fake-wall' ? 'A false wall gives way!' : 'A hidden wall!'); break;
+        case 'revealed': deps.sfx('reveal'); say(e.what === 'fake-wall' ? 'A false wall gives way!' : 'A hidden wall!'); break;
         case 'rose': deps.sfx('rise'); break;
         case 'teleported': deps.sfx('warp'); break;
-        case 'robbed': deps.sfx('thief'); deps.say('The thief took your gear.', 'bad'); break;
+        case 'robbed': deps.sfx('thief'); say('The thief took your gear.', 'bad'); break;
         case 'exploded': deps.sfx('boom'); break;
         case 'cloned': deps.sfx('clone'); break;
         case 'sent-home': deps.sfx('home'); break;
@@ -258,18 +277,32 @@ export function createGame(deps: GameDeps): Game {
     const r = act(run, a);
     if (r.run === run) {
       if (run.now.outcome === 'playing') deps.sfx('bump');
+      // Every way shut, a bump looks like a frozen game: say what still plays.
+      if (boxedIn(run.now)) deps.say(boxedInLine(input()), 'info');
       return false;
     }
     const before = run.now;
     run = r.run;
     played.push(a);
+    caughtTurns.push(r.events.some(e => e.kind === 'caught'));
     // A turn that retraced the try back to an earlier state is an undo to there: the moves after it go.
+    // The turn's lines, said together as one, so none hides another: the tools' first, then what befell Theseus.
+    const lines: { text: string; tone?: Tone }[] = [];
+    const say = (text: string, tone?: Tone): void => { lines.push(tone ? { text, tone } : { text }); };
     if (r.back !== undefined) {
       played = played.slice(0, r.back);
-      deps.say(`↶ Back to move ${run.now.moves}`, 'info');
+      caughtTurns = caughtTurns.slice(0, r.back);
+      say(`↶ Back to move ${run.now.moves}`, 'info');
     }
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
-    voice(r.events, before, run.now);
+    for (const t of toolLines(a, r.events, before, run.now, input())) say(t, 'info');
+    voice(r.events, before, run.now, say);
+    // A catch's own line stands; a bump says this one again.
+    if (!r.events.some(e => e.kind === 'caught') && boxedIn(run.now)) say(boxedInLine(input()), 'info');
+    if (lines.length > 0) {
+      const tone = lines.find(l => l.tone === 'bad')?.tone ?? lines.find(l => l.tone)?.tone;
+      deps.say(lines.map(l => l.text).join(' '), tone);
+    }
     took = r.events.flatMap(e => (e.kind === 'took' ? [e.what] : []));
     turn = {
       beast: r.events.flatMap(e => (e.kind === 'moved' && e.who === 'minotaur' ? [wayOf(e.from, e.to)] : [])),
@@ -284,9 +317,11 @@ export function createGame(deps: GameDeps): Game {
     anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: stopsOf(before, tl, meetings, !deps.levels.scratch?.(trial), first), paused: null } : null;
     reached = 0;
     if (run.now.outcome === 'won') {
-      if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, run.assisted);
+      // A win with a catch is a win, but never a best: it counts as one with help does.
+      const helped = run.assisted || catches() > 0;
+      if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, helped);
       else {
-        deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);
+        deps.progress.record(deps.levels.id(trial), run.now.moves, helped);
         found = deps.pages.add(pagesTaken(run.now));
       }
     }
@@ -376,6 +411,7 @@ export function createGame(deps: GameDeps): Game {
     get took() { return took; },
     get meets() { return meets; },
     get turn() { return turn; },
+    get catches() { return catches(); },
     animMs,
     resume,
     open(i) {
@@ -387,6 +423,7 @@ export function createGame(deps: GameDeps): Game {
       meets = [];
       turn = null;
       played = [];
+      caughtTurns = [];
       threadOn = false;
       thread = null;
       anim = null;
@@ -400,8 +437,8 @@ export function createGame(deps: GameDeps): Game {
       if (a === 'undo' || a === 'restart') {
         const was = run;
         run = a === 'undo' ? undo(run) : restart(run);
-        if (a === 'restart') played = [];
-        else if (run !== was) played.pop();
+        if (a === 'restart') { played = []; caughtTurns = []; }
+        else if (run !== was) { played.pop(); caughtTurns.pop(); }
         found = [];
         took = [];
         meets = [];

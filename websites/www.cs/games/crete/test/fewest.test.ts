@@ -23,3 +23,9 @@ test('a count of moves is set against the fewest: how many over, or perfect', ()
   assert.equal(againstFewest(14, 12), 'best possible 12 (2 over)');
   assert.equal(againstFewest(12, 12), 'best possible 12 · perfect');
 });
+
+test('a try with a catch is never perfect: the fewest are counted without catches', () => {
+  assert.equal(againstFewest(10, 12, 1), 'best possible 12 (caught once, so not a best)');
+  assert.equal(againstFewest(12, 12, 2), 'best possible 12 (caught 2 times, so not a best)');
+  assert.equal(againstFewest(15, 12, 3), 'best possible 12 (3 over, caught 3 times)');
+});

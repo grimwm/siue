@@ -661,3 +661,62 @@ test('walking into a fake wall opens it and steps through on one move; bumping a
   await expect(page.locator('#hud-moves')).toHaveText('3');
   expect(errors).toEqual([]);
 });
+
+/* ---- the tools say what they do, and the status bar shows each effect while it works ---- */
+const TOOL_HALL = ['title: Mirror and Cow', 'intro: A mirror and a cow.', '', '###########', '#Pzc.....M#', '#.........#', '#........E#', '###########', ''].join('\n');
+
+test('taking and using the mirror and the cow says what each does; the status bar shows each effect until it ends', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.evaluate(text => {
+    const t = (window as unknown as FirstsHook).__creteTest;
+    t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Mirror and Cow', best: null } });
+  }, TOOL_HALL);
+  await page.locator('#start-begin').click();
+  const toast = page.locator('#toast');
+  await page.keyboard.press('ArrowRight');
+  await expect(toast).toHaveText("Medusa's mirror: press Z or tap 🪞 to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall.");
+  await page.keyboard.press('ArrowRight');
+  await expect(toast).toHaveText("Daedalus's cow: press C or tap 🐄 to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it.");
+  await expect(page.locator('#hud-effects'), 'no effect at work yet').toHaveCount(0);
+  await page.keyboard.press('z');
+  await expect(toast).toHaveText('The Minotaur is stone for 3 more turns. Stone blocks everyone like a wall.');
+  await expect(page.locator('#fx-stone')).toContainText('Stone: 3 Turns');
+  await page.keyboard.press('.');
+  await expect(page.locator('#fx-stone')).toContainText('Stone: 2 Turns');
+  await page.keyboard.press('c');
+  await expect(toast).toHaveText('The cow stands here. The Minotaur is chasing the cow, not you.');
+  await expect(page.locator('#fx-stone')).toContainText('Stone: 1 Turn');
+  await expect(page.locator('#fx-cow')).toContainText('Chasing the Cow');
+  await page.keyboard.press('ArrowDown');
+  await expect(toast).toHaveText('The stone wears off: the Minotaur moves again next turn.');
+  await expect(page.locator('#fx-stone')).toHaveCount(0);
+  await page.keyboard.press('.');
+  await expect(toast).toHaveText('The Minotaur reached the cow. He comes for you again.');
+  await expect(page.locator('#hud-effects'), 'every effect has ended').toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('Chapter 1, Level 2: in the start corner beside the Minotaur, walking into him is a catch, never a freeze', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.evaluate(() => {
+    const t = window.__creteTest as unknown as CreteTest & FirstsHook['__creteTest'];
+    t.playLevel(t.trialLevel(1), { outside: { kind: 'shared', name: 'The Tribute Relics', best: null } });
+  });
+  await page.locator('#start-begin').click();
+  for (const k of ['ArrowRight', 'ArrowLeft', '.']) await page.keyboard.press(k);
+  await expect.poll(() => now(page)).toEqual({ moves: 3, hearts: 3, outcome: 'playing' });
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#toast')).toHaveText('Caught! 2 hearts left.');
+  await expect.poll(() => now(page), 'a turn and a heart').toEqual({ moves: 4, hearts: 2, outcome: 'playing' });
+  expect(errors).toEqual([]);
+});

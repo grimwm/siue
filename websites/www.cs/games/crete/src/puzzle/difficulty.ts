@@ -176,7 +176,8 @@ function apart(level: Level): boolean {
 }
 
 /** Whether some line from the start leads to a catch by the Minotaur: a breadth-first search over packed
- *  situations that stops at the first turn he catches in; a hazard's or a bomb's catch is a turn like any other.
+ *  situations that stops at the first turn he reaches Theseus in; Theseus walking into him, or a hazard's or a
+ *  bomb's catch, is a turn like any other.
  *  Breadth-first, a catch a few turns away is found before the search wanders off down one long line. False when
  *  it is proved none does, null when the search stored `cap` situations first or its store failed. It keeps them
  *  in `store`, by default one in memory. */
@@ -206,7 +207,7 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
       for (const c of ORDER) {
         if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
         const x = step(s, ACTIONS[c]!);
-        if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
+        if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur' && !e.walked)) return true;
         const n = x.state;
         if (searchSkips(s, x) || n.outcome !== 'playing') continue;
         pack(n, layout, buf, 0, s, from, 0);
@@ -343,7 +344,9 @@ export function naiveWalkWins(level: Level): boolean {
   if (!walk) return false;
   let s = initial(level);
   for (const dir of walk) {
-    s = step(s, { kind: 'move', dir }).state;
+    const x = step(s, { kind: 'move', dir });
+    // A walk into the live Minotaur is a step the walk never takes: it stands, as at a wall.
+    if (!(x.events[0]?.kind === 'caught' && x.events[0].walked)) s = x.state;
     if (s.outcome !== 'playing') break;
   }
   return s.outcome === 'won';

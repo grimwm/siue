@@ -2,7 +2,7 @@
 // a win records progress; undo and restart go through; sounds follow the events.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame } from '../src/game.ts';
+import { createGame, threadSolve } from '../src/game.ts';
 import { createFoundPages } from '../src/pages.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
@@ -361,7 +361,7 @@ test('a bomb, a snare, a thief and a revealed wall each get one line; hazard ste
   const wall = lone(['PW...M'], '');
   wall.game.press(R_);
   assert.deepEqual(wall.said, ['A false wall gives way!']);
-  const unseen = lone(['PI...M'], '');
+  const unseen = lone(['PI...M', '......'], '');
   unseen.game.press(R_);
   assert.deepEqual(unseen.said, ['A hidden wall!']);
   const steps = lone(['P....o'], 'facing: left');
@@ -444,4 +444,104 @@ test('undo back onto the line uses it again', () => {
   h.game.hint();
   assert.equal(h.solves(), 1, 'restart clears the moves played');
   assert.equal(h.game.run!.now.moves, 3);
+});
+
+test('a tool picked up, used and worn off is said; a catch in the same turn is said last', () => {
+  const { game, said } = lone(['#############', '#Pz........M#', '#############']);
+  game.press(R_);
+  assert.match(said.at(-1)!, /^Medusa's mirror: press Z or tap 🪞 to raise it\./);
+  game.press({ kind: 'tool', tool: 'mirror' });
+  assert.equal(said.at(-1), 'The Minotaur is stone for 3 more turns. Stone blocks everyone like a wall.');
+  for (let i = 0; i < 3; i++) game.press({ kind: 'wait' });
+  assert.equal(said.at(-1), 'The stone wears off: the Minotaur moves again next turn.');
+  const cow = lone(['#####', '#.Pc#', '#M..#', '#####']);
+  cow.game.press(R_);
+  cow.game.press({ kind: 'tool', tool: 'cow' });
+  assert.match(cow.said.at(-1)!, /^Caught!/);
+});
+
+test('boxed in, the turn and each bump after say what still plays, by key or by button', () => {
+  // A pop-up wall rises behind Theseus as he takes the mirror: walls all round.
+  const rows = ['#####', '#P;z#', '#####'];
+  const { game, said, sounds } = lone(rows);
+  game.press(R_);
+  game.press(R_);
+  assert.equal(said.at(-1), "Medusa's mirror: press Z or tap 🪞 to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall. No way to move: Wait (.) or Undo (U).",
+    "the turn's lines in one toast: the pickup, then the boxed-in line");
+  said.length = 0;
+  game.press(mv('down'));
+  assert.equal(sounds.at(-1), 'bump');
+  assert.deepEqual(said, ['No way to move: Wait (.) or Undo (U).']);
+  const m = manualClock();
+  const said2: string[] = [];
+  const touch = createGame({
+    sfx() {}, say: t => said2.push(t), progress: createProgress(null), pages: createFoundPages(null), input: () => 'touch',
+    timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'lone', level: () => parse(`title: t\nintro: i\n\n${rows.join('\n')}\n`) },
+  });
+  touch.open(0);
+  touch.press(R_);
+  touch.press(R_);
+  touch.press(mv('left'));
+  assert.equal(said2.at(-1), 'No way to move: tap Wait or Undo.');
+});
+
+test('walking into the Minotaur is a catch, said as one', () => {
+  const { game, said, sounds } = lone(['#####', '#.PM#', '#...#', '#####']);
+  game.press(R_);
+  assert.ok(sounds.includes('caught'));
+  assert.equal(said.at(-1), 'Caught! 2 hearts left.');
+  assert.equal(game.run!.now.moves, 1);
+});
+
+test('a win with a catch is a win but never a best; Undo takes the catch back', () => {
+  const progress = createProgress(null);
+  const m = manualClock();
+  // A penned Minotaur below a strip of gravel: walking down into him is a catch that throws Theseus back to his start.
+  const text = 'title: t\nintro: i\n\n######\n#E..P#\n####:#\n####M#\n######\n';
+  const game = createGame({
+    sfx() {}, say() {}, progress, pages: createFoundPages(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'lone', level: () => parse(text) },
+  });
+  game.open(0);
+  game.press(mv('down'));
+  game.press(mv('down'));
+  assert.equal(game.catches, 1);
+  game.press('undo');
+  assert.equal(game.catches, 0);
+  game.press(mv('down'));
+  for (let i = 0; i < 3; i++) game.press(mv('left'));
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.equal(game.catches, 1);
+  assert.equal(progress.get('lone').cleared, true);
+  assert.equal(progress.get('lone').best, null, 'not a best');
+});
+
+test("the thread's search takes the catch-free line where there is one", () => {
+  const s = initial(parse('title: t\nintro: i\n\n#########\n#E.P.M.S#\n#########\n'));
+  const r = threadSolve(s);
+  assert.ok(r.solved);
+  const line = r.line;
+  let x = s;
+  for (const a of line) {
+    const r = step(x, a);
+    assert.ok(!r.events.some(e => e.kind === 'caught'), 'no catch on the thread');
+    x = r.state;
+  }
+  assert.equal(x.outcome, 'won');
+});
+
+test("a pickup and a catch in the same turn are said together, the pickup first, as one bad line", () => {
+  const tones: (string | undefined)[] = [];
+  const said: string[] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say: (t, tone) => { said.push(t); tones.push(tone); }, progress: createProgress(null), pages: createFoundPages(null),
+    timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'lone', level: () => parse('title: t\nintro: i\n\n#######\n#Pc.M.#\n#######\n') },
+  });
+  game.open(0);
+  game.press(R_);
+  assert.deepEqual(said, ["Daedalus's cow: press C or tap 🐄 to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it. Caught! 2 hearts left."]);
+  assert.deepEqual(tones, ['bad']);
 });

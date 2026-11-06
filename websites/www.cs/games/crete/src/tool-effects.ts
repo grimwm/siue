@@ -17,8 +17,10 @@ export type Input = 'keys' | 'touch';
 /** The tool buttons' faces (src/ui/strip.tsx). */
 export const TOOL_EMOJI: Record<Tool, string> = { mirror: '🪞', cake: '🍯', cow: '🐄' };
 
-/** "press C" with keys, "tap 🐄" by touch. */
-const useOf = (tool: Tool, input: Input): string => (input === 'keys' ? `press ${TOOLS[tool].key}` : `tap ${TOOL_EMOJI[tool]}`);
+/** "press C or tap 🐄" with keys at hand (a fine pointer is no promise of a keyboard, so the button is named too),
+ *  "tap 🐄" by touch. */
+const useOf = (tool: Tool, input: Input): string =>
+  (input === 'keys' ? `press ${TOOLS[tool].key} or tap ${TOOL_EMOJI[tool]}` : `tap ${TOOL_EMOJI[tool]}`);
 
 /** What a tool just picked up does, and how to use it. */
 export function pickupLine(tool: Tool, input: Input): string {
@@ -91,6 +93,6 @@ export function boxedIn(s: State): boolean {
 /** What the page says to a boxed-in Theseus. */
 export function boxedInLine(input: Input): string {
   return input === 'keys'
-    ? `No way to move: press ${KEYS.wait.label} to Wait or ${KEYS.undo.label} to Undo.`
+    ? `No way to move: Wait (${KEYS.wait.label}) or Undo (${KEYS.undo.label}).`
     : 'No way to move: tap Wait or Undo.';
 }

@@ -65,6 +65,6 @@ test('boxed in: by walls and a stone Minotaur; not by a live one, not while the 
 });
 
 test('the boxed-in line names Wait and Undo by key with a keyboard, by button on a touch screen', () => {
-  assert.equal(boxedInLine('keys'), 'No way to move: press . to Wait or U to Undo.');
+  assert.equal(boxedInLine('keys'), 'No way to move: Wait (.) or Undo (U).');
   assert.equal(boxedInLine('touch'), 'No way to move: tap Wait or Undo.');
 });

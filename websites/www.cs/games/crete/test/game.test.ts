@@ -449,7 +449,7 @@ test('undo back onto the line uses it again', () => {
 test('a tool picked up, used and worn off is said; a catch in the same turn is said last', () => {
   const { game, said } = lone(['#############', '#Pz........M#', '#############']);
   game.press(R_);
-  assert.match(said.at(-1)!, /^Medusa's mirror: press Z to raise it\./);
+  assert.match(said.at(-1)!, /^Medusa's mirror: press Z or tap 🪞 to raise it\./);
   game.press({ kind: 'tool', tool: 'mirror' });
   assert.equal(said.at(-1), 'The Minotaur is stone for 3 more turns. Stone blocks everyone like a wall.');
   for (let i = 0; i < 3; i++) game.press({ kind: 'wait' });
@@ -466,11 +466,12 @@ test('boxed in, the turn and each bump after say what still plays, by key or by 
   const { game, said, sounds } = lone(rows);
   game.press(R_);
   game.press(R_);
-  assert.equal(said.at(-1), 'No way to move: press . to Wait or U to Undo.');
+  assert.equal(said.at(-1), "Medusa's mirror: press Z or tap 🪞 to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall. No way to move: Wait (.) or Undo (U).",
+    "the turn's lines in one toast: the pickup, then the boxed-in line");
   said.length = 0;
   game.press(mv('down'));
   assert.equal(sounds.at(-1), 'bump');
-  assert.deepEqual(said, ['No way to move: press . to Wait or U to Undo.']);
+  assert.deepEqual(said, ['No way to move: Wait (.) or Undo (U).']);
   const m = manualClock();
   const said2: string[] = [];
   const touch = createGame({
@@ -528,4 +529,19 @@ test("the thread's search takes the catch-free line where there is one", () => {
     x = r.state;
   }
   assert.equal(x.outcome, 'won');
+});
+
+test("a pickup and a catch in the same turn are said together, the pickup first, as one bad line", () => {
+  const tones: (string | undefined)[] = [];
+  const said: string[] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say: (t, tone) => { said.push(t); tones.push(tone); }, progress: createProgress(null), pages: createFoundPages(null),
+    timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'lone', level: () => parse('title: t\nintro: i\n\n#######\n#Pc.M.#\n#######\n') },
+  });
+  game.open(0);
+  game.press(R_);
+  assert.deepEqual(said, ["Daedalus's cow: press C or tap 🐄 to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it. Caught! 2 hearts left."]);
+  assert.deepEqual(tones, ['bad']);
 });

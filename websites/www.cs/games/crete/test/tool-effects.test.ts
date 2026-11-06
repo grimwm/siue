@@ -20,14 +20,14 @@ function said(s: State, a: Action, input: Input = 'keys'): { lines: string[]; af
 test('picking up the cow says what it does and how to use it, by key or by button', () => {
   const s = grid(['Pc.....M']);
   assert.deepEqual(said(s, mv('right')).lines,
-    ["Daedalus's cow: press C to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it."]);
+    ["Daedalus's cow: press C or tap 🐄 to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it."]);
   assert.deepEqual(said(s, mv('right'), 'touch').lines,
     ["Daedalus's cow: tap 🐄 to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it."]);
 });
 
 test('picking up the mirror and a cake says what each does', () => {
   assert.deepEqual(said(grid(['Pz.....M']), mv('right')).lines,
-    ["Medusa's mirror: press Z to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall."]);
+    ["Medusa's mirror: press Z or tap 🪞 to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall."]);
   assert.deepEqual(said(grid(['Px.....M']), mv('right'), 'touch').lines,
     ['Honey cake: tap 🍯 to eat it for one more heart.']);
 });

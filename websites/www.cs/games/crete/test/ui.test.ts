@@ -301,7 +301,9 @@ const game: Game = createGame({
 });
 let toggled = 0;
 let musics = 0;
-let helpChecks = 0;
+let helpBuilds = 0;
+/** The Help Build card's answers, as the page was told them. */
+const answers: boolean[] = [];
 let backgrounds = 0;
 let backs = 0;
 /* The editor as the page sees it: what it was asked to do, and every key it was handed. */
@@ -314,9 +316,11 @@ const editor = {
 };
 const looks: string[] = [];
 flow.bindControls({
-  game, toggleMute() {}, toggleMusic() { musics++; }, toggleHelpCheck() { helpChecks++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: (at?: number) => (at === undefined ? flow.showChapter(1, false) : flow.showChapter(chapterOf(at).chapter.n, false, at)), backToEditor: () => { backs++; },
+  game, toggleMute() {}, toggleMusic() { musics++; }, toggleHelpBuild() { helpBuilds++; }, setHelpBuild(on) { answers.push(on); }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: (at?: number) => (at === undefined ? flow.showChapter(1, false) : flow.showChapter(chapterOf(at).chapter.n, false, at)), backToEditor: () => { backs++; },
   editor, leftEditor: () => { edits.push('left'); },
 });
+// Answered already: New Game and Endless go straight on (the card that asks once has its own test).
+flow.setHelpBuild('off');
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
 const reset = () => { cleared.clear(); heard.length = 0; musics = 0; backgrounds = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; outsideLevel = null; backs = 0; edits.length = 0; editorKeys.length = 0; };
@@ -467,26 +471,36 @@ test('I on the title opens the story card and Q opens the menu; Q again returns 
   assert.equal(flow.top(), 'title');
 });
 
-test('F toggles full screen and L opens the Lore Book while the menu is up, and neither does anything in play', () => {
+test('F toggles full screen anywhere, in play, on the title card and on any card; L opens the Lore Book only from the menu', () => {
   reset();
   toggled = 0;
   game.open(0);
   key('Enter');
   key('f');
+  assert.equal(toggled, 1, 'F in play');
   key('l');
   key('i');
-  assert.equal(toggled, 0);
   assert.equal(flow.top(), null);
   key('q');
   assert.equal(flow.top(), 'menu');
   key('i');
   assert.equal(flow.top(), 'menu', 'I is the title card key');
   key('f');
-  assert.equal(toggled, 1);
+  assert.equal(toggled, 2, 'F on the menu');
   key('l');
   assert.equal(flow.top(), 'lore');
   key('f');
-  assert.equal(toggled, 1, 'F does nothing on the Lore Book');
+  assert.equal(toggled, 3, 'F on the Lore Book');
+  flow.showTitle(false);
+  key('f');
+  assert.equal(toggled, 4, 'F on the title card');
+  assert.equal(flow.top(), 'title');
+  fireDocument('keydown', { key: 'f', repeat: true, target: { tagName: 'DIV' } });
+  assert.equal(toggled, 4, 'a held F toggles once');
+  for (const chord of ['ctrlKey', 'metaKey', 'altKey']) fireDocument('keydown', { key: 'f', [chord]: true, target: { tagName: 'DIV' } });
+  assert.equal(toggled, 4, 'a chord is the browser\'s');
+  fireDocument('keydown', { key: 'f', target: { tagName: 'INPUT', type: 'text' } });
+  assert.equal(toggled, 4, 'F typed in a text box is a letter');
 });
 
 test('in the menu, down and up (or j and k) move the focus through its buttons and Enter presses the focused one', () => {
@@ -494,7 +508,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'help-check', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'menu-view-tips', 'menu-reset-tips', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'help-build', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'menu-view-tips', 'menu-reset-tips', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
   for (let i = 0; i < 8; i++) key('ArrowUp');
@@ -508,7 +522,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   key('s');
   assert.equal(at(), 'fullscreen');
   key('j');
-  assert.equal(at(), 'help-check');
+  assert.equal(at(), 'help-build');
   key('j');
   assert.equal(at(), 'walls-solid');
   for (let i = 0; i < 8; i++) key('j');
@@ -521,20 +535,68 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   assert.equal(at(), 'quit', 'clamped at the bottom');
 });
 
-test('Help Check Endless Levels is a switch in the menu, on until turned off, with a line that says what it does', () => {
+test('Help Build Endless Levels is a switch in the menu, off until turned on, with a line that says what it does', () => {
   reset();
   key('q');
-  const sw = () => byId(rootOf('menu'), 'help-check');
+  const sw = () => byId(rootOf('menu'), 'help-build');
   assert.equal(sw().getAttribute('role'), 'switch');
-  assert.equal(sw().getAttribute('aria-checked'), 'true');
-  assert.match(sw().textContent ?? '', /^Help Check Endless Levels/);
-  assert.match(sw().textContent ?? '', /spare time/);
-  const before = helpChecks;
-  click(sw());
-  assert.equal(helpChecks, before + 1);
-  flow.setHelpCheck(false);
   assert.equal(sw().getAttribute('aria-checked'), 'false');
-  flow.setHelpCheck(true);
+  assert.match(sw().textContent ?? '', /^Help Build Endless Levels/);
+  assert.match(sw().textContent ?? '', /idle time/);
+  const before = helpBuilds;
+  click(sw());
+  assert.equal(helpBuilds, before + 1);
+  flow.setHelpBuild('on');
+  assert.equal(sw().getAttribute('aria-checked'), 'true');
+  flow.setHelpBuild('unset');
+  assert.equal(sw().getAttribute('aria-checked'), 'false', 'unset is off');
+  flow.setHelpBuild('off');
+  flow.closeLayers();
+});
+
+test('unanswered, New Game and Endless ask once whether to help build Endless levels, then go on; each answer is kept', () => {
+  for (const [how, answer, goes] of [
+    ['New Game', 'help-yes', 'look'], ['N', 'help-no', 'look'], ['Q', 'q', 'look'], ['Escape', 'Escape', 'look'],
+  ] as const) {
+    reset();
+    answers.length = 0;
+    flow.setHelpBuild('unset');
+    flow.showTitle(false);
+    if (how === 'New Game') click(byId(rootOf('title'), 'title-play'));
+    else key('n');
+    assert.equal(flow.top(), 'help', how);
+    assert.equal(text('help-title'), 'Help Build Endless Levels');
+    assert.match(text('help-text'), /^Your device can help make and check new Endless levels while the game is idle\./);
+    assert.equal(globalThis.__focused?.id, 'help-yes', 'Help Build Levels has the focus');
+    if (answer.startsWith('help-')) click(byId(rootOf('help'), answer));
+    else key(answer);
+    assert.deepEqual(answers, [answer === 'help-yes'], how);
+    assert.equal(flow.top(), goes, `${how}: what asked goes on`);
+    // Answered: the next New Game goes straight on.
+    flow.showTitle(false);
+    key('n');
+    assert.equal(flow.top(), 'look', `${how}: asked once`);
+    assert.equal(answers.length, 1);
+  }
+  flow.setHelpBuild('off');
+  flow.closeLayers();
+});
+
+test('the Help Build card: down and up move between its buttons and Enter presses the focused one', () => {
+  reset();
+  answers.length = 0;
+  flow.setHelpBuild('unset');
+  flow.showTitle(false);
+  key('n');
+  assert.equal(flow.top(), 'help');
+  key('n');
+  assert.equal(flow.top(), 'help', 'N opens no level list over the card');
+  key('ArrowDown');
+  assert.equal(globalThis.__focused?.id, 'help-no');
+  fireDocument('keydown', { key: 'Enter', target: byId(rootOf('help'), 'help-no') });
+  assert.deepEqual(answers, [false]);
+  assert.equal(flow.top(), 'look');
+  flow.setHelpBuild('off');
   flow.closeLayers();
 });
 

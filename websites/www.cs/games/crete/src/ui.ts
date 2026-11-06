@@ -18,7 +18,7 @@ import { HEARTS_LINES, nextLine } from "./hearts-lines.ts";
 import type { IconSheet } from "./icons-models.ts";
 import type { Pics } from "./ui/sprite.tsx";
 import { BANNER_MS, isFirst as firstMeeting, meetNotices } from "./notices.ts";
-import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
+import { KEYS, actionFor, isDemoKey, isMove, itemFor } from "./keys.ts";
 import type { MoveAction } from "./keys.ts";
 import { PadPress, padDir } from "./pad.ts";
 import { TOUR_ID, showTour, tourDue } from "./tour.ts";
@@ -64,11 +64,12 @@ import { renderStoryCard } from "./ui/story.tsx";
 import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
-import type { Look, PadSide, WallMode } from "./settings.ts";
+import type { HelpBuild, Look, PadSide, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
 import { renderDemoStrip } from "./ui/demo.tsx";
 import type { DemoView } from "./demo.ts";
 import { renderLookPick } from "./ui/look-pick.tsx";
+import { renderHelpAsk } from "./ui/help-ask.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
 import type { SharedView } from "./share/visit.ts";
 import type { RatingState } from "./share/rating.ts";
@@ -121,7 +122,10 @@ export interface Controls {
   setPad?(side: PadSide): void;
   /** The Mini map switch, shown while the look is modern. */
   toggleMinimap?(): void;
-  toggleHelpCheck?(): void;
+  /** The Help Build Endless Levels switch in the menu. */
+  toggleHelpBuild?(): void;
+  /** The player answered the card that asks once whether to help build Endless levels. */
+  setHelpBuild?(on: boolean): void;
   /** Show View Tips: the modern board's tips by the compass again (the menu, the ? key). */
   showViewTips?(): void;
   toggleFullscreen(): void;
@@ -163,8 +167,8 @@ export interface Ui {
   setPad(side: PadSide): void;
   /** Shows the Mini map switch's state. */
   setMinimap(on: boolean): void;
-  /** Shows the Help Check Endless Levels switch's state. */
-  setHelpCheck(on: boolean): void;
+  /** Shows the Help Build Endless Levels switch's state; unset makes New Game and Endless ask first. */
+  setHelpBuild(state: HelpBuild): void;
   /** Whether the modern board shows: it fills the board's space, so the classic canvas is not fitted and nothing
    *  scrolls. */
   setModernBoard(on: boolean): void;
@@ -266,7 +270,9 @@ export function createUi(deps: UiDeps): Ui {
   let walls: WallMode = "solid";
   let pad: PadSide = "left";
   let minimap = false;
-  let helpCheck = true;
+  let helpBuild: HelpBuild = "unset";
+  /** What the title card was doing when the Help Build card asked first: it goes on once answered. */
+  let afterAsk: (() => void) | null = null;
   /** The strip as last drawn: a phone's, and whether its Thread panel is open. */
   let compact = false;
   let threadOpen = false;
@@ -438,6 +444,33 @@ export function createUi(deps: UiDeps): Ui {
     layers.open("endless");
   }
 
+  /** New Game on the title card: the new-game card, once the Help Build card has its answer. */
+  function newGame(): void {
+    askFirst(() => layers.open("look"));
+  }
+
+  /** The title card's New Game and Endless ask once, before they go on, whether this device may help build Endless
+   *  levels; once answered (or with no one to answer to) they go straight on. Demo never asks. */
+  function askFirst(then: () => void): void {
+    if (helpBuild !== "unset" || !controls?.setHelpBuild) {
+      then();
+      return;
+    }
+    afterAsk = then;
+    layers.open("help");
+  }
+
+  /** The answer on the Help Build card: kept, and what asked goes on. */
+  function answerAsk(on: boolean): void {
+    controls?.wake();
+    helpBuild = on ? "on" : "off";
+    controls?.setHelpBuild?.(on);
+    const then = afterAsk;
+    afterAsk = null;
+    layers.close("help");
+    then?.();
+  }
+
   /** Demo, from the title card: Endless plays by itself under no card (src/demo.ts). */
   function startDemo(): void {
     controls?.wake();
@@ -450,6 +483,8 @@ export function createUi(deps: UiDeps): Ui {
     const starting = !demo && !!view;
     demo = view;
     if (starting) {
+      // The level played before stays hidden while Demo finds its own, which then fades in: one map, never two.
+      boardFade("wait");
       // Whatever stood over the board before (a banner, a toast; a rule tip hides while Demo plays) goes.
       bannerEntries = [];
       bannerLine = null;
@@ -460,6 +495,7 @@ export function createUi(deps: UiDeps): Ui {
       drawLayers();
     }
     if (!view) {
+      if (document.getElementById("board")?.className.includes("board-wait")) boardFade("in");
       const g = controls?.game ?? game;
       endFor = g?.run ?? null;
       shownOpen = g?.opens ?? shownOpen;
@@ -596,11 +632,11 @@ export function createUi(deps: UiDeps): Ui {
       open: layers.isOpen("title"),
       hint: titleHint,
       ...(titleNote ? { note: titleNote } : {}),
-      onPlay: () => layers.open("look"),
+      onPlay: newGame,
       ...(resume() !== null ? { resume: continueWords(resume()!), onContinue: goResume } : {}),
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
-      ...(controls?.endless ? { onEndless: showEndless } : {}),
+      ...(controls?.endless ? { onEndless: () => askFirst(() => showEndless()) } : {}),
       ...(controls?.demo ? { onDemo: startDemo } : {}),
       onSettings: () => layers.open("menu"),
     });
@@ -628,6 +664,11 @@ export function createUi(deps: UiDeps): Ui {
         onBack: leaveEndless,
       });
     }
+    renderHelpAsk($("help-root"), {
+      open: layers.isOpen("help"),
+      onYes: () => answerAsk(true),
+      onNo: () => answerAsk(false),
+    });
     renderLookPick($("look-root"), {
       open: layers.isOpen("look"),
       look,
@@ -748,7 +789,7 @@ export function createUi(deps: UiDeps): Ui {
       walls,
       pad,
       minimap,
-      helpCheck,
+      helpBuild: helpBuild === "on",
       log,
       help: helpLines(KEYS, TOOLS),
       onSound: () => {
@@ -767,7 +808,7 @@ export function createUi(deps: UiDeps): Ui {
       onWalls: (w) => controls?.setWalls?.(w),
       onPad: (side) => controls?.setPad?.(side),
       onMinimap: () => controls?.toggleMinimap?.(),
-      onHelpCheck: () => controls?.toggleHelpCheck?.(),
+      onHelpBuild: () => controls?.toggleHelpBuild?.(),
       viewTips: look === "modern" || touchScreen(),
       onViewTips: () => {
         layers.close("menu");
@@ -992,6 +1033,25 @@ export function createUi(deps: UiDeps): Ui {
     };
   }
 
+  /** The board's state between levels: "wait" keeps it hidden (Demo finding its first level, so the level played
+   *  before never shows under it), "in-a" or "in-b" fades it in (two names, so each new level starts the fade again),
+   *  "" shows it as it is. A fade that has run its course is taken off, so the board keeps no animated layer. */
+  let fadeHeard = false;
+  function boardFade(state: "wait" | "in" | ""): void {
+    const el = document.getElementById("board");
+    if (!el) return;
+    if (!fadeHeard) {
+      fadeHeard = true;
+      el.addEventListener("animationend", (e) => {
+        if ((e as AnimationEvent).animationName?.startsWith("board-in") && el.className.includes("board-in")) boardFade("");
+      });
+    }
+    const rest = el.className.split(" ").filter((c) => c && !c.startsWith("board-"));
+    const was = el.className.includes("board-in-a") ? "a" : "b";
+    const cls = state === "wait" ? "board-wait" : state === "in" && !reducedMotion() ? `board-in-${was === "a" ? "b" : "a"}` : "";
+    el.className = [...rest, cls].filter(Boolean).join(" ");
+  }
+
   function render(g: Game): void {
     game = g;
     const run = g.run;
@@ -1021,6 +1081,8 @@ export function createUi(deps: UiDeps): Ui {
     // A level opened: the start card shows (a restart does not); the story log keeps its words.
     if (g.opens !== shownOpen) {
       shownOpen = g.opens;
+      // The new level fades in at once, under its start card (which waits for input as before), never a blank board.
+      boardFade("in");
       announced = [];
       pending = [];
       const name = out ? out.name : s.level.title;
@@ -1628,6 +1690,13 @@ export function createUi(deps: UiDeps): Ui {
         return;
       }
       c.wake();
+      // F toggles full screen wherever it is pressed: in play, on any card and in the editor (Demo's own key watch in
+      // src/main.ts lets it through). A chord is the browser's; a held F toggles once.
+      if (actionFor(ev.key) === "fullscreen" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        ev.preventDefault();
+        if (!ev.repeat) c.toggleFullscreen();
+        return;
+      }
       // The editor takes every key while it is the top layer; a Q it does not use (no dialog of its own is open)
       // leaves it for the title card.
       if (layers.isOpen("editor") && c.editor) {
@@ -1663,6 +1732,7 @@ export function createUi(deps: UiDeps): Ui {
         } else if (layers.isOpen("lore") && loreFromPickup) {
           closePickup();
         } else if (layers.isOpen("meet")) closeMeet();
+        else if (layers.isOpen("help")) answerAsk(false);
         else if (layers.isOpen("title")) layers.open("menu");
         else if (layers.isOpen("endless")) leaveEndless();
         else if (layers.isOpen("shared")) {
@@ -1691,41 +1761,37 @@ export function createUi(deps: UiDeps): Ui {
         return;
       }
       // The title's New Game is worded N: there it opens the new-game card, elsewhere N opens the list (not over the
-      // new-game card, which has no list to show).
+      // new-game card, which has no list to show, nor over the Help Build card, which waits for its answer).
       if (action === "new") {
         ev.preventDefault();
-        if (layers.isOpen("title")) layers.open("look");
-        else if (!layers.isOpen("look")) layers.open("levels");
+        if (layers.isOpen("title")) newGame();
+        else if (!layers.isOpen("look") && !layers.isOpen("help")) layers.open("levels");
         return;
       }
       if (action === "mute") {
         c.toggleMute();
         return;
       }
-      // Each card's own keys act only while it is the top card: I and E on the title, F and L on the menu.
+      // Each card's own keys act only while it is the top card: I, E and D on the title, L and G on the menu.
       if (action === "story" && layers.isOpen("title")) {
         ev.preventDefault();
         if (!ev.repeat) layers.open("story");
         return;
       }
-      if (action === "demo" && layers.top() === "title" && c.demo) {
+      // D is "right" everywhere else; on the title card, whose focus moves only up and down, it starts Demo.
+      if (isDemoKey(k) && layers.top() === "title" && c.demo) {
         ev.preventDefault();
         if (!ev.repeat) startDemo();
         return;
       }
       if (action === "endless" && layers.isOpen("title") && c.endless) {
         ev.preventDefault();
-        if (!ev.repeat) showEndless();
+        if (!ev.repeat) askFirst(() => showEndless());
         return;
       }
       if (action === "editor" && layers.isOpen("title") && c.editor) {
         ev.preventDefault();
         if (!ev.repeat) showEditor();
-        return;
-      }
-      if (action === "fullscreen" && layers.isOpen("menu")) {
-        ev.preventDefault();
-        if (!ev.repeat) c.toggleFullscreen();
         return;
       }
       if (action === "dictionary" && layers.isOpen("menu")) {
@@ -1996,8 +2062,8 @@ export function createUi(deps: UiDeps): Ui {
       minimap = on;
       drawLayers();
     },
-    setHelpCheck: (on) => {
-      helpCheck = on;
+    setHelpBuild: (state) => {
+      helpBuild = state;
       drawLayers();
     },
     setModernBoard: (on) => {

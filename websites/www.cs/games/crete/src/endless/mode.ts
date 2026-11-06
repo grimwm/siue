@@ -46,6 +46,9 @@ export interface EndlessDeps {
   shared?: { take(req: Request): RunLevel | null };
   /** The search made `made` as part `part` of `req`'s search: it goes up to the shared bank. */
   made?(req: Request, part: number, made: MadeAt): void;
+  /** Every level, not only a run's first, comes from the shared bank when one fits, and the search runs only when
+   *  none does: the player has not turned Help Build Endless Levels on. Asked each time. */
+  bankFirst?(): boolean;
 }
 
 export interface EndlessView {
@@ -197,8 +200,9 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
       // The page hears that the background's work changed, so a check of others' levels can start or stop with it.
       deps.changed();
     };
-    // A run's first level: a shared one at once when one fits, else the bundled bank's, as the worker answers.
-    if (depth === 1) {
+    // A run's first level (every level, while the device does not help build them): a shared one at once when one
+    // fits, else the bundled bank's, as the worker answers.
+    if (depth === 1 || deps.bankFirst?.()) {
       const s = sharedFor(request, seeded);
       if (s) { got(s); return; }
     }

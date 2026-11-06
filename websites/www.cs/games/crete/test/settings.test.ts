@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
-import { createSettings, FULLSCREEN_KEY, LOOK_KEY, MINIMAP_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, PAD_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
+import { createSettings, FULLSCREEN_KEY, HELP_BUILD_KEY, HELP_CHECK_KEY, LOOK_KEY, MINIMAP_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, PAD_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
 
 test('defaults: sound on, music on, music in the background on, fullscreen off', () => {
   const s = createSettings(memoryStorage());
@@ -83,4 +83,28 @@ test('the mini map is off until chosen; On is kept under crete-minimap and reads
   assert.equal(storage.data.get(MINIMAP_KEY), 'on');
   assert.equal(createSettings(storage).minimap.get(), 'on');
   assert.equal(createSettings(memoryStorage({ [MINIMAP_KEY]: 'maybe' })).minimap.get(), 'off');
+});
+
+test('Help Build Endless Levels is unset until the player answers, and an answer is kept', () => {
+  const storage = memoryStorage();
+  assert.equal(HELP_BUILD_KEY, 'crete-help-build');
+  assert.equal(createSettings(storage).helpBuild.get(), 'unset');
+  createSettings(storage).helpBuild.set('on');
+  assert.equal(createSettings(storage).helpBuild.get(), 'on');
+  createSettings(storage).helpBuild.set('off');
+  assert.equal(createSettings(storage).helpBuild.get(), 'off');
+});
+
+test('the old Help Check switch: its default "on" is no answer, an "off" the player chose stays off', () => {
+  const on = memoryStorage({ [HELP_CHECK_KEY]: 'on' });
+  assert.equal(createSettings(on).helpBuild.get(), 'unset');
+  assert.equal(on.data.has(HELP_CHECK_KEY), false);
+  const off = memoryStorage({ [HELP_CHECK_KEY]: 'off' });
+  assert.equal(createSettings(off).helpBuild.get(), 'off');
+  assert.equal(off.data.get(HELP_BUILD_KEY), 'off');
+  assert.equal(off.data.has(HELP_CHECK_KEY), false);
+  // A later answer is never overwritten by the old key.
+  const both = memoryStorage({ [HELP_CHECK_KEY]: 'off', [HELP_BUILD_KEY]: 'on' });
+  assert.equal(createSettings(both).helpBuild.get(), 'on');
+  assert.equal(createSettings(throwingStorage()).helpBuild.get(), 'unset');
 });

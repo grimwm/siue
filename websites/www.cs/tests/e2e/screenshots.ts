@@ -138,6 +138,8 @@ const SHOTS: Record<string, Shot> = {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       // Every Dictionary entry met, so no first card stops the level.
       await page.addInitScript(() => localStorage.setItem('crete-met', '["*"]'));
+      // Crete's Help Build card asks on the first New Game: answered here, so it never stands over a capture.
+      await page.addInitScript(() => { if (localStorage.getItem('crete-help-build') === null) localStorage.setItem('crete-help-build', 'off'); });
       // The first-time view hint (src/modern/hint.ts) would show over a long capture; it is done here.
       await page.addInitScript(() => localStorage.setItem('crete-view-hint', '{"shows":0,"moved":true}'));
       await page.goto('games/crete/');

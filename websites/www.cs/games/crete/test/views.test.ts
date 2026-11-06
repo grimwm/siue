@@ -270,10 +270,10 @@ test('a tool names itself, its count and what it does to a screen reader', () =>
 // ---- menu ----
 function menuProps(over: Partial<MenuProps> = {}): MenuProps {
   return {
-    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', pad: 'left', minimap: false, helpCheck: true,
+    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', pad: 'left', minimap: false, helpBuild: false,
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onWalls: noop, onPad: noop, onMinimap: noop, onHelpCheck: noop, viewTips: true, onViewTips: noop, resetAsking: false, onResetAsk: noop, onResetTips: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onWalls: noop, onPad: noop, onMinimap: noop, onHelpBuild: noop, viewTips: true, onViewTips: noop, resetAsking: false, onResetAsk: noop, onResetTips: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 

@@ -40,6 +40,7 @@ import { createFoundPages } from './pages.ts';
 import { createMet } from './met.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
+import { actionFor } from './keys.ts';
 import { watchPlay } from './track.ts';
 import { createEditor } from './editor/editor.ts';
 import { fromLevel } from './editor/model.ts';
@@ -185,21 +186,24 @@ const endlessSaves = Object.fromEntries(GRADES.map(g => [g, createEndlessSaved(b
 const endlessGrade = gradePref(browserStorage());
 const endlessWorker = () => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker;
 const endlessClient = createEndlessClient(endlessWorker, () => endlessWorkers(), partStore(browserStorage(), ENDLESS_WORKER_V));
-/* The shared bank: every level the search makes goes up to it, and a run started with New Run takes levels from it
-   when they fit (src/endless/shared.ts). Its levels are checked by other devices in the background (the verifier).
-   Do Not Track or Global Privacy Control turns the sending off (the uploads and the checks); shared levels still
-   come in. */
+/* The shared bank (src/endless/shared.ts). A player who turned Help Build Endless Levels on sends every level the
+   search makes up to it and checks others' levels in the background (the verifier); runs take a level from it when
+   one fits for their first level, the rest coming from the search. Until then (unset is off) nothing goes up, nothing
+   is checked, and every level comes from the bank when one fits, the search making one only when none does. Do Not
+   Track or Global Privacy Control keeps the sending off whatever the switch says; shared levels still come in. */
 const sendsNothing = (() => {
   const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
   return nav.doNotTrack === '1' || (window as unknown as { doNotTrack?: string }).doNotTrack === '1' || nav.globalPrivacyControl === true;
 })();
+/** The player turned Help Build Endless Levels on (src/settings.ts). */
+const helpsBuild = (): boolean => settings.helpBuild.get() === 'on';
 const sharedBank = createSharedBank({
   fetch: (url, init) => fetch(url, init),
   storage: browserStorage(),
   now: () => Date.now(),
   random: () => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32,
   url: new URL('endless-bank.php', window.location.href).toString(),
-  quiet: sendsNothing,
+  quiet: () => sendsNothing || !helpsBuild(),
 });
 const verifier = createVerifier({
   spawn: endlessWorker,
@@ -221,6 +225,7 @@ const endless = createEndlessMode({
   budget: () => endlessBudget,
   shared: { take: req => sharedBank.take(req) },
   made: (req, part, made) => { sharedBank.keep(req.grade, made); sharedBank.upload(req, part, made); },
+  bankFirst: () => !helpsBuild(),
 });
 /* Endless's levels are made in the background too, outside a run: with one worker, once the page has been quiet
    for ENDLESS_WARM_MS, while it shows and the solver's worker is idle, and not on a low battery that is draining.
@@ -252,7 +257,7 @@ function followEndless(): void {
   // and never while Demo plays.
   verifier.allow(!demo.active() && mayCheck({
     run: inEndlessRun(), warm: endlessWarm, shown: pageShown, solving: solverBusy(), battery: endlessBattery,
-    endlessIdle: endless.idle(), on: settings.helpCheck.get() === 'on', sendsNothing, specBudget: endlessBudget !== undefined,
+    endlessIdle: endless.idle(), on: helpsBuild(), sendsNothing, specBudget: endlessBudget !== undefined,
   }));
   if (!demo.active() && (endlessWarm || ui.top() === 'endless')) void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS, id => progress.get(id).cleared));
 }
@@ -444,11 +449,11 @@ function toggleMinimap(): void {
   ui.say(on ? 'Mini Map on.' : 'Mini Map off.', 'info');
 }
 
-function toggleHelpCheck(): void {
-  const on = settings.helpCheck.get() !== 'on';
-  settings.helpCheck.set(on ? 'on' : 'off');
-  ui.setHelpCheck(on);
-  ui.say(on ? 'Checking Endless levels on.' : 'Checking Endless levels off.', 'info');
+/* Help Build Endless Levels: the player's answer, from the menu's switch or the card that asks once. */
+function setHelpBuild(on: boolean, said = true): void {
+  settings.helpBuild.set(on ? 'on' : 'off');
+  ui.setHelpBuild(settings.helpBuild.get());
+  if (said) ui.say(on ? 'Helping build Endless levels.' : 'Not helping build Endless levels.', 'info');
   followEndless();
 }
 
@@ -518,7 +523,7 @@ function leaveDemo(): void {
   followEndless();
 }
 
-/* While Demo plays, a key or a tap ends it and does nothing more: the press never reaches the game, the board's
+/* While Demo plays, a key (but F, which toggles full screen) or a tap ends it and does nothing more: the press never reaches the game, the board's
    camera or the title card that comes back, and a key held from then repeats nothing. Escape ends it too; it never
    leaves full screen (the browser's own Escape aside, where there is no Keyboard Lock). A browser chord, a function
    key, a modifier alone and Tab are the browser's and pass. The wheel does nothing while Demo plays. */
@@ -536,6 +541,8 @@ window.addEventListener('keydown', ev => {
   if (demo.active() && ev.repeat) { swallow(ev); return; }
   if (!demo.active() || ev.ctrlKey || ev.metaKey || ev.altKey || PASS_KEYS.test(ev.key)) return;
   swallow(ev);
+  // F toggles full screen, as it does everywhere, and Demo plays on.
+  if (actionFor(ev.key) === 'fullscreen') { toggleFullscreen(); return; }
   demoKey = ev.code;
   leaveDemo();
 }, { capture: true });
@@ -911,7 +918,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, toggleHelpCheck, showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, toggleHelpBuild: () => setHelpBuild(!helpsBuild()), setHelpBuild: on => setHelpBuild(on, false), showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
     endless: { mode: endless, link: endlessLink, copy: link => { void copyLink(link); } },
     demo: { start: startDemo },
@@ -930,7 +937,7 @@ function start(): void {
   ui.setLook(settings.look.get(), settings.walls.get());
   ui.setPad(settings.pad.get());
   ui.setMinimap(settings.minimap.get() === 'on');
-  ui.setHelpCheck(settings.helpCheck.get() === 'on');
+  ui.setHelpBuild(settings.helpBuild.get());
   const moveMap = createMoveMap();
   ui.setMoveDir(dir => moveMap(dir, modernOn && modern ? modern.yaw() : ui.classicView().yaw));
   showLook(settings.look.get());

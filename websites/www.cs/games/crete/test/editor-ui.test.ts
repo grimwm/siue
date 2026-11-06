@@ -204,6 +204,16 @@ test('P tries the draft; C checks; Q is left to the page unless the drawer is op
   assert.equal(byId(e.root, 'editor-pieces').getAttribute('aria-expanded'), 'false');
 });
 
+test('F in the editor toggles full screen and leaves the editor open; typed into a box it is a letter', () => {
+  editing(9, 9);
+  fullscreens = 0;
+  key('f');
+  assert.equal(fullscreens, 1);
+  assert.equal(flow.top(), 'editor');
+  fireDocument('keydown', { key: 'f', target: { tagName: 'INPUT', type: 'number' } });
+  assert.equal(fullscreens, 1);
+});
+
 test('keys typed into the size bar are only typing', () => {
   const e = make();
   e.editor.open();
@@ -384,10 +394,12 @@ const tryEditor = ed.editor.createEditor({
   root: tryRoot as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
   tryIt: (level, text, line) => outside.tryLevel(level, text, line), changed() {}, start: trySolver.start,
 });
+/* How many times F asked for full screen. */
+let fullscreens = 0;
 /* How many times the page was told the editor's visit ended (it then takes #edit off the address). */
 let lefts = 0;
 flow.bindControls({
-  game: tryGame, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play() {}, backToEditor: outside.backToEditor, editor: tryEditor,
+  game: tryGame, toggleMute() {}, toggleFullscreen() { fullscreens++; }, wake() {}, quit() {}, play() {}, backToEditor: outside.backToEditor, editor: tryEditor,
   leftEditor: () => { lefts++; },
 });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });

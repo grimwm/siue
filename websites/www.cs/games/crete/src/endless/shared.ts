@@ -57,9 +57,10 @@ export interface SharedDeps {
   random(): number;
   /** The endpoint's address. */
   url: string;
-  /** Do Not Track or Global Privacy Control: nothing that carries the device's id is sent (no uploads, reports or
-   *  checks); shared levels still come in. */
-  quiet?: boolean;
+  /** Nothing that carries the device's id is sent (no uploads, reports or checks), asked each time: the player has
+   *  not turned Help Build Endless Levels on, or Do Not Track or Global Privacy Control is set. Shared levels still
+   *  come in. */
+  quiet?(): boolean;
 }
 
 export interface SharedBank {
@@ -199,7 +200,7 @@ export function createSharedBank(deps: SharedDeps): SharedBank {
     if (res.status === 403) { csrf = null; await get('n=0'); res = await send(); }
     return res.json();
   };
-  const report = (grade: Grade, h: string) => { if (!deps.quiet) void post({ op: 'report', grade, h }, true).catch(() => {}); };
+  const report = (grade: Grade, h: string) => { if (!deps.quiet?.()) void post({ op: 'report', grade, h }, true).catch(() => {}); };
 
   return {
     device,
@@ -209,7 +210,7 @@ export function createSharedBank(deps: SharedDeps): SharedBank {
       write(ownKey(grade), own.slice(-OWN_MOST));
     },
     upload(req, part, made) {
-      const tuple = deps.quiet ? null : tupleOf(req, part);
+      const tuple = deps.quiet?.() ? null : tupleOf(req, part);
       if (!tuple) return;
       let shared: SharedMade;
       try { shared = sharedOf(made); } catch { return; }
@@ -258,7 +259,7 @@ export function createSharedBank(deps: SharedDeps): SharedBank {
     },
     size: grade => cacheOf(grade).levels.length,
     async claim(version) {
-      if (deps.quiet) return null;
+      if (deps.quiet?.()) return null;
       try {
         const body = await post({ op: 'claim', v: version }) as { ticket?: unknown; tuple?: unknown };
         if (typeof body.ticket !== 'string' || !/^[a-f0-9]{32}$/.test(body.ticket) || typeof body.tuple !== 'object' || body.tuple === null) return null;

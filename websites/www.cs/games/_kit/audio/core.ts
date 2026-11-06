@@ -3,6 +3,11 @@
 // resumed and primed by a gesture, an sfx and a music bus whose gain and mute
 // the game sets, and the two envelopes every voice is built from. Voices and
 // music stay in the games. Without Web Audio it is silent and never throws.
+import type { Timers } from '../ports.ts';
+import { AWAY_FADE_S } from '../audio-focus.ts';
+
+export { AWAY_FADE_S };
+
 export type BusName = 'sfx' | 'music';
 
 /** A biquad filter in a voice's path, with an optional slide of its frequency. */
@@ -95,8 +100,14 @@ export interface AudioCore {
   hold(): void;
   /** Ends a hold and resumes the context if one was made (never makes one). */
   release(): void;
-  /** Resumes the context for one short sound while held; the caller suspends it again. */
+  /** Resumes the context for one short sound while held (not while away); the caller suspends it again. */
   wake(): AudioContext | null;
+  /** The player left the game (an embedded frame lost focus, audio-focus.ts): on, both buses fade out over
+   *  AWAY_FADE_S and the context is then suspended, and context() no longer resumes it; off, the buses come back
+   *  as set (a muted bus stays muted) and the context resumes only if it was running when the player left (or a
+   *  release() came while away), never when it was not made or was suspended for another reason. */
+  setAway(on: boolean): void;
+  isAway(): boolean;
   /** Closes the context for good; the next context() makes a fresh one. */
   close(): void;
   tone(spec: ToneSpec, to?: BusName | AudioNode): void;
@@ -108,6 +119,8 @@ export interface AudioCore {
 export interface AudioCoreOptions {
   /** Makes the context; the default uses AudioContext, or webkitAudioContext. */
   createContext?: () => AudioContext | null;
+  /** Times the suspend after setAway's fade; the default uses globalThis's timers. */
+  timers?: Pick<Timers, 'setTimeout' | 'clearTimeout'>;
 }
 
 /** An exponential ramp cannot reach 0, so silence is this. */
@@ -122,9 +135,17 @@ function defaultContext(): AudioContext | null {
 
 export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
   const make = opts.createContext ?? defaultContext;
+  const timers: Pick<Timers, 'setTimeout' | 'clearTimeout'> = opts.timers ?? {
+    setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms) as unknown as number,
+    clearTimeout: id => globalThis.clearTimeout(id),
+  };
   let ctx: AudioContext | null = null;
   let primed = false;
   let held = false;
+  let away = false;
+  /** The context was running when the player left, or a release() came while away: back resumes it. */
+  let owed = false;
+  let awayTimer = 0;
   let waiting: Array<() => void> = [];
   let loopNoise: AudioBuffer | null = null;
   const gains: Record<BusName, number> = { sfx: 1, music: 1 };
@@ -133,7 +154,8 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
 
   function applyGain(name: BusName): void {
     const node = buses[name];
-    if (!node || !ctx) return;
+    // Away, the fade to silence owns the buses; setAway(false) applies the gains and mutes set meanwhile.
+    if (!node || !ctx || away) return;
     const v = muted[name] ? 0 : gains[name];
     try {
       // A hard set: a ramp still scheduled from before would override it.
@@ -170,6 +192,12 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
         ctx = made;
         Object.assign(buses, built);
         for (const name of BUSES) applyGain(name);
+        if (away) {
+          // Made while the player is away: silent and suspended until they come back, and not owed a resume.
+          for (const name of BUSES) built[name]!.gain.value = 0;
+          const c = made;
+          settle(() => c.suspend()).catch(() => {});
+        }
       } catch {
         ctx = null;
         // Made but not built: give the context back rather than leak it.
@@ -179,13 +207,53 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
       }
     }
     const c = ctx;
-    if (c.state === 'suspended' && !held) settle(() => c.resume()).catch(() => {});
+    if (c.state === 'suspended' && !held && !away) settle(() => c.resume()).catch(() => {});
     return c;
+  }
+
+  /** Fades every bus to silence over `seconds`, from where each is. */
+  function fadeBuses(seconds: number): void {
+    const c = ctx;
+    if (!c) return;
+    for (const name of BUSES) {
+      const node = buses[name];
+      if (!node) continue;
+      try {
+        const now = c.currentTime;
+        node.gain.cancelScheduledValues(now);
+        node.gain.setValueAtTime(node.gain.value, now);
+        node.gain.linearRampToValueAtTime(0, now + seconds);
+      } catch {
+        node.gain.value = 0;
+      }
+    }
+  }
+
+  function setAway(on: boolean): void {
+    if (on === away) return;
+    away = on;
+    if (awayTimer) timers.clearTimeout(awayTimer);
+    awayTimer = 0;
+    const c = ctx;
+    if (on) {
+      owed = !!c && c.state === 'running';
+      if (!c) return;
+      fadeBuses(AWAY_FADE_S);
+      awayTimer = timers.setTimeout(() => {
+        awayTimer = 0;
+        if (away && ctx === c) settle(() => c.suspend()).catch(() => {});
+      }, AWAY_FADE_S * 1000);
+      return;
+    }
+    for (const name of BUSES) applyGain(name);
+    if (c && owed && !held) settle(() => c.resume()).catch(() => {});
+    owed = false;
   }
 
   function output(to: BusName | AudioNode | undefined): { c: AudioContext; node: AudioNode } | null {
     const name = to === undefined ? 'sfx' : typeof to === 'string' ? to : null;
-    if (name && muted[name]) return null;
+    // Away, a sound made now would wait in the suspended context and play on the player's return.
+    if (away || (name && muted[name])) return null;
     const c = context();
     if (!c) return null;
     const node = name ? buses[name] : (to as AudioNode);
@@ -345,6 +413,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     isMuted: name => muted[name],
     unlock,
     suspend() {
+      owed = false;
       const c = ctx;
       if (c) settle(() => c.suspend()).catch(() => {});
     },
@@ -356,6 +425,11 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     release() {
       held = false;
       const c = ctx;
+      // Away, the resume waits for the player to come back.
+      if (away) {
+        if (c) owed = true;
+        return;
+      }
       // Not gated on the state: a suspend() from hold() may still be in flight
       // (the state reads 'running' until it lands), and the resume queued behind
       // it is what keeps it from landing last. Resuming a running context is a no-op.
@@ -363,12 +437,15 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     },
     wake() {
       const c = context();
-      if (c && c.state === 'suspended') settle(() => c.resume()).catch(() => {});
+      if (c && c.state === 'suspended' && !away) settle(() => c.resume()).catch(() => {});
       return c;
     },
+    setAway,
+    isAway: () => away,
     close() {
       const c = ctx;
       ctx = null;
+      owed = false;
       for (const name of BUSES) delete buses[name];
       primed = false;
       waiting = [];

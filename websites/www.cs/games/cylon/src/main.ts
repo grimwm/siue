@@ -42,7 +42,8 @@ import * as state from './state.ts';
 import { createScoresClient, createLocalScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
-import { browserStorage } from '../../_kit/ports.browser.ts';
+import { followFocus } from '../../_kit/audio-focus.ts';
+import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { typesText } from '../../_kit/keys.ts';
 import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
 import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS, versionedShareUrl, versionOf } from '../../_kit/install.ts';
@@ -711,6 +712,8 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             },
             close: audio.pageClose,
         });
+        // In a frame on another page (the site's play page), clicking out of the frame silences it.
+        followFocus({ doc: document, win: window, timers: browserTimers }, { away: () => audio.frameAway(true), back: () => audio.frameAway(false) });
     }
 
     function openHelp() {

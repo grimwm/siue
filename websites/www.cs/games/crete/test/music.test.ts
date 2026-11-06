@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { FADE_IN_S, LOOP_XF_S, createMusic } from '../src/music.ts';
+import { AWAY_FADE_S } from '../../_kit/audio-focus.ts';
 import type { Deck, FadeShape } from '../src/music.ts';
 
 type Fade = [to: number, seconds: number] | [to: number, seconds: number, shape: FadeShape];
@@ -297,4 +298,53 @@ test('in a hidden page whose timers run late, the end of the file hands over to 
   b.playing = false;
   b.ended.forEach(fn => fn());
   assert.deepEqual(playing(), [a], 'and back again');
+});
+
+test('away fades the music out and stops it, background or not; back it goes on from there', async () => {
+  const { music, decks, playing, advance } = rig();
+  music.setEnabled(true);
+  advance(3);
+  const [a] = pair(decks);
+  music.away(true);
+  assert.deepEqual(a.fades.at(-1), [0, AWAY_FADE_S], 'a quick fade, not a cut');
+  assert.equal(a.playing, true, 'still fading');
+  advance(AWAY_FADE_S);
+  assert.deepEqual(playing(), [], 'stopped once faded, though the background switch is on');
+  const at = a.t;
+  advance(5);
+  music.away(false);
+  await settle();
+  const live = playing();
+  assert.equal(live.length, 1);
+  assert.ok(Math.abs(live[0]!.t - at) < 0.02, 'from where it was');
+  assert.deepEqual(live[0]!.fades.at(-1), [1, FADE_IN_S]);
+});
+
+test('back within the fade swells the music again without stopping it', () => {
+  const { music, decks, advance } = rig();
+  music.setEnabled(true);
+  advance(1);
+  const [a] = pair(decks);
+  music.away(true);
+  music.away(false);
+  advance(1);
+  assert.equal(a.playing, true);
+  assert.deepEqual(a.fades.at(-1), [1, AWAY_FADE_S]);
+});
+
+test('away never starts music that was off, and a hidden page keeps it held after back', async () => {
+  const { music, playing, advance } = rig();
+  music.away(true);
+  music.away(false);
+  assert.deepEqual(playing(), [], 'Music off: nothing starts');
+  music.setEnabled(true);
+  music.setBackground(false);
+  music.away(true);
+  advance(1);
+  music.hold();
+  music.away(false);
+  assert.deepEqual(playing(), [], 'the page is still hidden');
+  music.release();
+  await settle();
+  assert.equal(playing().length, 1);
 });

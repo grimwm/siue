@@ -1000,7 +1000,7 @@ function init(): void {
   // The room this tab shows, told to the other tabs now and on a beat (they forget a quiet tab).
   setInterval(reportScreen, ON_SCREEN_BEAT_MS);
   window.addEventListener('pagehide', () => onScreen.set(''));
-  installAudioPage({ doc: document, win: window, nav: navigator });
+  installAudioPage({ doc: document, win: window, nav: navigator, timers: browserTimers });
 
   document.querySelectorAll<HTMLElement>('[data-aim]').forEach(btn => {
     const act = AIM_COMMANDS[btn.getAttribute('data-aim') ?? ''];

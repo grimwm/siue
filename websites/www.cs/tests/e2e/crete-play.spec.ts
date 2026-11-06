@@ -795,13 +795,16 @@ for (const look of ['classic', 'modern'] as const) {
     // Every few ms from the press on (a software-drawn 3D board paints few frames): where both looks draw Theseus,
     // and whether the ending card shows.
     await page.evaluate(() => {
-      const w = window as unknown as { __creteTest: { figures(): { player: { r: number; c: number } } | null }; __walk: { c: number; card: boolean }[] };
+      const w = window as unknown as { __creteTest: { game: { anim: unknown }; figures(): { player: { r: number; c: number } } | null }; __walk: { c: number; card: boolean }[]; __walked: boolean };
       w.__walk = [];
+      w.__walked = false;
       const t0 = performance.now();
       const id = setInterval(() => {
         const f = w.__creteTest.figures();
         if (f) w.__walk.push({ c: f.player.c, card: !document.getElementById('end-veil')!.hidden });
-        if (performance.now() - t0 > 1500) clearInterval(id);
+        // Done once the turn has landed and the ending card shows.
+        const done = !w.__creteTest.game.anim && !document.getElementById('end-veil')!.hidden;
+        if (done || performance.now() - t0 > 5000) { clearInterval(id); w.__walked = true; }
       }, 5);
     });
     // The turn the press makes, read as the press returns (a software-drawn 3D board can paint past it at once).
@@ -822,7 +825,7 @@ for (const look of ['classic', 'modern'] as const) {
     expect(turn, 'the walk-in animates, held in his cell, before any ending card').toEqual({ duration: 240, held: { r: 2, c: 2.6 }, card: false });
     await expect(page.locator('#end-veil')).toBeVisible();
     await expect(page.locator('#end-title')).toHaveText('The Minotaur has you');
-    await page.waitForTimeout(1600);
+    await page.waitForFunction(() => (window as unknown as { __walked: boolean }).__walked);
     const walk = await page.evaluate(() => (window as unknown as { __walk: { c: number; card: boolean }[] }).__walk);
     const lunging = walk.filter(x => x.c > 2 && x.c < 3);
     // A software-drawn 3D board (as in CI) paints too few frames to count; the classic board paints every one.

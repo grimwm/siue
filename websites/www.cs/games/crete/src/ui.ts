@@ -355,6 +355,14 @@ export function createUi(deps: UiDeps): Ui {
   const lit = new Map<Tool, number>();
   const litTimers = new Map<Tool, number>();
   let litSeq = 0;
+  /** Tools picked up on the turn `litFor`, waiting for its animation to land. */
+  let litWaiting: Tool[] = [];
+  let litFor: State | null = null;
+  function flushLit(): void {
+    for (const t of litWaiting) lightTool(t);
+    litWaiting = [];
+    litFor = null;
+  }
   /** A tool button's pickup glow: twice, then still (game.css, .tool.got). None with reduced motion. */
   function lightTool(t: Tool): void {
     if (reducedMotion()) return;
@@ -1136,7 +1144,15 @@ export function createUi(deps: UiDeps): Ui {
       onMenu: () => layers.open("menu"),
     });
 
-    for (const t of watchPickups(s, g.took)) lightTool(t);
+    // A pickup glows once the turn's animation has landed (a first card can pause it before the figure reaches the
+    // tool); a newer turn lights the pickups still waiting at once.
+    if (litFor !== null && litFor !== s) flushLit();
+    const got = watchPickups(s, g.took);
+    if (got.length > 0) {
+      litWaiting = got;
+      litFor = s;
+    }
+    if (!g.anim) flushLit();
     drawStrip(g);
 
     // The ending card waits for the last step to land; a try taken back or begun again lets the next ending show.

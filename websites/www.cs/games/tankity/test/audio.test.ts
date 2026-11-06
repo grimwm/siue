@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { trimSilence, trackForLevel, sfx, music, initAudio, noteGesture, setSoundMuted } from '../src/audio.ts';
 import { fakeAudioContext } from '../../_kit/test/audio.ts';
+import { AWAY_FADE_S } from '../../_kit/audio-focus.ts';
 
 function must<T>(v: T | null | undefined, what: string): T {
   assert.ok(v !== null && v !== undefined, `${what} is missing`);
@@ -153,34 +154,40 @@ test('the turn ping sounds while hidden, then the context suspends again', async
   pageVisible();
 });
 
-test('clicked out of its frame: the sound fades and suspends, no effect or ping plays; back, the music goes on', async () => {
+test('clicked out of its frame: the sound fades and suspends, no effect or ping plays; back, the music goes on', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const settle = () => new Promise(r => setImmediate(r));
   initAudio({ sfx: {}, music: [] });
   music.stop();
   setMusicMuted(false);
   music.start();
   frameAway(true);
-  await new Promise(r => setTimeout(r, 250));
+  t.mock.timers.tick(AWAY_FADE_S * 1000);
+  await settle();
   assert.equal(ctx.state, 'suspended', 'suspended once faded');
   const n = ctx.nodes.length;
   sfx.play('boom');
   sfx.clockWarn();
   sfx.turnPing();
-  await new Promise(r => setTimeout(r, 150));
+  t.mock.timers.tick(1000);
   assert.equal(ctx.nodes.length, n, 'nothing sounds, not even the turn ping');
   pageHide();
   pageVisible();
+  await settle();
   assert.equal(ctx.state, 'suspended', 'a tab shown again while the player is still out stays quiet');
   frameAway(false);
-  await new Promise(r => setTimeout(r, 0));
+  await settle();
   assert.equal(ctx.state, 'running');
   ctx.currentTime += 5; // the fake clock stands still: move it on, so the scheduler has a window to fill
-  await new Promise(r => setTimeout(r, 150));
+  t.mock.timers.tick(120);
   assert.ok(ctx.nodes.length > n, 'the synth plays again');
   music.stop();
   frameAway(true);
   frameAway(false);
+  await settle();
   const m = ctx.nodes.length;
-  await new Promise(r => setTimeout(r, 150));
+  ctx.currentTime += 5;
+  t.mock.timers.tick(1000);
   assert.equal(ctx.nodes.length, m, 'music that was off stays off');
 });
 

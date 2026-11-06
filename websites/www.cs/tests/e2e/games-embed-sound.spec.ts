@@ -12,12 +12,15 @@ import { join } from 'node:path';
 test.use({ launchOptions: { args: ['--mute-audio', '--autoplay-policy=user-gesture-required', '--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests'] } });
 
 declare global {
-  interface Window { __soundCtx?: AudioContext; __soundMedia: HTMLMediaElement[] }
+  interface Window { __soundCtx?: AudioContext; __soundMedia: HTMLMediaElement[]; __soundResumes: number }
 }
 
 /* In every frame: keeps the game's audio context and every media element it plays. */
 function audioProbe() {
   window.__soundMedia = [];
+  window.__soundResumes = 0;
+  const resume = AudioContext.prototype.resume;
+  AudioContext.prototype.resume = function (this: AudioContext) { window.__soundResumes++; return resume.call(this); };
   const gain = AudioContext.prototype.createGain;
   AudioContext.prototype.createGain = function (this: AudioContext) { window.__soundCtx = this; return gain.apply(this); };
   const play = HTMLMediaElement.prototype.play;
@@ -57,6 +60,9 @@ async function gameFrame(page: Page, game: string): Promise<Frame> {
   return frame;
 }
 
+const resumes = (frame: Frame) => frame.evaluate(() => window.__soundResumes);
+/** Two of the frame's animation frames: long enough for a press or a focus there to have been handled. */
+const settled = (frame: Frame) => frame.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 const ctxState = (frame: Frame) => frame.evaluate(() => window.__soundCtx?.state ?? 'none');
 const mediaPlaying = (frame: Frame) => frame.evaluate(() => window.__soundMedia.filter(e => !e.paused).length);
 
@@ -88,8 +94,11 @@ test('Crete in a frame: clicking the post suspends its sound and pauses the them
   await clickPost(page);
   await expect.poll(() => ctxState(frame), { message: 'clicked out: the context is suspended' }).toBe('suspended');
   await expect.poll(() => mediaPlaying(frame), { message: 'and the theme is paused' }).toBe(0);
-  await page.waitForTimeout(500);
-  expect(await ctxState(frame), 'and stays so while the reader reads').toBe('suspended');
+  const out = await resumes(frame);
+  await page.mouse.wheel(0, 300); // the reader reads on
+  await settled(frame);
+  expect(await resumes(frame), 'nothing asks the context to resume while the reader reads').toBe(out);
+  expect(await ctxState(frame)).toBe('suspended');
 
   await frame.locator('#title-veil .kicker').click();
   await expect.poll(() => ctxState(frame), { message: 'clicked back in: running again' }).toBe('running');
@@ -101,9 +110,10 @@ test('Tankity in a frame: clicking the post suspends its sound; clicking back in
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
+  const config = page.waitForResponse(r => /\/games\/tankity\/game\.json/.test(r.url()));
   await page.goto(await serveFramePost(page, baseURL!, 'tankity'));
   const frame = await gameFrame(page, 'tankity');
-  await page.waitForTimeout(700);
+  await config; // the game has its settings, so the gesture below starts its music
   // A click in the frame and a key: the gesture that starts the music.
   await page.locator('iframe.hs-game').click({ position: { x: 8, y: 8 } });
   await page.keyboard.press('Control');
@@ -111,8 +121,10 @@ test('Tankity in a frame: clicking the post suspends its sound; clicking back in
 
   await clickPost(page);
   await expect.poll(() => ctxState(frame), { message: 'clicked out: the context is suspended' }).toBe('suspended');
+  const out = await resumes(frame);
   await page.keyboard.press('Control'); // a key on the host page reaches nothing in the frame
-  await page.waitForTimeout(500);
+  await settled(frame);
+  expect(await resumes(frame), 'a key on the post resumes nothing').toBe(out);
   expect(await ctxState(frame)).toBe('suspended');
 
   await page.locator('iframe.hs-game').click({ position: { x: 8, y: 8 } });
@@ -123,7 +135,9 @@ test('Tankity in a frame: clicking the post suspends its sound; clicking back in
 /** The stand-in WordPress post with the CIC's script embed, made long. */
 async function serveScriptPost(page: Page, baseURL: string): Promise<string> {
   const p = '<p>The fleet came over the ridge at dawn. This paragraph is here to make the post long.</p>';
-  const html = readFileSync(join(import.meta.dirname, 'fixtures', 'wp-post.html'), 'utf8')
+  const fixture = readFileSync(join(import.meta.dirname, 'fixtures', 'wp-post.html'), 'utf8');
+  for (const mark of ['EMBED_SRC', '<p>Thanks for reading.']) expect(fixture, `wp-post.html holds ${mark}`).toContain(mark);
+  const html = fixture
     .replace('EMBED_SRC', new URL('games/cylon/dist/embed.js', baseURL).href)
     .replace('<p>Thanks for reading.', `${p.repeat(200)}\n<p>Thanks for reading.`);
   const url = `${blogOrigin(baseURL)}/blog-example/2026/11/a-small-game/`;
@@ -143,7 +157,7 @@ test('the CIC script embed: silent while the post is read, quiet in a hidden tab
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(await serveScriptPost(page, baseURL!));
   await page.mouse.wheel(0, 1500);
-  await page.waitForTimeout(500);
+  await expect.poll(() => page.evaluate(() => window.scrollY), { message: 'the reader scrolls the post' }).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__soundCtx?.state ?? 'none'), 'reading the post makes no sound').toBe('none');
 
   await page.locator('#cic-embed-launch').click();

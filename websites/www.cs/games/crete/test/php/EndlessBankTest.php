@@ -507,7 +507,7 @@ final class EndlessBankTest extends TestCase
         file_put_contents("{$this->dir}/served-easy.json", Bank::encode($served));
         file_put_contents("{$this->dir}/pending-easy.json", Bank::encode($pending));
 
-        self::assertSame([2], self::config()['accept']);
+        self::assertSame([2, 3], self::config()['accept']);
         $got = $bank->levels('easy', 10, 16);
         self::assertSame([Bank::blank(self::level(41))], array_column($got, 'text'), 'a version-1 level is never served again');
         self::assertSame([2], array_column($this->stored('served-easy.json'), 'v'), 'and leaves the store at the next request');
@@ -807,7 +807,7 @@ final class EndlessBankTest extends TestCase
     public function testTheShippedConfigIsValid(): void
     {
         $config = self::config();
-        self::assertSame([2], $config['accept']);
+        self::assertSame([2, 3], $config['accept']);
         self::assertSame(1500, $config['servedCap']);
         self::assertSame(['submit' => 30, 'claim' => 20, 'verify' => 20, 'report' => 20, 'levels' => 120, 'trusted' => 600], $config['perHour']);
         self::assertSame('crete_bank_csrf', $config['guard']['csrfCookie']);

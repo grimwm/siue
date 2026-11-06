@@ -199,6 +199,8 @@ test('a long post holds still while a run is live, and scrolls again once the ga
   await expect(page.locator('body')).not.toHaveClass(/cylon-game-live/);
   await expect(page.locator('html')).not.toHaveClass(/cylon-scroll-held/);
   expect(await page.evaluate(() => document.documentElement.getAttribute('style'))).toBeNull();
+  // The bar shows the post's own site, read from its theme's title.
+  await expect(page.locator('#cic-embed-bar #site-brand')).toHaveText('Happy St. Louis');
   await page.mouse.move(640, 420);
   await page.mouse.wheel(0, 600);
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0);

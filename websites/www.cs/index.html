@@ -210,7 +210,7 @@
   // list's ?game= link and Play button call; a game that fails to load must
   // not take the list down with it.
   try {
-    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=6a4ca35fa4');
+    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=0ae3267814');
     await initializeCylonEffects({ onTheme: applyCombatTheme });
   } catch (err) {
     console.error('Cylon failed to start', err);

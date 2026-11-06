@@ -26,6 +26,7 @@ import introCss from '../css/intro.css' with { type: 'text' };
 import embedCss from './embed.css' with { type: 'text' };
 import { initializeCylonEffects } from './main.ts';
 import { createGlyphLayer } from './glyphs.ts';
+import { siteName } from './site-name.ts';
 
 /** The stylesheets in the home page's order (README.md, "Stylesheets"), then the embed's own. */
 const CSS = [kitCss, eyeCss, navCss, helpCss, hudCss, gameoverCss, settingsCss, controlsCss, fxCss, unitsCss, worldCss, introCss, embedCss];
@@ -38,6 +39,9 @@ const BAR_ID = 'cic-embed-bar';
 const SKIP = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'TEMPLATE', 'IFRAME']);
 /** Host content that flies as one piece (the game also scatters headings and asides). */
 const DEBRIS = 'img, picture, figure, video, svg, blockquote, pre, table, form, button, input, h4, h5, h6, .wp-block-image, .wp-block-button';
+
+/** This script's own tag, which may carry data-site-name; only readable while the script first runs. */
+const OWN_SCRIPT = document.currentScript;
 
 const log = (message: string, err?: unknown): void => { console.error(`The CIC: ${message}`, err ?? ''); };
 
@@ -131,6 +135,8 @@ async function launch(button: HTMLButtonElement): Promise<void> {
   style.textContent = CSS.join('\n');
   document.head.appendChild(style);
 
+  // Read before the bar's own #site-brand is on the page.
+  const name = siteName(document, location.hostname, OWN_SCRIPT);
   const root = document.createElement('div');
   root.id = 'game-root';
   root.dataset['game'] = 'cylon';
@@ -145,7 +151,7 @@ async function launch(button: HTMLButtonElement): Promise<void> {
   document.body.classList.add('cic-embed-on');
   bar.querySelector('#cic-embed-leave')?.addEventListener('click', () => { location.reload(); });
 
-  await initializeCylonEffects({ mountHtml, localScores: true, glyphLayer: createGlyphLayer({ doc: document, win: window }) });
+  await initializeCylonEffects({ mountHtml, localScores: true, siteName: name, glyphLayer: createGlyphLayer({ doc: document, win: window }) });
   window.cylonStartGame?.();
 }
 

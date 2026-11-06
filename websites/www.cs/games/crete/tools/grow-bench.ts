@@ -6,7 +6,8 @@
 // makes them, its whole time charged to the Hard child though it makes a Medium level too. One JSON line per tuple
 // and way, with the seconds it took, the Hard score it made and its parent's (the Medium level's).
 //
-//   node tools/grow-bench.ts <tuples> [ways] [lane] [lanes]    # e.g. 40 fresh,grown,child 0 2
+//   node tools/grow-bench.ts <tuples> [ways] [lane] [lanes] [first]   # e.g. 40 fresh,grown,child 0 2; first skips the
+//                                                                     # tuples before it, for a run that goes on
 //   node tools/grow-bench.ts sum <file.jsonl>...                # Hard levels per part-hour, each way
 //
 // Run from games/crete, one lane a core.
@@ -41,7 +42,7 @@ if (cmd === 'sum') {
   }
 } else {
   const n = Number(cmd ?? 20), ways = (rest[0] ?? WAYS.join(',')).split(',') as Way[];
-  const lane = Number(rest[1] ?? 0), lanes = Number(rest[2] ?? 1);
+  const lane = Number(rest[1] ?? 0), lanes = Number(rest[2] ?? 1), first = Number(rest[3] ?? 0);
   const known = knownOf(campaignLevels());
   const random = rngOf('bench-grow');
   const tuples: Tuple[] = [];
@@ -49,7 +50,7 @@ if (cmd === 'sum') {
   const mediums: Tuple[] = [];
   for (let i = 0; i < n; i++) mediums.push(tupleFor({ grade: 'medium', plateau: true, large: false }, () => random.next()));
   tuples.forEach((hard, i) => {
-    if (i % lanes !== lane) return;
+    if (i < first || i % lanes !== lane) return;
     for (const way of ways) {
       const t0 = Date.now();
       const t = way === 'child' ? mediums[i]! : hard;

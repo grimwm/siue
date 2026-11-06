@@ -523,7 +523,8 @@ export interface Grow { from: Grade; seed: string; steps: number }
 /** Hard's odd parts are grown: a Medium search at the Hard level's place, whose level is then climbed toward Hard's
  *  band for up to GROWN_STEPS changes, each kept only when the level still passes Hard's whole gate and scores
  *  higher. A Medium search finds a level about twice as often as a Hard one at the same place, and most Medium levels
- *  near the top of their band climb into Hard's within a few hundred changes; the even parts keep Hard's own drafts, its larger boards among them. */
+ *  near the top of their band climb into Hard's within a few hundred changes; the even parts keep Hard's own drafts,
+ *  its larger boards among them. */
 export const GROWN_STEPS = 300;
 export function growOf(req: Pick<Request, 'grade'>, k: number): Grow | null {
   return req.grade === 'hard' && k % 2 === 1 ? { from: 'medium', seed: 'part', steps: GROWN_STEPS } : null;
@@ -561,7 +562,7 @@ export function searchPart(req: Request, k: number, known: Known, opts: { progre
 export function grownPart(req: Request, k: number, g: Grow, known: Known, opts: { progress?: (p: Progress) => void; search?: (req: Request, k: number, known: Known, opts: { hides: boolean }) => Part } = {}): { parent: Made | null; climb: Grown | null; part: Part } {
   const place = placeOf(req);
   const { budget } = partsOf(req);
-  const p = (opts.search ?? ((r, kk, kn, o) => searchPart(r, kk, kn, { ...o, progress: x => opts.progress?.({ ...x, budget: 2 * budget }) })))({ ...req, grade: g.from }, k, known, { hides: place.hides });
+  const p = (opts.search ?? ((r, kk, kn, o) => searchPart(r, kk, kn, { ...o, progress: opts.progress })))({ ...req, grade: g.from }, k, known, { hides: place.hides });
   const parent = p.found;
   if (!parent || hidesWalls(parse(parent.text)) !== place.hides) return { parent, climb: null, part: { found: null, tries: p.tries, spent: p.spent } };
   const run = req.run.slice(-RUN_MEMORY).map(x => parse(x.text));

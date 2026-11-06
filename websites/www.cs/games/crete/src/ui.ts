@@ -1035,10 +1035,17 @@ export function createUi(deps: UiDeps): Ui {
 
   /** The board's state between levels: "wait" keeps it hidden (Demo finding its first level, so the level played
    *  before never shows under it), "in-a" or "in-b" fades it in (two names, so each new level starts the fade again),
-   *  "" shows it as it is. */
+   *  "" shows it as it is. A fade that has run its course is taken off, so the board keeps no animated layer. */
+  let fadeHeard = false;
   function boardFade(state: "wait" | "in" | ""): void {
     const el = document.getElementById("board");
     if (!el) return;
+    if (!fadeHeard) {
+      fadeHeard = true;
+      el.addEventListener("animationend", (e) => {
+        if ((e as AnimationEvent).animationName?.startsWith("board-in") && el.className.includes("board-in")) boardFade("");
+      });
+    }
     const rest = el.className.split(" ").filter((c) => c && !c.startsWith("board-"));
     const was = el.className.includes("board-in-a") ? "a" : "b";
     const cls = state === "wait" ? "board-wait" : state === "in" && !reducedMotion() ? `board-in-${was === "a" ? "b" : "a"}` : "";

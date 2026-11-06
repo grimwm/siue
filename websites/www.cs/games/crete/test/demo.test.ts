@@ -3,10 +3,17 @@
 // keeps the screen awake and takes a refused wake lock quietly, and leaves no trace when it ends.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEMO_PACE, DEMO_TRIES, createDemo, demoWords, memoryStorage } from '../src/demo.ts';
+import { DEMO_GRADE, DEMO_PACE, DEMO_TRIES, createDemo, demoWords, memoryStorage } from '../src/demo.ts';
 import type { DemoGame, WakeLock } from '../src/demo.ts';
 import type { EndlessMode, EndlessView } from '../src/endless/mode.ts';
 import { createEndlessSaved } from '../src/endless/saved.ts';
+import { createEndlessMode } from '../src/endless/mode.ts';
+import { createEndlessClient } from '../src/endless/client.ts';
+import type { WorkerLike } from '../src/endless/client.ts';
+import { createEndlessHost } from '../src/endless/host.ts';
+import type { FromEndless, ToEndless } from '../src/endless/host.ts';
+import { BANKS } from '../src/endless/bank.ts';
+import { CHAPTERS } from '../src/campaign/chapters.ts';
 
 /** Timers run by hand: `run(ms)` moves the clock on and fires what falls due. */
 function fakeTimers() {
@@ -57,6 +64,7 @@ function fakeMode(open: () => void, ready: { now: boolean }) {
     newRun(seed?: string, tier?: number, grade?: string) { calls.push(`new ${seed} ${tier} ${grade}`); depth = 0; cleared = 0; if (ready.now) mode.make(); else finding = true; },
     won(moves: number, assisted: boolean) { calls.push(`won ${moves} ${assisted}`); cleared = depth; },
     next() { calls.push('next'); if (ready.now) mode.make(); else finding = true; },
+    hurry() { calls.push('hurry'); },
     cancel() { calls.push('cancel'); },
   };
   return mode;
@@ -151,8 +159,11 @@ test('while the next level is made Demo waits quietly, and plays it once it is i
   t.ready.now = false;
   t.timers.run(DEMO_PACE.next);
   assert.deepEqual(t.demo.view(), { grade: 'medium', depth: 2, finding: true });
-  t.timers.run(10_000);
+  t.timers.run(DEMO_PACE.wait - 1);
   assert.equal(t.game.autos.length, 1, 'nothing plays while it waits');
+  assert.ok(!t.mode().calls.includes('hurry'), 'it waits a while');
+  t.timers.run(1);
+  assert.equal(t.mode().calls.at(-1), 'hurry', 'then asks for the bank\'s level');
   t.mode().make();
   assert.deepEqual(t.demo.view(), { grade: 'medium', depth: 2, finding: false });
   t.timers.run(DEMO_PACE.begin);
@@ -219,4 +230,51 @@ test('ending Demo stops the play-out, its searches and its timers', () => {
   t.demo.opened();
   t.timers.run(10_000);
   assert.deepEqual(t.game.autos, []);
+});
+
+/** An Endless worker whose bank answers at once and whose search answers, empty, at once up to `quick` (a level
+ *  whose search runs out goes to the bank) and past it never: a search that runs for minutes. */
+function searchWorker(quick: number): WorkerLike & { terminated: boolean } {
+  const w: WorkerLike & { terminated: boolean } = {
+    terminated: false, onmessage: null, onerror: null,
+    terminate() { w.terminated = true; },
+    postMessage(raw) {
+      const m = raw as ToEndless;
+      const answer = (r: FromEndless) => queueMicrotask(() => { if (!w.terminated) w.onmessage?.({ data: r }); });
+      if (m.type === 'part') {
+        if (m.request.depth <= quick) answer({ type: 'part', id: m.id, part: m.part, result: { found: null, tries: 1, spent: 1 } });
+        return;
+      }
+      createEndlessHost({ post: answer, banks: BANKS, known: () => ({ features: [] }), now: () => 0 }).receive(m);
+    },
+  };
+  return w;
+}
+
+test('Demo goes on past level 3 at Medium when a level\'s search runs long: it waits a while, then plays the bank\'s', async () => {
+  const timers = fakeTimers();
+  const game = fakeGame();
+  const tier = CHAPTERS.filter(c => c.released).length;
+  const client = createEndlessClient(() => searchWorker(3), () => 3);
+  const demo = createDemo({
+    timers,
+    game,
+    mode: () => {
+      const store = memoryStorage();
+      return createEndlessMode({
+        saved: g => createEndlessSaved(store, g), grade: () => DEMO_GRADE, setGrade: () => {}, client, tier: () => tier,
+        newSeed: () => 'slow23', play: () => { game.open(); demo.opened(); }, changed: () => demo.update(),
+      });
+    },
+    tier, newSeed: () => 'slow23', shown: () => true, changed: () => {},
+  });
+  demo.start();
+  // Five minutes of Demo, a second at a time, the game reporting each win as the page's does.
+  for (let s = 0; s < 300 && game.opens < 6; s++) {
+    await flush();
+    timers.run(1000);
+    demo.update();
+  }
+  assert.ok(game.opens >= 6, `Demo reached level ${game.opens} and stayed: "${demoWords(demo.view()!)}"`);
+  demo.stop();
 });

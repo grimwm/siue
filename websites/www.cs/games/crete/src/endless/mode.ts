@@ -87,6 +87,9 @@ export interface EndlessMode {
   next(): void;
   /** Stops waiting for a level (the search for the next level goes on in the background only when one is due). */
   cancel(): void;
+  /** The level waited on comes from the bank now, its search stopped where it stands (Demo, which shares nothing,
+   *  waits no longer than a while); nothing when no level is waited on. */
+  hurry(): void;
   /** The level being played belongs to the saved run: the next one is being made, or ready. */
   prefetch(): void;
   /** Makes levels in the background, while the player waits on none: the saved run's next, else the next new
@@ -338,6 +341,9 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
       finding = null;
       if (job?.first) { job.make.cancel(); job = null; }
       deps.changed();
+    },
+    hurry() {
+      if (waiting && job && !job.upcoming) job.make.hurry?.();
     },
     prefetch,
     ahead,

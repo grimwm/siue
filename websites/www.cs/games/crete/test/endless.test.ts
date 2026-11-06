@@ -18,7 +18,7 @@ import type { EndlessAbout, EndlessDeps } from '../src/endless/mode.ts';
 import { endlessName, endlessKicker, tierWords, readyWords } from '../src/endless/name.ts';
 import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import type { BankLevel, Made, Request } from '../src/endless/generate.ts';
-import { ln, expNeg, settle, generate, placeOf } from '../src/endless/generate.ts';
+import { ln, expNeg, settle, generate, placeOf, bankFor } from '../src/endless/generate.ts';
 import { openness } from '../src/puzzle/rating.ts';
 import type { Grade } from '../src/puzzle/rating.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -432,6 +432,22 @@ test('the client: a size of 0 holds a job, a larger one goes on with it, a small
   client.resize();
   assert.equal(workers.filter(w => !w.terminated).length, 1, 'narrowed to one worker');
   assert.deepEqual(await job.result, generate(req, BANKS, { features: [] }), 'the same level, however the size moved');
+});
+
+test('the client: a hurried job ends its parts\' workers and answers from the bank at once', async () => {
+  const prev = BANK[0]!;
+  const req: Request = { seed: 'hurry', tier: 1, grade: 'medium', depth: 2, run: [{ text: prev.text, explored: prev.explored, score: prev.score }] };
+  const workers: ReturnType<typeof fakeWorker>[] = [];
+  // Parts never come back (a long search); the bank answers.
+  const spawn = () => { const w = fakeWorker(); const post = w.postMessage; w.postMessage = m => { if ((m as { type: string }).type === 'bank') post(m); else w.posted.push(m); }; workers.push(w); return w; };
+  const client = createEndlessClient(spawn, () => 3);
+  const job = client.make(req);
+  assert.equal(workers.length, 3);
+  job.hurry!();
+  assert.ok(workers.slice(0, 3).every(w => w.terminated), 'the parts\' workers end');
+  const m = await job.result;
+  assert.equal(m.from, 'bank');
+  assert.deepEqual({ ...m, tries: 0, spent: 0 }, { ...bankFor(req, BANK), tries: 0, spent: 0 });
 });
 
 test('the client: the same request after a cancel goes on from the parts it finished', async () => {

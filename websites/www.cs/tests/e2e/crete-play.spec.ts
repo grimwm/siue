@@ -701,6 +701,55 @@ test('taking and using the mirror and the cow says what each does; the status ba
   expect(errors).toEqual([]);
 });
 
+test('the tool buttons show each tool\'s picture; held wears the accent border, none held is greyed; a pickup glows twice, then stops', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.evaluate(text => {
+    const t = (window as unknown as FirstsHook).__creteTest;
+    t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Mirror and Cow', best: null } });
+  }, TOOL_HALL);
+  await page.locator('#start-begin').click();
+  const mirror = page.locator('#tool-mirror');
+  const look = (sel: string) => page.locator(sel).evaluate(el => {
+    const cs = getComputedStyle(el);
+    const pic = el.querySelector('.tool-pic .sprite')!.getBoundingClientRect();
+    return { border: cs.borderTopColor, filter: cs.filter, opacity: cs.opacity, pic: [Math.round(pic.width), Math.round(pic.height)] };
+  });
+  await expect(mirror.locator('.tool-pic .sprite[data-look="classic"]'), 'the Classic picture').toHaveCount(1);
+  await expect(mirror).toHaveText(/^0/);
+  await expect(mirror).toHaveClass(/\bempty\b/);
+  expect(await look('#tool-mirror'), 'none held: greyed and dark at full opacity').toMatchObject({ filter: 'grayscale(1) brightness(0.55)', opacity: '1', pic: [40, 40] });
+  await expect(page.locator('.tool-glow')).toHaveCount(0);
+  await page.keyboard.press('ArrowRight');
+  await expect(mirror).toHaveClass(/\bheld\b/);
+  await expect(mirror, 'the pickup glows').toHaveClass(/\bgot\b/);
+  await expect(mirror.locator('.tool-glow')).toHaveCount(1);
+  expect(await look('#tool-mirror'), 'held: the accent border, no filter').toMatchObject({ border: 'rgb(240, 180, 41)', filter: 'none', opacity: '1' });
+  expect(await mirror.locator('.tool-glow').evaluate(el => {
+    const a = getComputedStyle(el);
+    return [a.animationName, a.animationIterationCount, a.animationDuration];
+  }), 'twice, 1.1 s each').toEqual(['tool-glow', '2', '1.1s']);
+  await expect(page.locator('#tool-cow'), 'only the tool picked up glows').not.toHaveClass(/\bgot\b/);
+  await page.waitForTimeout(2500);
+  await expect(mirror, 'then still').not.toHaveClass(/\bgot\b/);
+  await expect(mirror.locator('.tool-glow')).toHaveCount(0);
+  await expect(mirror).toHaveClass(/\bheld\b/);
+  // A turn taken back never glows.
+  await page.keyboard.press('u');
+  await expect(mirror).toHaveClass(/\bempty\b/);
+  await expect(mirror).not.toHaveClass(/\bgot\b/);
+  // With reduced motion, a pickup holds the border and never glows.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.keyboard.press('ArrowRight');
+  await expect(mirror).toHaveClass(/\bheld\b/);
+  await expect(mirror).not.toHaveClass(/\bgot\b/);
+  expect(errors).toEqual([]);
+});
+
 test('Chapter 1, Level 2: in the start corner beside the Minotaur, walking into him is a catch, never a freeze', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -720,3 +769,71 @@ test('Chapter 1, Level 2: in the start corner beside the Minotaur, walking into 
   await expect.poll(() => now(page), 'a turn and a heart').toEqual({ moves: 4, hearts: 2, outcome: 'playing' });
   expect(errors).toEqual([]);
 });
+
+/* ---- a walk into the Minotaur plays like a move: Theseus lunges into his cell, then the catch lands ---- */
+const WALK_IN = ['title: Walk In', 'intro: One heart.', 'hearts: 1', '', '#######', '#*....#', '#.PM..#', '#....E#', '#######', ''].join('\n');
+
+for (const look of ['classic', 'modern'] as const) {
+  test(`${look}: walking into the Minotaur lunges Theseus into his cell before "The Minotaur has you"`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.addInitScript((l: string) => localStorage.setItem('crete-look', l), look);
+    await page.goto(PAGE);
+    await expect(page.locator('#title-veil')).toBeVisible();
+    await page.evaluate(text => {
+      const t = (window as unknown as FirstsHook).__creteTest;
+      t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Walk In', best: null } });
+    }, WALK_IN);
+    await page.locator('#start-begin').click();
+    if (look === 'modern') {
+      await page.waitForFunction(() => {
+        const m = (window as unknown as { __creteTest: { modern: { active: boolean; frames(): number } } }).__creteTest.modern;
+        return m.active && m.frames() > 0;
+      }, null, { timeout: 30_000 });
+    }
+    // Every few ms from the press on (a software-drawn 3D board paints few frames): where both looks draw Theseus,
+    // and whether the ending card shows.
+    await page.evaluate(() => {
+      const w = window as unknown as { __creteTest: { game: { anim: unknown }; figures(): { player: { r: number; c: number } } | null }; __walk: { c: number; card: boolean }[]; __walked: boolean };
+      w.__walk = [];
+      w.__walked = false;
+      const t0 = performance.now();
+      const id = setInterval(() => {
+        const f = w.__creteTest.figures();
+        if (f) w.__walk.push({ c: f.player.c, card: !document.getElementById('end-veil')!.hidden });
+        // Done once the turn has landed and the ending card shows.
+        const done = !w.__creteTest.game.anim && !document.getElementById('end-veil')!.hidden;
+        if (done || performance.now() - t0 > 5000) { clearInterval(id); w.__walked = true; }
+      }, 5);
+    });
+    // The turn the press makes, read as the press returns (a software-drawn 3D board can paint past it at once).
+    await page.evaluate(() => {
+      type Tl = { duration: number; at(ms: number): { player: { r: number; c: number } } };
+      type G = { anim: { timeline: Tl } | null; press(a: unknown): void };
+      const w = window as unknown as { __creteTest: { game: G }; __turn: unknown };
+      const g = w.__creteTest.game;
+      const press = g.press.bind(g);
+      g.press = (a: unknown) => {
+        press(a);
+        const tl = g.anim?.timeline;
+        w.__turn = tl ? { duration: tl.duration, held: tl.at(tl.duration * 0.75).player, card: !document.getElementById('end-veil')!.hidden } : null;
+      };
+    });
+    await page.keyboard.press('ArrowRight');
+    const turn = await page.evaluate(() => (window as unknown as { __turn: unknown }).__turn);
+    expect(turn, 'the walk-in animates, held in his cell, before any ending card').toEqual({ duration: 240, held: { r: 2, c: 2.6 }, card: false });
+    await expect(page.locator('#end-veil')).toBeVisible();
+    await expect(page.locator('#end-title')).toHaveText('The Minotaur has you');
+    await page.waitForFunction(() => (window as unknown as { __walked: boolean }).__walked);
+    const walk = await page.evaluate(() => (window as unknown as { __walk: { c: number; card: boolean }[] }).__walk);
+    const lunging = walk.filter(x => x.c > 2 && x.c < 3);
+    // A software-drawn 3D board (as in CI) paints too few frames to count; the classic board paints every one.
+    if (look === 'classic') {
+      expect(lunging.length, 'Theseus is drawn between his cell and the Minotaur\'s over several frames').toBeGreaterThan(2);
+      expect(Math.max(...walk.map(x => x.c)), 'most of the way into his cell').toBeGreaterThan(2.5);
+    }
+    expect(lunging.every(x => !x.card), 'the ending card waits for the lunge').toBe(true);
+    expect(errors).toEqual([]);
+  });
+}

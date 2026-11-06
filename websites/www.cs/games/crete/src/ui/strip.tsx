@@ -1,5 +1,6 @@
 // The Island of Crete: the control strip. The move pad (a connected cross round an inert centre), Wait, Undo and Restart, Ariadne's
-// thread (Hint, Route, Auto), the three tools with their counts and the Map button, each with a key tab printed from the
+// thread (Hint, Route, Auto), the three tools (each its picture in the board's look and its count: an accent border
+// while held, grey when none, a glow and a wiggle twice when one is picked up) and the Map button, each with a key tab printed from the
 // key table (the tools' from their own definition). On a phone the thread is one Thread button whose panel holds the
 // three. src/ui.ts builds the rows and decides which strip a screen gets; this draws them and reports presses.
 import { render } from 'preact';
@@ -10,20 +11,28 @@ import { KEYS } from '../keys.ts';
 import type { Action, MoveAction } from '../keys.ts';
 import type { Tool } from '../puzzle/tiles.ts';
 import type { Look } from '../settings.ts';
+import type { Entry } from '../dictionary.ts';
+import { Picture } from './sprite.tsx';
+import type { Pics } from './sprite.tsx';
 
 export interface ToolRow {
   kind: Tool;
-  emoji: string;
+  /** The tool's Dictionary entry, for its picture. */
+  entry: Entry;
   name: string;
   /** The key the tool's definition prints. */
   key: string;
   count: number;
   desc: string;
   disabled: boolean;
+  /** The number of the tool's latest pickup while its glow plays, else 0: a new number plays it again. */
+  lit: number;
 }
 
 export interface StripProps {
   tools: ToolRow[];
+  /** What the tools' pictures are drawn from. */
+  pics: Pics;
   /** The play-out is running. */
   playing: boolean;
   /** The whole thread is drawn. */
@@ -61,6 +70,10 @@ const PAD: { dir: MoveAction; glyph: string; name: string }[] = [
   { dir: 'right', glyph: '▶', name: 'Move right' },
   { dir: 'down', glyph: '▼', name: 'Move down' },
 ];
+
+/** A tool's picture, in CSS pixels: on a wide screen's 52 px button, and on a phone's 48 px one. */
+const TOOL_PIC = 40;
+const TOOL_PIC_PHONE = 34;
 
 function Tab({ action }: { action: Action }) {
   return <KeyChip variant="tab" label={KEYS[action].label} at={action} decorative />;
@@ -113,9 +126,13 @@ export function Strip(p: StripProps) {
         )}
         <div class="tools" role="group" aria-label="Tools">
           {p.tools.map(t => (
-            <Button key={t.kind} id={`tool-${t.kind}`} class="tool" label={`${t.name} × ${t.count}. ${t.desc}`} title={t.desc}
-              disabled={t.disabled} onClick={() => p.onTool(t.kind)}>
-              <span aria-hidden="true">{t.emoji}</span><span class="n" aria-hidden="true">{t.count}</span>
+            <Button key={t.kind} id={`tool-${t.kind}`} class={`tool ${t.count > 0 ? 'held' : 'empty'}${t.lit ? ' got' : ''}`}
+              label={`${t.name} × ${t.count}. ${t.desc}`} title={t.desc} disabled={t.disabled} onClick={() => p.onTool(t.kind)}>
+              {t.lit ? <span key={`glow-${t.lit}`} class="tool-glow" aria-hidden="true" /> : null}
+              <span key={`pic-${t.lit}`} class="tool-pic" aria-hidden="true">
+                <Picture pics={p.pics} entry={t.entry} size={p.compact ? TOOL_PIC_PHONE : TOOL_PIC} alone />
+              </span>
+              <span class="n" aria-hidden="true">{t.count}</span>
               <KeyChip variant="tab" label={t.key} at={`item:${t.kind}`} decorative />
             </Button>
           ))}

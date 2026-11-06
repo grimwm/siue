@@ -83,6 +83,20 @@ test('reduced motion snaps; a catch plays the Minotaur in, then throws the playe
   assert.deepEqual(tl.at(tl.duration), { player: { r: 0, c: 2 }, minotaur: { r: 0, c: 0 }, hazards: [] });
 });
 
+test('a walk into the Minotaur plays: Theseus lunges into his cell and holds, then the catch throws him back', () => {
+  const s = grid(['*.......', '.PM.....', '........']);
+  const r = step(s, mv('right'));
+  assert.ok(r.events.some(e => e.kind === 'caught' && e.walked), 'a walk into him');
+  const tl = timeline(s, r.events, false, r.state);
+  assert.equal(tl.duration, 2 * SLIDE_MS, 'a lunge and a beat held');
+  assert.deepEqual(tl.at(0).player, { r: 1, c: 1 });
+  assert.deepEqual(tl.at(SLIDE_MS / 2).player, { r: 1, c: 1.3 });
+  assert.deepEqual(tl.at(SLIDE_MS * 1.5).player, { r: 1, c: 1.6 }, 'held in his cell');
+  assert.deepEqual(tl.at(SLIDE_MS * 1.5).minotaur, { r: 1, c: 2 }, 'the Minotaur stands');
+  assert.deepEqual(tl.at(tl.duration).player, r.state.player, 'then thrown back as the engine says');
+  assert.equal(timeline(s, r.events, true, r.state).duration, 0, 'reduced motion snaps');
+});
+
 test('a pushed block is drawn between its cells during the player\'s segment, and not at its old cell', () => {
   const s = grid(['PO...', '.....', '....M']);
   const r = step(s, mv('right'));

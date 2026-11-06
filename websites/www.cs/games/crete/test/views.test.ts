@@ -21,6 +21,9 @@ import type { ChapterCardProps } from '../src/ui/chapter.tsx';
 import type { StartProps } from '../src/ui/start.tsx';
 import type { LoreProps, LoreEntry } from '../src/ui/lore.tsx';
 import { CHAPTERS, nextChapter } from '../src/campaign/chapters.ts';
+import { ENTRY } from '../src/dictionary.ts';
+import type { Atlas } from '../src/board-plan.ts';
+import type { Pics } from '../src/ui/sprite.tsx';
 
 installDocument();
 const views = await importTsx<{
@@ -113,11 +116,15 @@ test('hearts and keys carry their long form as a tooltip; nothing held shows a d
 // ---- control strip ----
 const TOOL_KINDS = Object.keys(TOOLS) as Tool[];
 const ROWS: ToolRow[] = TOOL_KINDS.map((kind, i) => ({
-  kind, emoji: '·', name: TOOLS[kind].name, key: TOOLS[kind].key, count: i, desc: TOOLS[kind].desc, disabled: i === 0,
+  kind, entry: ENTRY[kind]!, name: TOOLS[kind].name, key: TOOLS[kind].key, count: i, desc: TOOLS[kind].desc, disabled: i === 0, lit: 0,
 }));
+const PICS: Pics = {
+  look: 'modern', atlas: { cell: 64, rise: 24, sprites: Object.fromEntries(TOOL_KINDS.map((k, i) => [k, { x: 0, y: i * 88, frames: 1, fps: 0 }])) } as Atlas,
+  icons: { cell: 128, width: 512, height: 256, icons: Object.fromEntries(TOOL_KINDS.map((k, i) => [k, { x: (i + 1) * 128, y: 128 }])) },
+};
 function stripProps(over: Partial<StripProps> = {}): StripProps {
   return {
-    tools: ROWS, playing: false, route: false, over: false, look: 'modern', compact: false, threadOpen: false,
+    tools: ROWS, pics: PICS, playing: false, route: false, over: false, look: 'modern', compact: false, threadOpen: false,
     onThread: noop, onMove: noop, onWait: noop, onUndo: noop, onRestart: noop, onHint: noop, onRoute: noop, onAuto: noop, onTool: noop, onLook: noop, onMenu: noop, ...over,
   };
 }
@@ -185,6 +192,26 @@ test('an unusable tool cannot be pressed, Route and Auto show when on, and a fin
   assert.equal(byId(root, 'btn-undo').disabled, false);
   assert.equal(byId(root, 'btn-restart').disabled, false);
   assert.equal(walk(root).filter(n => n.className.startsWith('mv ')).every(b => b.disabled), true);
+});
+
+test("each tool wears its picture in the board's look and its count: held or empty, and glowing while just picked up", () => {
+  const root = mount();
+  const pic = (kind: Tool) => walk(byId(root, `tool-${kind}`)).find(n => n.className.split(' ').includes('sprite'))!;
+  const classes = (kind: Tool) => byId(root, `tool-${kind}`).className.split(' ');
+  renderStrip(root, stripProps());
+  for (const k of TOOL_KINDS) assert.equal(pic(k).getAttribute('data-look'), 'modern', k);
+  assert.equal(pic('cake').style.width, '40px', 'a wide strip draws 40 px pictures');
+  assert.equal(byId(root, 'tool-cake').textContent?.includes('🍯'), false, 'no emoji');
+  assert.deepEqual(classes('mirror'), ['tool', 'empty']);
+  assert.deepEqual(classes('cake'), ['tool', 'held']);
+  assert.equal(byId(root, 'tool-cake').getAttribute('aria-label'), `${TOOLS.cake.name} × 1. ${TOOLS.cake.desc}`);
+  assert.equal(walk(root).filter(n => n.className === 'tool-glow').length, 0, 'no glow until a pickup');
+  renderStrip(root, stripProps({ compact: true, pics: { ...PICS, look: 'classic' }, tools: ROWS.map(r => (r.kind === 'cow' ? { ...r, lit: 3 } : r)) }));
+  for (const k of TOOL_KINDS) assert.equal(pic(k).getAttribute('data-look'), 'classic', k);
+  assert.equal(pic('cake').style.width, '34px', 'a phone strip draws 34 px pictures');
+  assert.deepEqual(classes('cow'), ['tool', 'held', 'got']);
+  assert.equal(walk(byId(root, 'tool-cow')).filter(n => n.className === 'tool-glow').length, 1);
+  assert.equal(walk(root).filter(n => n.className === 'tool-glow').length, 1, 'only the tool picked up glows');
 });
 
 test('the pad is a plus: up, then left and right on one row with an empty centre between them, then down', () => {

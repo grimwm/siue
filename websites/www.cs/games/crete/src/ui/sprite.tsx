@@ -21,6 +21,8 @@ export interface PictureProps {
   /** Its width in CSS pixels. */
   size: number;
   locked?: boolean;
+  /** Drawn alone in a `size` square, as on a tool button: a Classic sprite without its floor, filling the square. */
+  alone?: boolean;
 }
 
 export function Picture(p: PictureProps) {
@@ -44,10 +46,27 @@ export function Picture(p: PictureProps) {
       </span>
     );
   }
+  if (p.alone) return <Alone atlas={p.pics.atlas} name={p.entry.sprite} size={p.size} />;
   return <Sprite atlas={p.pics.atlas} name={p.entry.sprite} size={p.size} locked={p.locked} />;
 }
 
 interface SpriteProps { atlas: Atlas; name: string; size: number; locked?: boolean | undefined }
+
+/** A Classic sprite alone in a `size` square, centred across: from its top down to half a rise above its foot, which
+ *  holds only the shadow it casts on the floor, so the piece itself fills the square. */
+function Alone(p: SpriteProps) {
+  const { cell, rise } = p.atlas;
+  const s = p.atlas.sprites[p.name];
+  const k = p.size / (cell + rise / 2);
+  return (
+    <span class="sprite" data-look="classic" style={{ width: `${p.size}px`, height: `${p.size}px` }} aria-hidden="true">
+      {s && <span class="sprite-layer" style={{
+        left: `${(p.size - cell * k) / 2}px`, width: `${cell}px`, height: `${cell + rise}px`,
+        backgroundPosition: `-${s.x}px -${s.y}px`, transform: `scale(${k})`,
+      }} />}
+    </span>
+  );
+}
 
 function Sprite(p: SpriteProps) {
   const { cell, rise } = p.atlas;

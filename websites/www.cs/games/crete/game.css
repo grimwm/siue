@@ -329,7 +329,32 @@ button:disabled { opacity: 0.45; cursor: default; }
 .thread-panel[hidden] { display: none; }
 .strip .thread-panel button { min-width: 64px; }
 #frame.pad-right .thread-panel { right: auto; left: 8px; }
-.tool .n { margin-left: 0.3rem; font-weight: 700; }
+/* A tool button: the tool's picture in the board's look (src/ui/sprite.tsx) and its count. Held, an accent border;
+   none held, the picture greyed and dark; picked up, a glow round the button and a wiggle of the picture, twice
+   together, then still (src/ui.ts PICKUP_MS waits them out). */
+.strip .tool { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 0.7rem 0 0.4rem; }
+.tool-pic { display: inline-flex; flex: none; }
+.tool .n { margin-left: 0.3rem; font-weight: 700; font-size: 1.05rem; }
+.strip .tool.held { border: 1.5px solid var(--accent); }
+.strip .tool.empty:disabled { opacity: 1; filter: grayscale(1) brightness(0.55); }
+.tool-glow { position: absolute; inset: -1.5px; border-radius: inherit; pointer-events: none; animation: tool-glow 1.1s ease-in-out 2; }
+.tool.got .tool-pic { animation: tool-wiggle 1.1s ease-in-out 2; }
+@keyframes tool-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 180, 41, 0); }
+  50% { box-shadow: 0 0 20px 5px rgba(240, 180, 41, 0.7); }
+}
+@keyframes tool-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(-14deg); }
+  30% { transform: rotate(12deg); }
+  45% { transform: rotate(-9deg); }
+  60% { transform: rotate(6deg); }
+  75% { transform: rotate(-3deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-glow { display: none; }
+  .tool.got .tool-pic { animation: none; }
+}
 
 /* ---- cards: title, menu, story, ending ---- */
 .veil {
@@ -692,6 +717,7 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   }
   #frame.pad-right .strip { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; grid-template-areas: "turn turn pad" "tools tools pad" "thread view pad"; }
   .strip button { min-width: 0; min-height: 40px; padding: 0 0.3rem; }
+  .strip .tool { min-height: 48px; padding: 0 0.3rem 0 0.15rem; }
   .pad { grid-area: pad; }
   .actions { display: contents; }
   .turn, .tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -716,6 +742,8 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .strip { gap: 6px 12px; padding: 10px 8px 8px; }
   .strip button { padding: 0 0.1rem; font-size: 0.68rem; }
   .turn, .tools, .view.with-menu { gap: 4px; }
+  .strip .tool { padding: 0; }
+  .tool .n { margin-left: 0.15rem; }
   .strip .view.with-menu button { font-size: 0.68rem; padding: 0 0.1rem; }
   /* Narrower still: the bottom row splits 1 : 3, so Classic and Modern keep their width. */
   .strip { grid-template-columns: auto minmax(0, 1fr) minmax(0, 3fr); }
@@ -745,6 +773,7 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
     pointer-events: none;
   }
   .strip button { pointer-events: auto; min-width: 40px; min-height: 40px; padding: 0 0.3rem; font-size: 0.8rem; background: rgba(22, 27, 34, 0.92); }
+  .strip .tool { min-height: 48px; padding: 0 0.3rem 0 0.15rem; }
   .strip .thread-panel { pointer-events: auto; }
   .actions { flex-direction: column; align-items: flex-end; gap: 4px; }
   .turn, .thread, .tools, .view { gap: 4px; }

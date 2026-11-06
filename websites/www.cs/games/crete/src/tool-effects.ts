@@ -80,8 +80,9 @@ export function activeEffects(s: State): Effect[] {
   return out;
 }
 
-/** Theseus is boxed in: the try goes on, no snare holds him, and every move is a bump (walls, the Minotaur, a shut
- *  door). Only Wait, a tool, Undo or Restart plays on. */
+/** Theseus is boxed in: the try goes on, no snare holds him, and every move is a bump (walls, a shut door, the board's
+ *  edge, a stone Minotaur; walking into the live one is a catch, so it never boxes him in). Only Wait, a tool, Undo
+ *  or Restart plays on. */
 export function boxedIn(s: State): boolean {
   if (s.outcome !== 'playing' || heldAt(turnOf(s), s.player)) return false;
   return DIRS.every(d => step(s, { kind: 'move', dir: d }).state === s);
@@ -90,6 +91,6 @@ export function boxedIn(s: State): boolean {
 /** What the page says to a boxed-in Theseus. */
 export function boxedInLine(input: Input): string {
   return input === 'keys'
-    ? `No way to move: press ${KEYS.wait.label} to Wait (the Minotaur moves) or ${KEYS.undo.label} to Undo.`
-    : 'No way to move: tap Wait (the Minotaur moves) or Undo.';
+    ? `No way to move: press ${KEYS.wait.label} to Wait or ${KEYS.undo.label} to Undo.`
+    : 'No way to move: tap Wait or Undo.';
 }

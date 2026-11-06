@@ -701,7 +701,7 @@ test('taking and using the mirror and the cow says what each does; the status ba
   expect(errors).toEqual([]);
 });
 
-test('boxed in on Chapter 1, Level 2 (start corner, the Minotaur beside him), a move says to Wait or Undo; Wait is a catch, never a freeze', async ({ page }) => {
+test('Chapter 1, Level 2: in the start corner beside the Minotaur, walking into him is a catch, never a freeze', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -716,11 +716,7 @@ test('boxed in on Chapter 1, Level 2 (start corner, the Minotaur beside him), a 
   for (const k of ['ArrowRight', 'ArrowLeft', '.']) await page.keyboard.press(k);
   await expect.poll(() => now(page)).toEqual({ moves: 3, hearts: 3, outcome: 'playing' });
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('#toast')).toHaveText('No way to move: press . to Wait (the Minotaur moves) or U to Undo.');
-  expect((await now(page)).moves, 'the move was a bump').toBe(3);
-  await page.keyboard.press('.');
   await expect(page.locator('#toast')).toHaveText('Caught! 2 hearts left.');
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(() => now(page), 'free to move again').toEqual({ moves: 5, hearts: 2, outcome: 'playing' });
+  await expect.poll(() => now(page), 'a turn and a heart').toEqual({ moves: 4, hearts: 2, outcome: 'playing' });
   expect(errors).toEqual([]);
 });

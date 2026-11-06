@@ -61,9 +61,15 @@ test('the last heart lost ends the try', () => {
   assert.equal(step(r.state, WAIT).state, r.state);
 });
 
-test('you cannot walk into it; as stone it is a wall to you too', () => {
-  const s = grid(['PM.']);
-  assert.equal(step(s, mv('right')).state, s);
+test('walking into it is a catch and a turn; as stone it is a wall to you (a bump)', () => {
+  const into = play(grid(['.PM..', '.....']), mv('right'));
+  assert.ok(into.events.some(e => e.kind === 'caught' && e.by === 'minotaur' && e.walked), 'a catch marked as walked into');
+  assert.equal(into.state.hearts, 2);
+  assert.equal(into.state.moves, 1, 'a turn spent');
+  assert.deepEqual(into.state.player, { r: 0, c: 1 }, 'thrown back to the start');
+  assert.deepEqual(into.state.minotaur, { r: 0, c: 2 }, 'he stays where the catch was, as when he reaches you');
+  assert.ok(!into.kinds.includes('moved'), 'nobody moved: the catch ends the turn');
+  assert.equal(play(grid(['PM.'], 'hearts: 1'), mv('right')).state.outcome, 'lost', 'the last heart ends the try');
   const near = play(grid(['Pz..M']), mv('right'));
   const stoned = play(near.state, tool('mirror'));
   assert.ok(stoned.kinds.includes('stoned'));

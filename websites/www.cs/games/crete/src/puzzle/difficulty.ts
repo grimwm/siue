@@ -176,7 +176,8 @@ function apart(level: Level): boolean {
 }
 
 /** Whether some line from the start leads to a catch by the Minotaur: a breadth-first search over packed
- *  situations that stops at the first turn he catches in; a hazard's or a bomb's catch is a turn like any other.
+ *  situations that stops at the first turn he reaches Theseus in; Theseus walking into him, or a hazard's or a
+ *  bomb's catch, is a turn like any other.
  *  Breadth-first, a catch a few turns away is found before the search wanders off down one long line. False when
  *  it is proved none does, null when the search stored `cap` situations first or its store failed. It keeps them
  *  in `store`, by default one in memory. */
@@ -206,7 +207,8 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
       for (const c of ORDER) {
         if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
         const x = step(s, ACTIONS[c]!);
-        if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
+        // Walking into him is no threat of his: only his reaching Theseus counts.
+        if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur' && !e.walked)) return true;
         const n = x.state;
         if (searchSkips(s, x) || n.outcome !== 'playing') continue;
         pack(n, layout, buf, 0, s, from, 0);

@@ -80,7 +80,7 @@ export const ENTRIES: readonly Entry[] = [
 
   { id: 'minotaur', kind: 'hazard', name: 'The Minotaur', sprite: 'minotaur',
     lore: 'Asterion, son of Queen Pasiphaë and the white bull of Poseidon: half bull, all appetite.',
-    effect: 'He takes two steps for each of your turns. Each step closes the gap across if that square is open to him, else the gap up or down; with neither open he stands. If he reaches you, you lose a heart and wake on your last safe zone, or where you began.',
+    effect: 'He takes two steps for each of your turns. Each step closes the gap across if that square is open to him, else the gap up or down; with neither open he stands. If he reaches you, or you walk into him, you lose a heart and wake on your last safe zone, or where you began. Turned to stone he is a wall to you.',
     short: 'Two steps to your one' },
   { id: 'ball', kind: 'hazard', name: 'Bronze Ball', sprite: 'ball',
     lore: 'A ball of solid bronze, set rolling by one of Daedalus\'s engines, that never comes to rest.',

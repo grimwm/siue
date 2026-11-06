@@ -460,19 +460,35 @@ test('a tool picked up, used and worn off is said; a catch in the same turn is s
   assert.match(cow.said.at(-1)!, /^Caught!/);
 });
 
-test('boxed in, a bump says what still plays, by key or by button', () => {
-  const { game, said, sounds } = lone(['#####', '#PM.#', '##..#', '#####']);
+test('boxed in, the turn and each bump after say what still plays, by key or by button', () => {
+  // A pop-up wall rises behind Theseus as he takes the mirror: walls all round.
+  const rows = ['#####', '#P;z#', '#####'];
+  const { game, said, sounds } = lone(rows);
+  game.press(R_);
+  game.press(R_);
+  assert.equal(said.at(-1), 'No way to move: press . to Wait or U to Undo.');
+  said.length = 0;
   game.press(mv('down'));
-  assert.deepEqual(sounds, ['bump']);
-  assert.equal(said.at(-1), 'No way to move: press . to Wait (the Minotaur moves) or U to Undo.');
+  assert.equal(sounds.at(-1), 'bump');
+  assert.deepEqual(said, ['No way to move: press . to Wait or U to Undo.']);
   const m = manualClock();
   const said2: string[] = [];
   const touch = createGame({
     sfx() {}, say: t => said2.push(t), progress: createProgress(null), pages: createFoundPages(null), input: () => 'touch',
     timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
-    levels: { count: 1, id: () => 'lone', level: () => parse('title: t\nintro: i\n\n#####\n#PM.#\n##..#\n#####\n') },
+    levels: { count: 1, id: () => 'lone', level: () => parse(`title: t\nintro: i\n\n${rows.join('\n')}\n`) },
   });
   touch.open(0);
+  touch.press(R_);
+  touch.press(R_);
   touch.press(mv('left'));
-  assert.equal(said2.at(-1), 'No way to move: tap Wait (the Minotaur moves) or Undo.');
+  assert.equal(said2.at(-1), 'No way to move: tap Wait or Undo.');
+});
+
+test('walking into the Minotaur is a catch, said as one', () => {
+  const { game, said, sounds } = lone(['#####', '#.PM#', '#...#', '#####']);
+  game.press(R_);
+  assert.ok(sounds.includes('caught'));
+  assert.equal(said.at(-1), 'Caught! 2 hearts left.');
+  assert.equal(game.run!.now.moves, 1);
 });

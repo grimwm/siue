@@ -2,6 +2,7 @@
 // must keep this green.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { helpAnswered } from './crete-answered.ts';
 
 /** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
 const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
@@ -280,6 +281,93 @@ test('a win on the shortest line is perfect; Next Level shows level 2\'s start c
   expect(errors).toEqual([]);
 });
 
+test('Next Level draws the new level at once under its start card, in both looks: never a blank board', async ({ browser }) => {
+  for (const look of ['classic', 'modern'] as const) {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, storageState: helpAnswered() });
+    await ctx.addInitScript(allMet);
+    await ctx.addInitScript(l => localStorage.setItem('crete-look', l), look);
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(PAGE);
+    await page.locator('#title-play').click();
+    await page.locator('#pick-enter').click();
+    await page.locator('#chapter-enter').click();
+    await page.locator('#start-begin').click();
+    for (const s of await line(page)) await page.keyboard.press(KEY[s]!);
+    await expect(page.locator('#end-next')).toBeVisible();
+    await page.locator('#end-next').click();
+    await expect(page.locator('#start-veil')).toBeVisible();
+    // The board keeps the frame's middle row under the card, and fades in to full there while the card is up.
+    const board = (await page.locator('#board').boundingBox())!;
+    expect(board.height, `${look}: the board fills its row`).toBeGreaterThan(400);
+    const surface = look === 'modern' ? '#modern' : '#stage-view';
+    await expect.poll(() => page.locator(surface).evaluate(el => Number(getComputedStyle(el).opacity)), { message: `${look}: the board fades in` }).toBe(1);
+    const shown = (await page.locator(surface).boundingBox())!;
+    expect(shown.height, `${look}: drawn in the board, under the card`).toBeGreaterThan(300);
+    await expect(page.locator('#start-veil')).toBeVisible();
+    expect(await page.evaluate(() => window.__creteTest.game.run.now.moves)).toBe(0);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }
+});
+
+test('F toggles full screen anywhere: on the title card, in play and on a card', async ({ page }) => {
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  const full = () => page.evaluate(() => document.fullscreenElement?.id ?? null);
+  await page.keyboard.press('f');
+  await expect.poll(full, 'on the title card').toBe('frame');
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.keyboard.press('f');
+  await expect.poll(full).toBe(null);
+  await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
+  await page.locator('#chapter-enter').click();
+  await page.locator('#start-begin').click();
+  await page.keyboard.press('f');
+  await expect.poll(full, 'in play').toBe('frame');
+  await page.keyboard.press('n');
+  await expect(page.locator('#levels-veil')).toBeVisible();
+  await page.keyboard.press('f');
+  await expect.poll(full, 'on the level list').toBe(null);
+  await expect(page.locator('#levels-veil')).toBeVisible();
+});
+
+test.describe('Help Build Endless Levels, never answered', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('the first New Game asks once; No Thanks goes on and is kept, and nothing is asked again', async ({ page }) => {
+    await page.goto(PAGE);
+    await page.locator('#title-play').click();
+    await expect(page.locator('#help-veil')).toBeVisible();
+    await expect(page.locator('#help-title')).toHaveText('Help Build Endless Levels');
+    await expect(page.locator('#help-yes')).toBeFocused();
+    await page.locator('#help-no').click();
+    await expect(page.locator('#look-veil')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('crete-help-build'))).toBe('off');
+    await page.reload();
+    await page.locator('#title-play').click();
+    await expect(page.locator('#look-veil')).toBeVisible();
+    await page.keyboard.press('q');
+    await page.keyboard.press('o');
+    await expect(page.locator('#endless-veil')).toBeVisible();
+    await expect(page.locator('#help-veil')).toBeHidden();
+  });
+
+  test('Endless asks first too; Enter on Help Build Levels turns it on and opens the Endless card', async ({ page }) => {
+    await page.goto(PAGE);
+    await page.keyboard.press('o');
+    await expect(page.locator('#help-veil')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#endless-veil')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('crete-help-build'))).toBe('on');
+    await page.keyboard.press('q');
+    await page.keyboard.press('q');
+    await expect(page.locator('#help-build')).toHaveAttribute('aria-checked', 'true');
+  });
+});
+
 test('the board paints: the canvas holds drawn pixels', async ({ page }) => {
   await beginTrial1(page);
   await page.waitForSelector('#stage[data-cell]');
@@ -402,7 +490,7 @@ function lockRecorder() {
 }
 
 test('Full screen from the menu takes the Esc lock; Esc changes nothing and the cards stay', async ({ browser }) => {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, storageState: helpAnswered() });
   await ctx.addInitScript(lockRecorder);
   await ctx.addInitScript(allMet);
   const page = await ctx.newPage();

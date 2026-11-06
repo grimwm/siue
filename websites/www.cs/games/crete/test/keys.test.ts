@@ -28,6 +28,7 @@ const game = {
 } as unknown as Game;
 const controls: Controls = {
   game, toggleMute: note('mute'), toggleFullscreen: note('fullscreen'), wake: note('wake'), quit: note('quit'), play: note('play'),
+  demo: { start: note('demo') }, setLook: (l: string) => { calls.push(`look:${l}`); },
 };
 // createUi keeps these for drawing; the key handler reads none of them.
 const page = ui.createUi({ atlas: {} as Atlas, board: {} as SheetBoard, progress: createProgress(null), pages: createFoundPages(null) });
@@ -123,6 +124,42 @@ test('with nothing open, the keys reach the game, and a tool key uses its tool',
   assert.deepEqual(press('r').calls, ['restart']);
   for (const [tool, def] of Object.entries(TOOLS)) assert.deepEqual(press(def.key).calls, [tool], tool);
   assert.deepEqual(press(' ').calls, []);
+});
+
+test('F toggles full screen in play, on the title card and on a card; never typed into a text box or on a chord', () => {
+  assert.deepEqual(press('f').calls, ['fullscreen']);
+  assert.equal(press('F').ev.prevented, true);
+  page.showTitle(false);
+  assert.deepEqual(press('f').calls, ['fullscreen']);
+  assert.equal(page.top(), 'title');
+  press('q');
+  assert.deepEqual(press('f').calls, ['fullscreen']);
+  assert.equal(page.top(), 'menu');
+  assert.deepEqual(press('f', { repeat: true }).calls, []);
+  for (const chord of ['ctrlKey', 'metaKey', 'altKey']) assert.deepEqual(press('f', { [chord]: true }).calls, [], chord);
+  page.closeLayers();
+  for (const tagName of ['INPUT', 'TEXTAREA']) {
+    const { ev, calls } = press('f', { target: { tagName, type: tagName === 'INPUT' ? 'text' : undefined } });
+    assert.deepEqual(calls, [], tagName);
+    assert.equal(ev.prevented, false, tagName);
+  }
+});
+
+test('D starts Demo on the title card only: in play it moves right, on the new-game card it picks Classic; P starts nothing', () => {
+  page.showTitle(false);
+  assert.deepEqual(press('p').calls, []);
+  assert.equal(page.top(), 'title');
+  assert.deepEqual(press('d').calls, ['demo']);
+  page.showTitle(false);
+  assert.deepEqual(press('D').calls, ['demo']);
+  assert.deepEqual(press('d', { repeat: true }).calls, [], 'a held D starts Demo once');
+  page.showTitle(false);
+  press('n');
+  assert.equal(page.top(), 'look');
+  assert.deepEqual(press('d').calls, ['look:classic']);
+  assert.equal(page.top(), 'look');
+  page.closeLayers();
+  assert.deepEqual(press('d').calls, ['right']);
 });
 
 test('a card opening stops the play-out', () => {

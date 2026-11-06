@@ -36,7 +36,7 @@ export const KEYS: Record<Action, KeyDef> = {
   new: { label: "N", keys: ["n"] },
   /** Opens the story card, from the title card. */
   story: { label: "I", keys: ["i"] },
-  /** Toggles full screen, from the menu. */
+  /** Toggles full screen, anywhere: in play, on any card, in the editor and in Demo. */
   fullscreen: { label: "F", keys: ["f"] },
   /** Opens the Lore Book, from the menu. */
   lore: { label: "L", keys: ["l"] },
@@ -46,8 +46,9 @@ export const KEYS: Record<Action, KeyDef> = {
   editor: { label: "E", keys: ["e"] },
   /** Opens the Endless card, from the title card. */
   endless: { label: "O", keys: ["o"] },
-  /** Starts Demo, which plays Endless by itself, from the title card. */
-  demo: { label: "P", keys: ["p"] },
+  /** Starts Demo, which plays Endless by itself, from the title card. D is "right" everywhere else, so this row
+   *  claims no key: src/ui.ts reads D for Demo on the title card only (isDemoKey). */
+  demo: { label: "D", keys: [] },
   /** Swaps the board between the modern and the classic look, from the strip. */
   look: { label: "B", keys: ["b"] },
   /** Shows the view tips again, on the modern board. */
@@ -75,6 +76,11 @@ export function actionFor(key: string): Action | null {
 
 export function isMove(a: Action | null): a is MoveAction {
   return a === "up" || a === "down" || a === "left" || a === "right";
+}
+
+/** Whether a press is Demo's key, which starts Demo only while the title card is the top card. */
+export function isDemoKey(key: string): boolean {
+  return key.toLowerCase() === KEYS.demo.label.toLowerCase();
 }
 
 /** The tool whose printed key this press is, or null. */

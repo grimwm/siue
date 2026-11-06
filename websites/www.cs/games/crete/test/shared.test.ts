@@ -174,7 +174,7 @@ function scripted(answer: (r: Request) => MadeAt) {
 }
 const madeOf = (b: BankLevel, from: Made['from'], part?: number): MadeAt => ({ ...b, from, tries: 1, spent: 1, ...(part !== undefined ? { part } : {}) });
 
-function modeWith(answer: (r: Request) => MadeAt, take: (r: Request) => RunLevel | null) {
+function modeWith(answer: (r: Request) => MadeAt, take: (r: Request) => RunLevel | null, bankFirst?: () => boolean) {
   const saved = createEndlessSaved(memory(), 'medium');
   const { client, asked } = scripted(answer);
   const opened: { about: EndlessAbout; intro: string }[] = [];
@@ -185,6 +185,7 @@ function modeWith(answer: (r: Request) => MadeAt, take: (r: Request) => RunLevel
     play: (level, about) => opened.push({ about, intro: level.intro }), changed: () => {},
     shared: { take: r => { takes.push(r); return take(r); } },
     made: (req, part, made) => uploads.push({ req, part, made }),
+    ...(bankFirst ? { bankFirst } : {}),
   });
   return { mode, saved, asked, opened, uploads, takes };
 }
@@ -197,6 +198,28 @@ test('New Run opens a shared level at once; its card says so', async () => {
   assert.match(m.opened[0]!.intro, /From the shared bank\.$/);
   assert.equal(m.saved.run()!.levels[0]!.from, 'shared');
   assert.equal(m.saved.run()!.seeded, undefined);
+});
+
+test('Help Build off: every level comes from the shared bank when one fits, the search only when none does', async () => {
+  let left = 2;
+  const m = modeWith(r => madeOf(FIRST[r.depth % FIRST.length]!, 'made', 0), r => (left-- > 0 ? sharedLevel(FIRST[r.depth % FIRST.length]!) : null), () => true);
+  m.mode.newRun();
+  await flush(); await flush(); await flush();
+  const run = m.saved.run()!;
+  assert.equal(run.levels[0]!.from, 'shared');
+  assert.equal(run.next!.from, 'shared', 'level 2, made ahead, came from the shared bank too');
+  assert.ok(m.takes.some(r => r.depth === 2));
+  assert.ok(m.asked.every(r => r.depth > 2), 'the search ran only once the bank had nothing to fit');
+  assert.ok(m.asked.length >= 1, 'and it still runs then: the run never waits on an empty bank');
+});
+
+test('Help Build on: past the first, levels made ahead come from the live search', async () => {
+  const m = modeWith(r => madeOf(FIRST[r.depth % FIRST.length]!, 'made', 0), r => sharedLevel(FIRST[r.depth % FIRST.length]!), () => false);
+  m.mode.newRun();
+  await flush(); await flush(); await flush();
+  assert.equal(m.saved.run()!.levels[0]!.from, 'shared');
+  assert.equal(m.saved.run()!.next!.from, 'made');
+  assert.deepEqual(m.takes.map(r => r.depth), [1]);
 });
 
 test('a seeded run never takes a shared level, and its made levels still go up with their part', async () => {
@@ -329,7 +352,7 @@ test('checking runs on any idle page, never while the solver searches (a hint, C
   const idle: CheckStanding = { run: false, warm: true, shown: true, solving: false, battery: null, endlessIdle: true, on: true, sendsNothing: false, specBudget: false };
   assert.equal(mayCheck(idle), true, 'the campaign, the menus, the editor: idle and quiet');
   assert.equal(mayCheck({ ...idle, solving: true }), false, 'the solver is searching');
-  assert.equal(mayCheck({ ...idle, on: false }), false, 'Help Check Endless Levels is off');
+  assert.equal(mayCheck({ ...idle, on: false }), false, 'Help Build Endless Levels is off or unset');
   assert.equal(mayCheck({ ...idle, endlessIdle: false }), false, 'Endless is making its own levels: they take turns');
   assert.equal(mayCheck({ ...idle, run: true }), false, 'an Endless run takes the workers');
   assert.equal(mayCheck({ ...idle, warm: false }), false, 'not before the quiet start');
@@ -352,11 +375,11 @@ test('a device keeps its own levels and plays them again in its own runs when no
   assert.equal(b.take(firstReq({ grade: 'easy' })), null, 'each grade keeps its own');
 });
 
-test('Do Not Track: nothing carrying the device\'s id is sent (no upload, report or claim), and shared levels still come in', async () => {
+test('Help Build off (or Do Not Track): nothing carrying the device\'s id is sent (no upload, report or claim), and shared levels still come in', async () => {
   const bad = { ...served(FIRST[0]!, 'd'.repeat(16)), shortest: FIRST[0]!.shortest - 1 };
   const srv = server([bad, served(FIRST[1]!, 'e'.repeat(16))]);
   const st = memory();
-  const b = createSharedBank({ fetch: srv.fetch, storage: st, now: () => 1_000_000, random: () => 0.5, url: 'endless-bank.php', quiet: true });
+  const b = createSharedBank({ fetch: srv.fetch, storage: st, now: () => 1_000_000, random: () => 0.5, url: 'endless-bank.php', quiet: () => true });
   await b.refill('medium', 10);
   assert.equal(b.take(firstReq())!.text, FIRST[1]!.text);
   b.upload({ seed: 'q', tier: 1, grade: 'medium', depth: 3, run: [{ text: FIRST[0]!.text, explored: 1, score: 40 }] }, 0, FIRST[0]!);
@@ -364,6 +387,24 @@ test('Do Not Track: nothing carrying the device\'s id is sent (no upload, report
   await flush(); await flush();
   assert.deepEqual(srv.posts, []);
   assert.equal(st.data[DEVICE_KEY], undefined, 'no id is even made');
+});
+
+test('Help Build is read at each send: turned on, uploads go; turned off again, they stop', async () => {
+  const srv = server([]);
+  let helping = false;
+  const b = createSharedBank({ fetch: srv.fetch, storage: memory(), now: () => 1_000_000, random: () => 0.5, url: 'endless-bank.php', quiet: () => !helping });
+  const req = { seed: 'q', tier: 1, grade: 'medium' as const, depth: 3, run: [{ text: FIRST[0]!.text, explored: 1, score: 40 }] };
+  b.upload(req, 0, FIRST[1]!);
+  await flush(); await flush();
+  assert.equal(srv.posts.length, 0);
+  helping = true;
+  b.upload(req, 0, FIRST[1]!);
+  await flush(); await flush(); await flush();
+  assert.equal(srv.posts.length, 1);
+  helping = false;
+  b.upload(req, 0, FIRST[2]!);
+  await flush(); await flush();
+  assert.equal(srv.posts.length, 1);
 });
 
 test('a worker that fails on a claimed part sends no verdict: the ticket simply expires', async () => {

@@ -4,6 +4,7 @@
 // difficulty keeps its own run; and a seed link names its difficulty.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { helpAnswered } from './crete-answered.ts';
 
 const PAGE = 'games/crete/';
 const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
@@ -115,7 +116,7 @@ test('the run is saved: after a reload the Endless card offers Continue, and Q g
 
 test('Endless on a phone: the card fits the screen and the touch pad moves Theseus', async ({ browser }) => {
   test.setTimeout(60_000);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, storageState: helpAnswered() });
   try {
     const page = await context.newPage();
     await openEndless(page, 'classic');

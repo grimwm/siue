@@ -1,6 +1,7 @@
 // Runs against E2E_BASE_URL (the site root, ending in /): local docker from
 // `make url`, or https://www.cs.siue.edu/~wgrim/. Never starts a server.
 import { defineConfig } from '@playwright/test';
+import { helpAnswered } from './crete-answered.ts';
 
 const base = process.env.E2E_BASE_URL;
 if (!base) throw new Error('Set E2E_BASE_URL to the site root, e.g. E2E_BASE_URL=$(make -C ../.. url)');
@@ -18,6 +19,7 @@ export default defineConfig({
     baseURL: base.endsWith('/') ? base : base + '/',
     viewport: { width: 1280, height: 860 },
     screenshot: 'only-on-failure',
+    storageState: helpAnswered(),
   },
   // Chrome runs everything. E2E_WEBKIT=1 adds WebKit for the specs that judge
   // drawing across engines and for the room puzzle (needs `npx playwright

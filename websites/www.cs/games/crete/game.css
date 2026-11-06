@@ -63,7 +63,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: var(--bg);
   overflow: hidden;
 }
-#title-root, #look-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root, #lore-root,
+#title-root, #help-root, #look-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root, #lore-root,
 #dict-root, #meet-root, #banner-root, #demo-root { display: contents; }
 
 /* ---- status bar ---- */
@@ -101,7 +101,11 @@ button:disabled { opacity: 0.45; cursor: default; }
 .strip button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
 /* ---- maze ---- */
+/* The board holds the frame's middle row by name: the start card stands in that row too, over it, and an item placed
+   by the grid would otherwise move the board down a row while the card is up. */
 .board {
+  grid-row: 2;
+  grid-column: 1;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -109,6 +113,16 @@ button:disabled { opacity: 0.45; cursor: default; }
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   padding: 6px;
   overflow: hidden;
+}
+/* A new level fades in as soon as it is drawn, under its start card; Demo's board waits hidden for its first level. */
+.board.board-wait > .stage-view, .board.board-wait > .modern-area { opacity: 0; }
+.board.board-in-a > .stage-view, .board.board-in-a > .modern-area { animation: board-in-a 400ms ease-out both; }
+.board.board-in-b > .stage-view, .board.board-in-b > .modern-area { animation: board-in-b 400ms ease-out both; }
+@keyframes board-in-a { from { opacity: 0; } }
+@keyframes board-in-b { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .board.board-in-a > .stage-view, .board.board-in-a > .modern-area,
+  .board.board-in-b > .stage-view, .board.board-in-b > .modern-area { animation: none; }
 }
 /* The classic board's view fills the board's space. Its sheet (src/sheet-board.ts) lies at the view's top-left and a
    CSS transform from src/sheet.ts turns, tilts, scales and places it; the figures stand on a canvas over the whole
@@ -245,6 +259,8 @@ button:disabled { opacity: 0.45; cursor: default; }
    Arrows setting; the actions take the other side): four arms that touch an inert centre square, so no two buttons
    are apart. An arm's tab sits at the cross's outer edge, clear of its neighbours. */
 .strip {
+  grid-row: 3;
+  grid-column: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;

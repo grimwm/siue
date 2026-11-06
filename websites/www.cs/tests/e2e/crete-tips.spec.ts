@@ -4,6 +4,7 @@
 // goes first, and the first tip waits for it to end.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { helpAnswered } from './crete-answered.ts';
 
 const PAGE = 'games/crete/';
 const BEAST = 'The Minotaur takes two steps for each of yours, always toward you: across if he can, else up or down.';
@@ -147,7 +148,7 @@ test('the camera still turns while a tip holds play', async ({ page }) => {
 
 for (const [name, viewport] of [['a 360 px phone', { width: 360, height: 740 }], ['a desktop', { width: 1280, height: 800 }]] as const) {
   test(`${name}: retracing a step is an undo, said "Back to move N"; Best fits the status bar and turns amber past the fewest`, async ({ browser }) => {
-    const ctx = await browser.newContext({ viewport, reducedMotion: 'reduce' });
+    const ctx = await browser.newContext({ viewport, reducedMotion: 'reduce', storageState: helpAnswered() });
     try {
       await ctx.addInitScript(() => localStorage.setItem('crete-met', '["*"]'));
       const page = await ctx.newPage();

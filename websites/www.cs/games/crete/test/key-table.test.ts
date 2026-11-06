@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BACK_KEY } from '../../_kit/keys.ts';
 import { TOOLS } from '../src/puzzle/tiles.ts';
-import { KEYS, MOVE_DELTA, actionFor, isMove, itemFor } from '../src/keys.ts';
+import { KEYS, MOVE_DELTA, actionFor, isDemoKey, isMove, itemFor } from '../src/keys.ts';
 import type { Action } from '../src/keys.ts';
 
 const ACTIONS = Object.keys(KEYS) as Action[];
@@ -31,6 +31,11 @@ test('the rows the trials use', () => {
   assert.deepEqual(KEYS.story, { label: 'I', keys: ['i'] });
   assert.deepEqual(KEYS.fullscreen, { label: 'F', keys: ['f'] });
   assert.deepEqual(KEYS.lore, { label: 'L', keys: ['l'] });
+  // Demo's D is the title card's alone: it claims no key, and D stays a move everywhere.
+  assert.deepEqual(KEYS.demo, { label: 'D', keys: [] });
+  assert.equal(actionFor('d'), 'right');
+  assert.equal(isDemoKey('D'), true);
+  assert.equal(isDemoKey('p'), false);
   assert.deepEqual(KEYS.look, { label: 'B', keys: ['b'] });
   assert.equal(actionFor('B'), 'look');
   assert.equal('bash' in KEYS, false);

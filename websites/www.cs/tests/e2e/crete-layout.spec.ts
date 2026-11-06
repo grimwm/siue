@@ -8,6 +8,7 @@
 // scrolling; zoomed in, a step keeps the zoom and pans to keep Theseus in view, and Reset shows the whole level again.
 import { test, expect } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
+import { helpAnswered } from './crete-answered.ts';
 
 /** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
 const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
@@ -29,7 +30,7 @@ const DEVICES: Device[] = [
 const TABS = 15; // every control carries a key tab with a keyboard at hand
 
 async function open(browser: Browser, [, width, height, touch]: Device, pad?: 'left' | 'right') {
-  const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+  const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch, storageState: helpAnswered() });
   await ctx.addInitScript(allMet);
   const page = await ctx.newPage();
   const errors: string[] = [];

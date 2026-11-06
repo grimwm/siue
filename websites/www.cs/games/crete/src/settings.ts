@@ -13,7 +13,12 @@ export const LOOK_KEY = "crete-look";
 export const WALLS_KEY = "crete-walls";
 export const PAD_KEY = "crete-pad";
 export const MINIMAP_KEY = "crete-minimap";
+export const HELP_BUILD_KEY = "crete-help-build";
+/** The switch's earlier key, on by default: only an "off" the player chose there is carried over. */
 export const HELP_CHECK_KEY = "crete-help-check";
+
+/** Help Build Endless Levels: on or off as the player answered, unset (off) until they do. */
+export type HelpBuild = "on" | "off" | "unset";
 
 /** How the board is drawn: the painted 3D look, or the flat tiles. */
 export type Look = "modern" | "classic";
@@ -36,11 +41,14 @@ export interface Settings {
   pad: Pref<PadSide>;
   /** Only the modern look shows the mini map, and only when this is on. */
   minimap: Pref<OnOff>;
-  /** Whether this device checks Endless levels other players made, in its spare time (src/endless/verifier.ts). */
-  helpCheck: Pref<OnOff>;
+  /** Whether this device helps build Endless levels: sends the levels it makes up to the shared bank and checks
+   *  levels other players made in its spare time (src/endless/shared.ts, src/endless/verifier.ts). Unset until the
+   *  player answers, and unset is off. */
+  helpBuild: Pref<HelpBuild>;
 }
 
 export function createSettings(storage: StorageLike | null): Settings {
+  migrateHelpCheck(storage);
   return {
     sound: pref<OnOff>(SOUND_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
     music: pref<OnOff>(MUSIC_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
@@ -50,6 +58,19 @@ export function createSettings(storage: StorageLike | null): Settings {
     walls: pref<WallMode>(WALLS_KEY, "ghosted", oneOf<WallMode>(["solid", "ghosted", "low"], "ghosted"), storage),
     pad: pref<PadSide>(PAD_KEY, "left", oneOf<PadSide>(["left", "right"], "left"), storage),
     minimap: pref<OnOff>(MINIMAP_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
-    helpCheck: pref<OnOff>(HELP_CHECK_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
+    helpBuild: pref<HelpBuild>(HELP_BUILD_KEY, "unset", oneOf<HelpBuild>(["on", "off", "unset"], "unset"), storage),
   };
+}
+
+/** The old Help Check switch was on by default, so a stored "on" is no answer and is dropped; an "off" the player
+ *  chose stays off. The old key goes either way. */
+function migrateHelpCheck(storage: StorageLike | null): void {
+  try {
+    const old = storage?.getItem(HELP_CHECK_KEY);
+    if (old == null) return;
+    if (old === "off" && storage?.getItem(HELP_BUILD_KEY) == null) storage?.setItem(HELP_BUILD_KEY, "off");
+    storage?.removeItem(HELP_CHECK_KEY);
+  } catch {
+    // Storage that refuses keeps the default: unset, which is off.
+  }
 }

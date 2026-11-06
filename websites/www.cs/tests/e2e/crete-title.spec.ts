@@ -4,6 +4,7 @@
 // the seed.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { helpAnswered } from './crete-answered.ts';
 
 const PAGE = 'games/crete/';
 const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
@@ -24,7 +25,7 @@ async function boxes(page: Page): Promise<{ id: string; x: number; w: number; ri
 for (const [name, viewport, touch] of [['a 360 px phone', { width: 360, height: 740 }, true], ['a 412 px phone', { width: 412, height: 915 }, true], ['a desktop', { width: 1280, height: 800 }, false]] as const) {
   for (const look of ['modern', 'classic'] as const) {
     test(`${name}, ${look}: the title buttons share one column, the way in across it and the rest in even halves, a lone last one across`, async ({ browser }) => {
-      const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch });
+      const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch, storageState: helpAnswered() });
       try {
         const page = await ctx.newPage();
         await ctx.addInitScript(l => localStorage.setItem('crete-look', l), look);

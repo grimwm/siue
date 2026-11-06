@@ -23,6 +23,8 @@ import { threadPath } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
 import type { Cell, Dir, HazardKind, ObjectKind } from './puzzle/tiles.ts';
 import { meetingsOf } from './dictionary.ts';
+import { boxedIn, boxedInLine, toolLines } from './tool-effects.ts';
+import type { Input } from './tool-effects.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
@@ -57,6 +59,8 @@ export interface GameDeps {
   /** Whether meeting this Dictionary entry (an item taken, an active tile touched) is a first, whose card the page
    *  shows: a turn's animation stops where the figure first meets each such entry. None is, when not given. */
   isFirst?(id: string): boolean;
+  /** How the player plays, for the lines that name a key or a button (src/tool-effects.ts): keys when not given. */
+  input?(): Input;
 }
 
 export interface Anim {
@@ -191,6 +195,7 @@ export function createGame(deps: GameDeps): Game {
   /** The actions that made the try as it stands, from the level's start. */
   let played: Action[] = [];
   const search = deps.solve ?? solve;
+  const input = (): Input => deps.input?.() ?? 'keys';
 
   const stop = (): void => {
     if (tick === null) return;
@@ -258,6 +263,8 @@ export function createGame(deps: GameDeps): Game {
     const r = act(run, a);
     if (r.run === run) {
       if (run.now.outcome === 'playing') deps.sfx('bump');
+      // Every way shut, a bump looks like a frozen game: say what still plays.
+      if (boxedIn(run.now)) deps.say(boxedInLine(input()), 'info');
       return false;
     }
     const before = run.now;
@@ -269,7 +276,11 @@ export function createGame(deps: GameDeps): Game {
       deps.say(`↶ Back to move ${run.now.moves}`, 'info');
     }
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
+    // The tools' lines first, so a catch in the same turn is the line the toast ends on.
+    for (const t of toolLines(a, r.events, before, run.now, input())) deps.say(t, 'info');
     voice(r.events, before, run.now);
+    // A catch's own line stands; a bump says this one again.
+    if (!r.events.some(e => e.kind === 'caught') && boxedIn(run.now)) deps.say(boxedInLine(input()), 'info');
     took = r.events.flatMap(e => (e.kind === 'took' ? [e.what] : []));
     turn = {
       beast: r.events.flatMap(e => (e.kind === 'moved' && e.who === 'minotaur' ? [wayOf(e.from, e.to)] : [])),

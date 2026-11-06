@@ -659,3 +659,37 @@ test('Desktop: the wheel zooms the classic board; a double click and Restart sho
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+/** A mirror and a cow by Theseus, for the status bar's effect chips. */
+const TOOL_HALL = ['title: Mirror and Cow', 'intro: A mirror and a cow.', '', '###########', '#Pzc.....M#', '#.........#', '#........E#', '###########', ''].join('\n');
+
+for (const device of DEVICES) {
+  test(`${device[0]}: both effect chips fit the status bar beside the longest stats, over nothing`, async ({ browser }) => {
+    const { ctx, page, errors } = await open(browser, device);
+    await expect(page.locator('#title-veil')).toBeVisible();
+    await page.evaluate(text => {
+      const t = (window as unknown as { __creteTest: { parse(s: string): unknown; playLevel(l: unknown, o: unknown): void } }).__creteTest;
+      t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Mirror and Cow', best: null } });
+    }, TOOL_HALL);
+    await page.locator('#start-begin').click();
+    for (const k of ['ArrowRight', 'ArrowRight', 'z', 'c']) await page.keyboard.press(k);
+    await expect(page.locator('#fx-stone')).toBeVisible();
+    await expect(page.locator('#fx-cow')).toBeVisible();
+    await page.waitForSelector('#stage[data-cell]');
+    await page.evaluate(setWorst);
+    await expect.poll(() => page.evaluate(measure)).toEqual([]);
+    const overlaps = await page.evaluate(() => {
+      const fx = document.querySelector('#status-root .stat-effects')!.getBoundingClientRect();
+      return [...document.querySelectorAll<HTMLElement>('#status-root .stat:not(.stat-effects), #status-root button')]
+        .filter(el => el.getClientRects().length > 0)
+        .filter(el => {
+          const r = el.getBoundingClientRect();
+          return r.left < fx.right - 0.5 && r.right > fx.left + 0.5 && r.top < fx.bottom - 0.5 && r.bottom > fx.top + 0.5;
+        })
+        .map(el => el.id || el.querySelector('dd')?.id || el.className);
+    });
+    expect(overlaps, 'the chips cover no stat and no button').toEqual([]);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}

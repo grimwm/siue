@@ -383,6 +383,8 @@ const game = createGame({
   clock,
   reducedMotion: () => reduced,
   isFirst: id => ui.isFirst(id),
+  // Keys are named where they show (a fine pointer, src/ui/strip.tsx's key tabs); buttons by face elsewhere.
+  input: () => (typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches ? 'keys' : 'touch'),
   changed: () => {
     ui.render(game);
     showModern();

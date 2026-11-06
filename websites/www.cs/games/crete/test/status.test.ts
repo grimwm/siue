@@ -51,3 +51,12 @@ test('Best is the fewest possible; past it, by how many; the player\'s own best 
   assert.equal(over.over, 3);
   assert.match(over.bestNote, /^Fewest possible moves 12; 3 over.*; your best clear 13$/);
 });
+
+test('the effects at work pass through as chips, in order; none by default', () => {
+  assert.deepEqual(statusView(base).effects, []);
+  const fx = [
+    { id: 'stone', label: 'Stone: 2 Turns', note: 'The Minotaur is stone for 2 more turns.' },
+    { id: 'cow', label: 'Chasing the Cow', note: 'The Minotaur goes for the cow, not you, until he reaches it.' },
+  ] as const;
+  assert.deepEqual(statusView({ ...base, effects: fx }).effects.map(e => e.label), ['Stone: 2 Turns', 'Chasing the Cow']);
+});

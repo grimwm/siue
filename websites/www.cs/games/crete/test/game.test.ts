@@ -361,7 +361,7 @@ test('a bomb, a snare, a thief and a revealed wall each get one line; hazard ste
   const wall = lone(['PW...M'], '');
   wall.game.press(R_);
   assert.deepEqual(wall.said, ['A false wall gives way!']);
-  const unseen = lone(['PI...M'], '');
+  const unseen = lone(['PI...M', '......'], '');
   unseen.game.press(R_);
   assert.deepEqual(unseen.said, ['A hidden wall!']);
   const steps = lone(['P....o'], 'facing: left');
@@ -444,4 +444,35 @@ test('undo back onto the line uses it again', () => {
   h.game.hint();
   assert.equal(h.solves(), 1, 'restart clears the moves played');
   assert.equal(h.game.run!.now.moves, 3);
+});
+
+test('a tool picked up, used and worn off is said; a catch in the same turn is said last', () => {
+  const { game, said } = lone(['#############', '#Pz........M#', '#############']);
+  game.press(R_);
+  assert.match(said.at(-1)!, /^Medusa's mirror: press Z to raise it\./);
+  game.press({ kind: 'tool', tool: 'mirror' });
+  assert.equal(said.at(-1), 'The Minotaur is stone for 3 more turns. Stone blocks everyone like a wall.');
+  for (let i = 0; i < 3; i++) game.press({ kind: 'wait' });
+  assert.equal(said.at(-1), 'The stone wears off: the Minotaur moves again next turn.');
+  const cow = lone(['#####', '#.Pc#', '#M..#', '#####']);
+  cow.game.press(R_);
+  cow.game.press({ kind: 'tool', tool: 'cow' });
+  assert.match(cow.said.at(-1)!, /^Caught!/);
+});
+
+test('boxed in, a bump says what still plays, by key or by button', () => {
+  const { game, said, sounds } = lone(['#####', '#PM.#', '##..#', '#####']);
+  game.press(mv('down'));
+  assert.deepEqual(sounds, ['bump']);
+  assert.equal(said.at(-1), 'No way to move: press . to Wait (the Minotaur moves) or U to Undo.');
+  const m = manualClock();
+  const said2: string[] = [];
+  const touch = createGame({
+    sfx() {}, say: t => said2.push(t), progress: createProgress(null), pages: createFoundPages(null), input: () => 'touch',
+    timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'lone', level: () => parse('title: t\nintro: i\n\n#####\n#PM.#\n##..#\n#####\n') },
+  });
+  touch.open(0);
+  touch.press(mv('left'));
+  assert.equal(said2.at(-1), 'No way to move: tap Wait (the Minotaur moves) or Undo.');
 });

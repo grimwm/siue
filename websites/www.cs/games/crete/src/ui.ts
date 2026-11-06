@@ -38,6 +38,7 @@ import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter, placeWord
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
+import { TOOL_EMOJI, activeEffects } from "./tool-effects.ts";
 import { centredOn, createSheetView, eye, holdTarget, keepInView, panned, project, sheetCell, unproject, wholeFrame } from "./sheet.ts";
 import type { Frame } from "./sheet.ts";
 import { createCompassButton } from "./modern/controls.ts";
@@ -218,11 +219,12 @@ export interface Ui {
   setDemo(view: DemoView | null): void;
 }
 
-const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "🐄" };
 const TOOL_KINDS = Object.keys(TOOLS) as Tool[];
 
 const LOG_LIMIT = 80;
 const TOAST_MS = 3000;
+/** A long line stays up long enough to read: about 55 ms a character, never less than TOAST_MS. */
+const toastMs = (text: string): number => Math.max(TOAST_MS, text.length * 55);
 /** A wheel line, in pixels. */
 const WHEEL_LINE_PX = 16;
 /** How long the classic view rests before the sheet is drawn again at the cell that fits it. */
@@ -875,7 +877,7 @@ export function createUi(deps: UiDeps): Ui {
     toast.textContent = text;
     toast.className = tone ? `toast show ${tone}` : "toast show";
     timers.clearTimeout(toastTimer);
-    toastTimer = timers.setTimeout(() => { toast.className = toast.className.split(" ").filter((c) => c !== "show").join(" "); }, TOAST_MS);
+    toastTimer = timers.setTimeout(() => { toast.className = toast.className.split(" ").filter((c) => c !== "show").join(" "); }, toastMs(text));
     if (layers.isOpen("menu")) drawLayers();
   }
 
@@ -1105,6 +1107,7 @@ export function createUi(deps: UiDeps): Ui {
         gear: s.gear,
         moves: s.moves,
         stone: s.stone,
+        effects: activeEffects(s),
         ...fewestOf(g, out),
       }),
       menuKey: KEYS.menu.label,

@@ -29,8 +29,9 @@
  * posting it, for tools/upload-bank.ts to post later; it needs no token, and with one it still keeps to the room.
  *
  * Over HTTPS only (never ssh or sftp); the CRETE_BANK_VERIFIER_TOKEN secret goes in the X-Crete-Verifier header and is
- * never printed. A run always exits 0 once it starts: a failed run only leaves the bank as it was (`--status` exits 1
- * when it cannot read the bank). Options it cannot take
+ * never printed. A post the bank fails is logged and tried again, and only failures that persist stop the run
+ * (tools/bank-post.ts); the halt line says why. A run always exits 0 once it starts: a
+ * failed run only leaves the bank as it was (`--status` exits 1 when it cannot read the bank). Options it cannot take
  * exit 2 before anything starts.
  *
  *   CRETE_BANK_VERIFIER_TOKEN=… node tools/generate-bank.ts [--minutes 35] [--workers n] [--url <endpoint>]
@@ -51,7 +52,8 @@ import { rngOf } from '../src/endless/random.ts';
 import { BANKS } from '../src/endless/bank.ts';
 import { parse } from '../src/puzzle/level.ts';
 import type { Grade } from '../src/puzzle/rating.ts';
-import { BANK_URL, TOKEN_HEADER } from './verify-bank.ts';
+import { BANK_URL } from './verify-bank.ts';
+import { answeredLine, backoffMs, Failures, transient, trustedPoster } from './bank-post.ts';
 
 /** Each grade's share of a run's part time while it has room; a grade without room passes its share to the others. */
 export const TIME_SHARE: Readonly<Record<Grade, number>> = { hard: 0.5, medium: 0.3, easy: 0.2 };
@@ -172,8 +174,22 @@ export function tupleFor(want: Want, random: () => number): Tuple {
 }
 
 /** A post's outcome: `ok` took room, `replaced` retired a served level for it; `duplicate` is a layout the bank holds
- *  and `retired` one it served once and let go, neither taken. */
-export type Upload = 'ok' | 'replaced' | 'duplicate' | 'retired' | 'full' | 'rate' | 'error';
+ *  and `retired` one it served once and let go, neither taken; `full` the grade at its cap and `rate` this runner's
+ *  hourly share spent. `refused` is the bank turning this one level down (400, or a 409 it gives no known reason
+ *  for); `denied` the bank turning this runner down (403: a generator version it no longer takes, every post faring
+ *  the same). `error` is a post that may fare better later (tools/bank-post.ts's `transient`, or a 200 the run cannot
+ *  read). */
+export type Upload = 'ok' | 'replaced' | 'duplicate' | 'retired' | 'full' | 'rate' | 'refused' | 'denied' | 'error';
+
+/** What a trusted-add's answer means (as Upload), from its status and body. */
+export function uploadOf(status: number, body: unknown): Upload {
+  const b = body !== null && typeof body === 'object' ? body as { error?: unknown; h?: unknown; retired?: unknown } : null;
+  if (status === 200) return typeof b?.h === 'string' ? (typeof b.retired === 'string' ? 'replaced' : 'ok') : 'error';
+  if (status === 409) return b?.error === 'duplicate' || b?.error === 'retired' || b?.error === 'full' ? b.error : 'refused';
+  if (status === 429) return 'rate';
+  if (transient(status)) return 'error';
+  return status === 400 ? 'refused' : 'denied';
+}
 
 export interface GenerateDeps {
   /** Each grade's shelf, or null when the bank would not say. */
@@ -188,6 +204,8 @@ export interface GenerateDeps {
   now(): number;
   /** Resolves after `ms`. */
   wait(ms: number): Promise<void>;
+  /** In [0, 1): the jitter in a retry's wait (Math.random when not given). */
+  random?: () => number;
   /** Ends the parts still running. */
   stop(): void;
   log(line: string): void;
@@ -204,6 +222,8 @@ export interface Made {
   emptyBy: PerGrade<number>; refusedBy: PerGrade<number>; duplicateBy: PerGrade<number>; retiredBy: PerGrade<number>; spentMs: PerGrade<number>; levelMs: PerGrade<number[]>;
   /** The grades stopped at their cap with rollover off, and what the run says about each. */
   capped: Grade[]; hints: string[];
+  /** Why the run stopped before its time or counts were done (a spent hourly share, a failing or refusing bank), or null. */
+  halt: string | null;
 }
 
 /** What a run says of a grade it stopped at its cap with rollover off: how many it still owes, and how to go on. */
@@ -244,20 +264,31 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
   const zero = () => ({ easy: 0, medium: 0, hard: 0 });
   const out: Made = {
     tried: 0, found: zero(), added: zero(), replaced: zero(), empty: 0, refused: 0,
-    emptyBy: zero(), refusedBy: zero(), duplicateBy: zero(), retiredBy: zero(), spentMs: zero(), levelMs: { easy: [], medium: [], hard: [] }, capped: [], hints: [],
+    emptyBy: zero(), refusedBy: zero(), duplicateBy: zero(), retiredBy: zero(), spentMs: zero(), levelMs: { easy: [], medium: [], hard: [] }, capped: [], hints: [], halt: null,
   };
-  let counts: Counts | null;
-  try { counts = await deps.counts(); } catch { counts = null; }
-  if (!counts) { deps.log('could not read the bank\'s counts; nothing made'); return out; }
+  const random = deps.random ?? Math.random;
+  const failures = new Failures(deps.now);
+  let counts: Counts | null = null;
+  for (let attempt = 0; !counts; attempt++) {
+    try { counts = await deps.counts(); } catch { counts = null; }
+    if (counts) break;
+    const why = failures.failed();
+    if (why) { out.halt = why; deps.log(`could not read the bank's counts: ${why}; nothing made`); return out; }
+    await deps.wait(backoffMs(attempt, random));
+  }
+  failures.answered();
   const grades = limits.grades ?? GRADES, count = limits.count ?? null, rollover = limits.rollover ?? true;
   const tally = limitedTally(counts, grades, count, rollover);
-  const full = new Set<Grade>();
+  // The grades the bank said were full, and those whose room under the cap (rollover off) runs short of what was asked;
+  // only a grade the bank said was full, or whose room this run filled, is reported capped.
+  const full = new Set<Grade>(), short = new Set<Grade>();
+  const room0 = { easy: roomOf(counts.easy), medium: roomOf(counts.medium), hard: roomOf(counts.hard) };
   for (const g of GRADES) {
     const asked = count?.[g] ?? 0;
-    if (grades.includes(g) && !rollover && (count !== null ? tally[g].room < asked : roomOf(counts[g]) === 0)) full.add(g);
+    if (grades.includes(g) && !rollover && (count !== null ? tally[g].room < asked : room0[g] === 0)) short.add(g);
     const plan = !grades.includes(g) ? 'not asked for'
-      : count !== null ? `making ${asked}${full.has(g) ? `, room for ${tally[g].room}` : ''}`
-      : full.has(g) ? 'full, rollover off: none made'
+      : count !== null ? `making ${asked}${short.has(g) ? `, room for ${tally[g].room}` : ''}`
+      : short.has(g) ? 'full, rollover off: none made'
       : tally[g].replace ? `full, replacing up to ${tally[g].room}` : `room for ${tally[g].room}`;
     deps.log(`${g}: ${counts[g].served} served, ${counts[g].pending} waiting, ${plan}; ${tally[g].plateau} on the plateau, ${tally[g].large} of them large`);
   }
@@ -266,7 +297,21 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
   let lastProgress = started0;
   // The levels this run made, so one it makes twice is not sent twice.
   const seen = new Set<string>();
-  let halted = false, errors = 0;
+  let halted = false;
+  const stopFor = (why: string) => { halted = true; out.halt = why; deps.log(`${why}; stopping`); };
+  /** Posts a level, trying again after a growing wait while the bank fails, until it answers or the run halts. */
+  const post = async (t: Tuple, made: SharedMade, replace: boolean): Promise<Upload> => {
+    for (let attempt = 0; ; attempt++) {
+      if (halted) return 'error';
+      const sent = await deps.upload(t, made, replace).catch((): Upload => 'error');
+      if (sent !== 'error') { failures.answered(); return sent; }
+      const why = failures.failed();
+      if (why) { if (!halted) stopFor(why); return 'error'; }
+      const wait = backoffMs(attempt, random);
+      deps.log(`${t.grade}: trying that level again in ${Math.round(wait / 1000)} s`);
+      await deps.wait(wait);
+    }
+  };
   const running = new Set<Promise<void>>();
 
   const finish = async (want: Want, t: Tuple, made: SharedMade | null, started: number): Promise<void> => {
@@ -284,7 +329,7 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
     const s = tally[want.grade];
     const again = seen.has(made.text);
     seen.add(made.text);
-    const sent = again ? 'duplicate' : halted ? 'error' : await deps.upload(t, made, s.replace).catch((): Upload => 'error');
+    const sent = again ? 'duplicate' : await post(t, made, s.replace);
     if (sent === 'duplicate' || sent === 'retired') {
       // Held already, or served once and let go: it counts toward nothing (not the count, the room or the cap), so
       // the grade makes another.
@@ -294,7 +339,6 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
       return;
     }
     if (sent === 'ok' || sent === 'replaced') {
-      errors = 0;
       out.added[want.grade]++;
       if (sent === 'replaced') out.replaced[want.grade]++;
       s.total++;
@@ -309,8 +353,8 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
     out.refusedBy[want.grade]++;
     s.room++;
     if (sent === 'full') { s.room = 0; full.add(want.grade); deps.log(`${want.grade} is full`); }
-    if (sent === 'rate') { halted = true; deps.log('the bank\'s hourly share for this runner is spent; stopping'); }
-    if (sent === 'error' && !halted && ++errors >= 3) { halted = true; deps.log('the bank keeps failing; stopping'); }
+    if (sent === 'rate' && !halted) stopFor('the bank\'s hourly share for this runner is spent');
+    if (sent === 'denied' && !halted) stopFor('the bank turned this runner down (logged above)');
   };
 
   for (;;) {
@@ -343,7 +387,9 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
     }
   }
   for (const g of grades) {
-    if (!full.has(g) || (count !== null && out.added[g] >= (count[g] ?? 0))) continue;
+    // Capped: the bank said full, or rollover off and this run filled the room there was (none, for a full grade).
+    const filled = short.has(g) && out.added[g] >= room0[g];
+    if (!(full.has(g) || filled) || (count !== null && out.added[g] >= (count[g] ?? 0))) continue;
     const hint = capHint(g, counts[g].cap, count !== null ? (count[g] ?? 0) - out.added[g] : null, count?.[g] ?? null);
     out.capped.push(g); out.hints.push(hint); deps.log(hint);
   }
@@ -584,18 +630,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (typeof options === 'string') { console.error(`generate-bank: ${options}`); process.exit(2); }
   const { minutes, workers } = options;
   let code = 0;
-  const post = async (body: Record<string, unknown>): Promise<{ status: number; body: unknown }> => {
-    const res = await fetch(url!, {
-      method: 'POST', signal: AbortSignal.timeout(60_000),
-      headers: { 'Content-Type': 'application/json', [TOKEN_HEADER]: token },
-      body: JSON.stringify(body),
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  };
+  const post = trustedPoster(url ?? '', token, log);
   const counts = async (): Promise<Counts | null> => {
-    const r = await post({ op: 'trusted-counts' });
-    if (r.status !== 200) { log(`the bank answered ${r.status} for its counts`); return null; }
-    return (r.body as { grades: Counts }).grades;
+    const r = await post({ op: 'trusted-counts' }, 'trusted-counts');
+    const grades = (r.body as { grades?: Counts } | null)?.grades;
+    if (r.status === 200 && grades && GRADES.every(g => grades[g])) return grades;
+    if (r.status) log(answeredLine('trusted-counts', r, token));
+    return null;
   };
   const save = options.saveOnly;
   if (options.plan) {
@@ -626,21 +667,19 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
             if (result === 'ok') log(`${tuple.grade}: saved ${name} (score ${made.score})`);
             return result;
           }
-          const r = await post(replace ? { op: 'trusted-add', tuple, made, replace } : { op: 'trusted-add', tuple, made });
-          const error = (r.body as { error?: unknown } | null)?.error;
-          if (r.status === 200) {
+          const what = `${tuple.grade}: trusted-add`;
+          const r = await post(replace ? { op: 'trusted-add', tuple, made, replace } : { op: 'trusted-add', tuple, made }, what);
+          if (!r.status) return 'error';
+          const sent = uploadOf(r.status, r.body);
+          if (sent === 'ok' || sent === 'replaced') {
             const { h, retired } = r.body as { h: string; retired?: string };
             log(retired ? `${tuple.grade}: replaced ${retired} with ${h} (score ${made.score})` : `${tuple.grade}: added ${h} (score ${made.score})`);
-            return retired ? 'replaced' : 'ok';
-          }
-          if (r.status === 409 && (error === 'duplicate' || error === 'retired' || error === 'full')) return error;
-          if (r.status === 429) return 'rate';
-          log(`${tuple.grade}: the bank answered ${r.status}`);
-          return 'error';
+          } else if (sent === 'error' || sent === 'refused' || sent === 'denied') log(answeredLine(what, r, token));
+          return sent;
         },
         tupleFor: w => tupleFor(w, Math.random),
         now: () => Date.now(),
-        wait: ms => new Promise(r => setTimeout(r, ms).unref()),
+        wait: ms => new Promise(r => setTimeout(r, ms)),
         stop: () => pool.stop(),
         log,
       }, { ms: minutes * 60_000, grades: options.grades, count: options.count, rollover: options.rollover });

@@ -69,6 +69,8 @@ function bank(files: { grade: Grade; i: number }[], c: Counts, answer: (t: Tuple
     post: async (tuple, _made, replace) => { posts.push({ grade: tuple.grade, replace }); t += 1000; return answer(tuple, replace, posts.length - 1); },
     move: (n, to) => { moved[n] = to; dir.delete(n); },
     now: () => t,
+    wait: async ms => { t += ms; },
+    random: () => 0.5,
     log: l => lines.push(l),
   };
   return { deps, moved, posts, lines, left: () => [...dir.keys()] };
@@ -95,23 +97,37 @@ test('it fills a grade\'s room, then stops it unless rollover is on, leaving the
   assert.equal(f.posts.length, 1, 'one try, then the grade waits');
 });
 
-test('taken and duplicate files move to uploaded/, refused ones to rejected/ with the reason, failures stay', async () => {
+test('taken and duplicate files move to uploaded/, refused ones to rejected/ with the reason, lasting failures stay', async () => {
   const files = [{ grade: 'easy' as Grade, i: 0 }, { grade: 'easy' as Grade, i: 1 }, { grade: 'medium' as Grade, i: 0 }, { grade: 'hard' as Grade, i: 0 }];
   let easy = 0;
   const answer = (t: Tuple): Posted => (t.grade === 'easy' ? (easy++ ? { kind: 'duplicate' } : { kind: 'added' })
-    : t.grade === 'medium' ? { kind: 'rejected', reason: '403 version: the bank no longer takes this generator version' } : { kind: 'error' });
+    : t.grade === 'hard' ? { kind: 'rejected', reason: '403 version: the bank no longer takes this generator version' } : { kind: 'error' });
   const b = bank(files, { easy: shelf(0), medium: shelf(0), hard: shelf(0) }, answer);
   const u = await uploadAll(b.deps, { grades: ['easy', 'medium', 'hard'], rollover: false, dir: 'saved' });
   assert.deepEqual(Object.values(b.moved).sort(), ['rejected', 'uploaded', 'uploaded']);
-  assert.equal(b.left().length, 1, 'the one the bank did not answer waits');
-  assert.ok(b.lines.some(l => /medium-.*: rejected, 403 version/.test(l)));
+  assert.equal(b.left().length, 1, 'the one the bank never answered waits');
+  assert.match(u.halt!, /^the bank has failed \d+ tries in a row over \d+ min/);
+  assert.ok(b.lines.some(l => /^medium-.*: trying again in \d+ s$/.test(l)), 'tried again first');
+  assert.ok(b.lines.some(l => /hard-.*: rejected, 403 version/.test(l)));
   assert.deepEqual(u.grades.easy, { added: 1, replaced: 0, duplicate: 1, retired: 0, rejected: 0, left: 0 });
   assert.deepEqual(uploadLines(u, ['easy', 'medium', 'hard']), [
     'easy: added 1, replaced 0, duplicate 1, retired 0, rejected 0, left 0',
-    'medium: added 0, replaced 0, duplicate 0, retired 0, rejected 1, left 0',
-    'hard: added 0, replaced 0, duplicate 0, retired 0, rejected 0, left 1',
-    'sent 3 in 4 s (2700 per hour)',
+    'medium: added 0, replaced 0, duplicate 0, retired 0, rejected 0, left 1',
+    'hard: added 0, replaced 0, duplicate 0, retired 0, rejected 1, left 0',
+    `sent 3 in ${u.seconds} s (${Math.round((3 / u.seconds) * 3600)} per hour)`,
   ]);
+  // A bank that comes back after a few failed tries takes the file: nothing waits, nothing stops.
+  let tries = 0;
+  const back = bank([{ grade: 'hard', i: 0 }], { easy: shelf(0), medium: shelf(0), hard: shelf(0) }, () => (++tries <= 3 ? { kind: 'error' } : { kind: 'added' }));
+  const bu = await uploadAll(back.deps, { grades: ['hard'], rollover: false, dir: 'saved' });
+  assert.equal(bu.grades.hard.added, 1);
+  assert.equal(bu.halt, null);
+  assert.equal(back.left().length, 0);
+  // A bank that turns this runner down stops it at once.
+  const denied = bank(files, { easy: shelf(0), medium: shelf(0), hard: shelf(0) }, () => ({ kind: 'denied' }));
+  const du = await uploadAll(denied.deps, { grades: ['easy', 'medium', 'hard'], rollover: false, dir: 'saved' });
+  assert.equal(du.halt, 'the bank turned this runner down (logged above)');
+  assert.equal(denied.posts.length, 1);
   // Only the named grades are sent; a file that does not read is rejected without a post.
   const only = bank(files, { easy: shelf(0), medium: shelf(0), hard: shelf(0) }, () => ({ kind: 'added' }));
   only.deps.read = n => (n.startsWith('hard-') ? 'nonsense' : '');
@@ -135,8 +151,12 @@ test('the bank\'s answers read as added, replaced, duplicate, full, rejected wit
   assert.deepEqual(postedOf(429, null), { kind: 'rate' });
   assert.deepEqual(postedOf(400, { error: 'invalid', field: 'made.line' }), { kind: 'rejected', reason: '400 invalid (made.line)' });
   assert.match((postedOf(403, { error: 'version' }) as { reason: string }).reason, /no longer takes/);
-  assert.deepEqual(postedOf(403, { error: 'forbidden' }), { kind: 'error' }, 'a bad token is not the file\'s fault');
+  assert.deepEqual(postedOf(403, { error: 'forbidden' }), { kind: 'denied' }, 'a bad token is not the file\'s fault');
+  assert.deepEqual(postedOf(401, { error: 'unauthorized' }), { kind: 'error' }, 'a deploy can give a 401 for a moment');
+  assert.deepEqual(postedOf(404, null), { kind: 'error' }, 'or a 404: tried again, never rejected');
   assert.deepEqual(postedOf(500, null), { kind: 'error' });
+  assert.deepEqual(postedOf(0, null), { kind: 'error' }, 'no answer');
+  assert.deepEqual(postedOf(200, null), { kind: 'error' }, 'a 200 that is not the bank\'s JSON');
 });
 
 test('uploading the same folder twice leaves the bank as the first upload left it', async () => {
@@ -157,7 +177,7 @@ test('uploading the same folder twice leaves the bank as the first upload left i
   const run = async (dir: Map<string, string>) => {
     const deps: UploadDeps = {
       counts: async () => ({ easy: { served: held.length, pending: 0, cap, levels: [] }, medium: shelf(0), hard: shelf(0) }),
-      files: () => [...dir.keys()], read: n => dir.get(n)!, post, move: (n, to) => { dir.delete(n); moved.push(to); }, now: () => 0, log: () => {},
+      files: () => [...dir.keys()], read: n => dir.get(n)!, post, move: (n, to) => { dir.delete(n); moved.push(to); }, now: () => 0, wait: async () => {}, log: () => {},
     };
     return uploadAll(deps, { grades: ['easy'], rollover: true, dir: 'saved' });
   };

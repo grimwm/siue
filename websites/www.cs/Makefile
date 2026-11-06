@@ -133,7 +133,8 @@ stats-e2e: ## Visitor statistics browser check in a throwaway docker project
 # and crete-verify-levels checks the levels waiting in quarantine (games/crete/tools/verify-bank.ts). The token is
 # CRETE_BANK_VERIFIER_TOKEN when it is set (the workflow loads it), otherwise it is read with op from 1Password; it
 # lives in the recipe's environment only and is never printed. crete-levels caps the whole run at MEMORY_LIMIT with
-# systemd-run where that works, and sizes its workers by MEMORY_LIMIT either way.
+# systemd-run --user and sizes its workers by MEMORY_LIMIT; where systemd-run cannot cap it, it refuses to start unless
+# ALLOW_UNCAPPED=yes (as on GitHub's runner, a throwaway VM), which runs it uncapped with each worker's heap capped.
 .PHONY: crete-levels crete-levels-upload crete-bank-status crete-verify-levels
 MEMORY_LIMIT ?= 8G
 CRETE_TOKEN_REF = op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
@@ -151,17 +152,19 @@ CRETE_LEVEL_ARGS = $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") $(if $(COU
 	$(if $(MINUTES),--minutes "$(MINUTES)",$(if $(COUNT_PER_DIFFICULTY),,--minutes 60)) $(if $(WORKERS),--workers "$(WORKERS)") \
 	--rollover "$(or $(ROLLOVER),no)" $(if $(SAVE_ONLY),--save-only "$(SAVE_ONLY)")
 
-##@ Crete shared bank (crete-levels also takes MEMORY_LIMIT=8G WORKERS STATS_FILE; games/crete/README.md)
+##@ Crete shared bank (crete-levels also takes MEMORY_LIMIT=8G WORKERS STATS_FILE ALLOW_UNCAPPED; games/crete/README.md)
 crete-levels: ## Make levels (DIFFICULTY COUNT_PER_DIFFICULTY MINUTES ROLLOVER SAVE_ONLY ...)
 	@limit=$$(printf '%s' "$(MEMORY_LIMIT)" | tr kmg KMG); \
 	case "$$limit" in [0-9]*K|[0-9]*M|[0-9]*G) n=$${limit%?}; case "$$n" in *[!0-9]*) n=;; esac;; *) n=;; esac; \
 	test -n "$$n" || { echo "$@: MEMORY_LIMIT must be a size such as 8G, 12g or 12000M" >&2; exit 2; }; \
 	case "$$limit" in *K) mb=$$((n / 1024));; *M) mb=$$n;; *G) mb=$$((n * 1024));; esac; \
 	node games/crete/tools/generate-bank.ts --plan --memory-mb "$$mb" $(CRETE_LEVEL_ARGS) || exit $$?; \
-	$(if $(SAVE_ONLY),$(CRETE_TOKEN_IF_ANY),$(CRETE_TOKEN)); \
 	cap=; if systemd-run --user --scope -q -p MemoryMax=$$limit -p MemorySwapMax=0 true 2>/dev/null; then \
 		cap="systemd-run --user --scope -q -p MemoryMax=$$limit -p MemorySwapMax=0"; \
-	else echo "$@: systemd-run is not available here; the workers are sized for $$limit but the run is not capped"; fi; \
+	elif [ "$(ALLOW_UNCAPPED)" = yes ]; then \
+		echo "$@: systemd-run --user cannot cap this run; going on uncapped (ALLOW_UNCAPPED=yes), each worker's heap still capped"; \
+	else echo "$@: systemd-run --user cannot cap this run at $$limit here; nothing done (ALLOW_UNCAPPED=yes runs it uncapped)" >&2; exit 1; fi; \
+	$(if $(SAVE_ONLY),$(CRETE_TOKEN_IF_ANY),$(CRETE_TOKEN)); \
 	stats="$(STATS_FILE)"; test -n "$$stats" || stats="$${XDG_STATE_HOME:-$$HOME/.local/state}/crete/levels-runs.jsonl"; \
 	$$cap node games/crete/tools/generate-bank.ts --memory-mb "$$mb" $(CRETE_LEVEL_ARGS) --stats-file "$$stats"
 

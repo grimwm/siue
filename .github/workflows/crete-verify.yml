@@ -79,4 +79,5 @@ jobs:
         run: |
           left=$(( 47 - ( $(date +%s) - CRETE_START ) / 60 ))
           if [ "$left" -lt 2 ]; then echo "generate-bank: no time left in this run"; exit 0; fi
-          make -C websites/www.cs crete-levels MINUTES="$left" ROLLOVER=yes
+          # The runner has no user systemd to cap the run; it is a throwaway VM, and each worker's heap is still capped.
+          make -C websites/www.cs crete-levels MINUTES="$left" ROLLOVER=yes ALLOW_UNCAPPED=yes

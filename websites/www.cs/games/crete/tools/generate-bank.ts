@@ -528,6 +528,7 @@ export function optionsOf(argv: readonly string[], cores: number, totalMb: numbe
   if (typeof count === 'string') return count;
   const memoryMb = has('memory-mb') ? positive(arg('memory-mb')) : null;
   if (has('memory-mb') && memoryMb === null) return '--memory-mb must be a whole number of megabytes';
+  if (memoryMb !== null && memoryMb < WORKER_MB) return `--memory-mb ${memoryMb} is less than one worker needs (${WORKER_MB} MB)`;
   let minutes = count !== null ? Infinity : 35;
   if (has('minutes')) {
     minutes = Number(arg('minutes'));

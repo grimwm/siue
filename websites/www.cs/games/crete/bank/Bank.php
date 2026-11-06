@@ -1100,9 +1100,10 @@ final class Bank
             $pendingRaw = self::read($pendingPath);
             $retiredRaw = self::read($retiredPath);
             $retired = array_fill_keys(self::decodeHashes($retiredRaw, $retiredPath), true);
-            $before = array_column(self::decodeList($servedRaw, $servedPath), 'h');
+            $stored = self::decodeList($servedRaw, $servedPath);
+            $before = array_column($stored, 'h');
             $accepted = fn(array $e): bool => in_array($e['v'] ?? null, $this->config['accept'], true);
-            $served = array_values(array_filter(self::decodeList($servedRaw, $servedPath), $accepted));
+            $served = array_values(array_filter($stored, $accepted));
             $since = ($this->clock)() - $this->config['pendingDays'] * self::DAY;
             $pending = array_values(array_filter(
                 self::decodeList($pendingRaw, $pendingPath),

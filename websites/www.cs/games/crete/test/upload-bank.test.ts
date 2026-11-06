@@ -34,6 +34,8 @@ test('a saved level holds what trusted-add sends, reads back the same, and is na
   assert.match(readLevelFile(JSON.stringify({ ...JSON.parse(f.text), grade: 'easy' })) as string, /does not match/);
   const { text: _t, ...partial } = made;
   assert.match(readLevelFile(JSON.stringify({ ...JSON.parse(f.text), made: partial })) as string, /missing fields/);
+  assert.match(readLevelFile(JSON.stringify({ ...JSON.parse(f.text), made: { ...made, score: '12', hides: 0 } })) as string, /score, hides is not one the bank takes/);
+  assert.match(readLevelFile(JSON.stringify({ ...JSON.parse(f.text), made: { ...made, line: 'UP' } })) as string, /line/);
 });
 
 test('saving writes one file per level into the folder, and the same level twice is a duplicate', () => {

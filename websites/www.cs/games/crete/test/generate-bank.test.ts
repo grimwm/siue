@@ -224,6 +224,8 @@ test('the memory cap sets the workers, 2 GB each, and an explicit --workers may 
   assert.equal(workersIn(8192, 8, 16_000), 4);
   assert.equal(workersIn(12_288, 8, 16_000), 6);
   assert.equal(workersIn(1000, 8, 16_000), 1, 'always one');
+  assert.match(optionsOf(['--memory-mb', '8'], 8, 16_000) as string, /--memory-mb 8 is less than one worker needs \(2048 MB\)/);
+  assert.equal((optionsOf(['--memory-mb', '2048'], 8, 16_000) as RunOptions).workers, 1);
   assert.equal(workersIn(12_288, 2, 16_000), 2, 'never past the cores');
   assert.equal(workersIn(65_536, 8, 16_000), 6, 'never past what the machine holds');
   assert.equal((optionsOf(['--memory-mb', '12288'], 8, 16_000) as { workers: number }).workers, 6);

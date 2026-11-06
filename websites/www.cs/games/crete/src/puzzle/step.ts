@@ -264,13 +264,16 @@ export function act(s: State, a: Action): StepResult {
   return { state: share(w, s), events: ev };
 }
 
-/** A step the searches leave out: a bump (the same state back), or a turn whose move showed an invisible wall. That
- *  one is a whole turn, but it plays exactly as a Wait from the same state, which the searches try too: the wall it
- *  shows was wall to everyone already, so showing it changes nothing a later turn does. */
+/** A step the searches leave out: a bump (the same state back), a turn whose move showed an invisible wall, or a walk
+ *  into the live Minotaur. The wall's turn is a whole turn, but it plays exactly as a Wait from the same state, which
+ *  the searches try too: the wall it shows was wall to everyone already, so showing it changes nothing a later turn
+ *  does. A walk into him is a catch Theseus chooses, and fewest moves and Best are counted without catches: leaving
+ *  it out keeps every search where it was before a player could walk into him (the solver's lines, the measure's
+ *  numbers, the gate). */
 export function searchSkips(s: State, r: StepResult): boolean {
   if (r.state === s) return true;
   const e = r.events[0];
-  return e?.kind === 'revealed' && e.what === 'invisible-wall';
+  return (e?.kind === 'revealed' && e.what === 'invisible-wall') || (e?.kind === 'caught' && e.walked === true);
 }
 
 export function step(s: State, a: Action): StepResult {

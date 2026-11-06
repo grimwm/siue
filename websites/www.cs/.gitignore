@@ -6,6 +6,7 @@ vendor/
 .phpunit.cache/
 .phpunit.result.cache
 games/tankity/data/
+games/crete/data/
 admin/data/
 admin/config/
 music/tools/.venv/

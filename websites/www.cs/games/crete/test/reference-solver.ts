@@ -88,7 +88,9 @@ function search(start: State, cap: number, refuse: Refuse | null): SolveResult {
     for (const code of actionCodes(s)) {
       const r = step(s, decode(code));
       const n = r.state;
-      if (n === s || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
+      // A walk into the live Minotaur is a catch Theseus chooses: never searched, as step.ts searchSkips says.
+      const walked = r.events[0]?.kind === 'caught' && r.events[0].walked === true;
+      if (n === s || walked || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
       const k = stateKey(n);
       if (seen.has(k)) continue;
       seen.add(k);

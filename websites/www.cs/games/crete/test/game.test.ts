@@ -2,7 +2,7 @@
 // a win records progress; undo and restart go through; sounds follow the events.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame } from '../src/game.ts';
+import { createGame, threadSolve } from '../src/game.ts';
 import { createFoundPages } from '../src/pages.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
@@ -491,4 +491,41 @@ test('walking into the Minotaur is a catch, said as one', () => {
   assert.ok(sounds.includes('caught'));
   assert.equal(said.at(-1), 'Caught! 2 hearts left.');
   assert.equal(game.run!.now.moves, 1);
+});
+
+test('a win with a catch is a win but never a best; Undo takes the catch back', () => {
+  const progress = createProgress(null);
+  const m = manualClock();
+  // A penned Minotaur below a strip of gravel: walking down into him is a catch that throws Theseus back to his start.
+  const text = 'title: t\nintro: i\n\n######\n#E..P#\n####:#\n####M#\n######\n';
+  const game = createGame({
+    sfx() {}, say() {}, progress, pages: createFoundPages(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'lone', level: () => parse(text) },
+  });
+  game.open(0);
+  game.press(mv('down'));
+  game.press(mv('down'));
+  assert.equal(game.catches, 1);
+  game.press('undo');
+  assert.equal(game.catches, 0);
+  game.press(mv('down'));
+  for (let i = 0; i < 3; i++) game.press(mv('left'));
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.equal(game.catches, 1);
+  assert.equal(progress.get('lone').cleared, true);
+  assert.equal(progress.get('lone').best, null, 'not a best');
+});
+
+test("the thread's search takes the catch-free line where there is one", () => {
+  const s = initial(parse('title: t\nintro: i\n\n#########\n#E.P.M.S#\n#########\n'));
+  const r = threadSolve(s);
+  assert.ok(r.solved);
+  const line = r.line;
+  let x = s;
+  for (const a of line) {
+    const r = step(x, a);
+    assert.ok(!r.events.some(e => e.kind === 'caught'), 'no catch on the thread');
+    x = r.state;
+  }
+  assert.equal(x.outcome, 'won');
 });

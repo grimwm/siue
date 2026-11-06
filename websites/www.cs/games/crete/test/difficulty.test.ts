@@ -223,8 +223,9 @@ function catchByStrings(lv: Level): boolean | null {
     for (const a of actions) {
       if (a.kind === 'tool' && s.tools[a.tool] <= 0) continue;
       const x = step(s, a);
-      if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
-      if (x.state === s || x.state.outcome !== 'playing') continue;
+      // The Minotaur reaching Theseus counts; Theseus walking into him is a step no search takes.
+      if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur' && !e.walked)) return true;
+      if (x.state === s || x.events.some(e => e.kind === 'caught' && e.walked) || x.state.outcome !== 'playing') continue;
       const key = stateKey(x.state);
       if (seen.has(key)) continue;
       if (seen.size >= 20_000) return null;

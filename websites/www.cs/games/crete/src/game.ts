@@ -13,7 +13,7 @@ import type { FoundPages } from './pages.ts';
 import type { Progress } from './progress.ts';
 import { act, assist, restart, startRun, undo } from './puzzle/run.ts';
 import type { Run } from './puzzle/run.ts';
-import { solve } from './puzzle/solver.ts';
+import { caught as catchIn, solve, solveRefusing } from './puzzle/solver.ts';
 import { pagesTaken } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
 import { act as actAlone } from './puzzle/step.ts';
@@ -113,6 +113,9 @@ export interface Game {
   readonly meets: readonly string[];
   /** The last turn played; null after open, undo and restart. */
   readonly turn: TurnNote | null;
+  /** The catches in the try as it stands (Undo takes a caught turn's back). A won try with any never counts toward
+   *  Best: fewest moves and Best are counted without catches. */
+  readonly catches: number;
   /** Starts level `i` fresh (clears assisted). */
   open(i: number): void;
   press(a: Action | 'undo' | 'restart'): void;
@@ -177,6 +180,13 @@ const sameAction = (a: Action, b: Action): boolean =>
 /** A hazard by its myth name, with its article: "The Harpy", "Talos's fire". */
 const hazardName = (kind: HazardKind): string => (kind === 'fireball' ? HAZARDS[kind].name : `The ${HAZARDS[kind].name}`);
 
+/** The thread's search from a try as it stands: the shortest line with no catch, as fewest moves and Best are
+ *  counted; only where none is found, the shortest line at all. */
+export function threadSolve(s: State, cap?: number): ReturnType<typeof solve> {
+  const free = solveRefusing(s, catchIn, cap);
+  return free.solved ? free : solve(s, cap);
+}
+
 export function createGame(deps: GameDeps): Game {
   let trial = -1;
   let opens = 0;
@@ -194,7 +204,10 @@ export function createGame(deps: GameDeps): Game {
   let threadOn = false;
   /** The actions that made the try as it stands, from the level's start. */
   let played: Action[] = [];
-  const search = deps.solve ?? solve;
+  /** Whether each turn in `played` was a catch. */
+  let caughtTurns: boolean[] = [];
+  const catches = (): number => caughtTurns.filter(Boolean).length;
+  const search = deps.solve ?? threadSolve;
   const input = (): Input => deps.input?.() ?? 'keys';
 
   const stop = (): void => {
@@ -270,9 +283,11 @@ export function createGame(deps: GameDeps): Game {
     const before = run.now;
     run = r.run;
     played.push(a);
+    caughtTurns.push(r.events.some(e => e.kind === 'caught'));
     // A turn that retraced the try back to an earlier state is an undo to there: the moves after it go.
     if (r.back !== undefined) {
       played = played.slice(0, r.back);
+      caughtTurns = caughtTurns.slice(0, r.back);
       deps.say(`↶ Back to move ${run.now.moves}`, 'info');
     }
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
@@ -295,9 +310,11 @@ export function createGame(deps: GameDeps): Game {
     anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: stopsOf(before, tl, meetings, !deps.levels.scratch?.(trial), first), paused: null } : null;
     reached = 0;
     if (run.now.outcome === 'won') {
-      if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, run.assisted);
+      // A win with a catch is a win, but never a best: it counts as one with help does.
+      const helped = run.assisted || catches() > 0;
+      if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, helped);
       else {
-        deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);
+        deps.progress.record(deps.levels.id(trial), run.now.moves, helped);
         found = deps.pages.add(pagesTaken(run.now));
       }
     }
@@ -387,6 +404,7 @@ export function createGame(deps: GameDeps): Game {
     get took() { return took; },
     get meets() { return meets; },
     get turn() { return turn; },
+    get catches() { return catches(); },
     animMs,
     resume,
     open(i) {
@@ -398,6 +416,7 @@ export function createGame(deps: GameDeps): Game {
       meets = [];
       turn = null;
       played = [];
+      caughtTurns = [];
       threadOn = false;
       thread = null;
       anim = null;
@@ -411,8 +430,8 @@ export function createGame(deps: GameDeps): Game {
       if (a === 'undo' || a === 'restart') {
         const was = run;
         run = a === 'undo' ? undo(run) : restart(run);
-        if (a === 'restart') played = [];
-        else if (run !== was) played.pop();
+        if (a === 'restart') { played = []; caughtTurns = []; }
+        else if (run !== was) { played.pop(); caughtTurns.pop(); }
         found = [];
         took = [];
         meets = [];

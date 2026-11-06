@@ -3,7 +3,7 @@
 // catches and the throw-back, hearts, and the three tools.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { step } from '../src/puzzle/step.ts';
+import { step, searchSkips } from '../src/puzzle/step.ts';
 import { terrainAt } from '../src/puzzle/state.ts';
 import { grid, mv, play, WAIT } from './puzzle-grid.ts';
 
@@ -69,6 +69,8 @@ test('walking into it is a catch and a turn; as stone it is a wall to you (a bum
   assert.deepEqual(into.state.player, { r: 0, c: 1 }, 'thrown back to the start');
   assert.deepEqual(into.state.minotaur, { r: 0, c: 2 }, 'he stays where the catch was, as when he reaches you');
   assert.ok(!into.kinds.includes('moved'), 'nobody moved: the catch ends the turn');
+  const s = grid(['.PM..', '.....']);
+  assert.ok(searchSkips(s, step(s, mv('right'))), 'the searches never walk into him: Best is counted without catches');
   assert.equal(play(grid(['PM.'], 'hearts: 1'), mv('right')).state.outcome, 'lost', 'the last heart ends the try');
   const near = play(grid(['Pz..M']), mv('right'));
   const stoned = play(near.state, tool('mirror'));

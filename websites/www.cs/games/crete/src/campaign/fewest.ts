@@ -24,8 +24,11 @@ export const FEWEST: Readonly<Record<string, number>> = {
   'ch10-6': 42, 'ch10-7': 54, 'ch10-8': 55, 'ch10-9': 42, 'ch10-10': 60,
 };
 
-/** How a count of moves stands against the fewest possible: "best possible 12 (2 over)", or "best possible 12 ·
- *  perfect" at the fewest. */
-export function againstFewest(moves: number, fewest: number): string {
-  return moves <= fewest ? `best possible ${fewest} · perfect` : `best possible ${fewest} (${moves - fewest} over)`;
+/** How a count of moves stands against the fewest possible, which are counted without catches: "best possible 12
+ *  (2 over)", or "best possible 12 · perfect" at the fewest. A try with `catches` is never perfect, whatever its
+ *  count: "best possible 12 (caught once, so not a best)", or "best possible 12 (2 over, caught 3 times)". */
+export function againstFewest(moves: number, fewest: number, catches = 0): string {
+  const caught = catches === 0 ? '' : `caught ${catches === 1 ? 'once' : `${catches} times`}`;
+  if (moves <= fewest) return catches === 0 ? `best possible ${fewest} · perfect` : `best possible ${fewest} (${caught}, so not a best)`;
+  return `best possible ${fewest} (${moves - fewest} over${caught ? `, ${caught}` : ''})`;
 }

@@ -1002,7 +1002,8 @@ export function createUi(deps: UiDeps): Ui {
         text: "Your last heart is gone. Undo a turn or begin the level again.", score: `${s.moves} moves`,
       };
     }
-    const how = run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.";
+    const caughtWords = g.catches === 0 ? "" : ` You were caught ${g.catches === 1 ? "once" : `${g.catches} times`}, so this win does not count toward your best.`;
+    const how = (run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.") + caughtWords;
     const help = run.assisted ? "with help" : "";
     const out = outsideOf(g);
     // A level from outside the campaign records nothing and has no chapter: its card names it and, for a shared
@@ -1011,11 +1012,11 @@ export function createUi(deps: UiDeps): Ui {
       return {
         open: true, won, hasNext: true, hasLevels: false, pages: [], kicker: `${endlessKicker(out.depth ?? 1)} cleared`, title: out.name,
         text: how,
-        score: [`${s.moves} moves`, out.fewest !== undefined ? againstFewest(s.moves, out.fewest) : "", help].filter(Boolean).join(" · "),
+        score: [`${s.moves} moves`, out.fewest !== undefined ? againstFewest(s.moves, out.fewest, g.catches) : "", help].filter(Boolean).join(" · "),
       };
     }
     if (out) {
-      const author = out.best === null ? "" : !run.assisted && s.moves < out.best ? ` You beat the author's ${out.best}.` : ` The author's best is ${out.best}.`;
+      const author = out.best === null ? "" : !run.assisted && g.catches === 0 && s.moves < out.best ? ` You beat the author's ${out.best}.` : ` The author's best is ${out.best}.`;
       return {
         open: true, won, hasNext: false, hasLevels: false, pages: [], kicker: outsideKicker(out), title: out.name,
         text: how + author, score: [`${s.moves} moves`, help].filter(Boolean).join(" · "),
@@ -1030,7 +1031,7 @@ export function createUi(deps: UiDeps): Ui {
     return {
       open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, hasLevels: true, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
       text: how,
-      score: [`${s.moves} moves`, fewest !== undefined ? againstFewest(s.moves, fewest) : "", best !== null && best !== s.moves ? `your best ${best}` : "", help]
+      score: [`${s.moves} moves`, fewest !== undefined ? againstFewest(s.moves, fewest, g.catches) : "", best !== null && best !== s.moves ? `your best ${best}` : "", help]
         .filter(Boolean).join(" · "),
     };
   }

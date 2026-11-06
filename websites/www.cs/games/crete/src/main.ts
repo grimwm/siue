@@ -22,7 +22,7 @@ import { createMoveMap } from './modern/screen-move.ts';
 import { drawList } from './board-plan.ts';
 import { bubbles } from './item-bubble.ts';
 import { createOpenings, portalAt } from './openings.ts';
-import type { Atlas } from './board-plan.ts';
+import type { Atlas, Figures } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
@@ -1118,8 +1118,8 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
+/* The figures both looks draw now: mid-turn, where the animation has them. */
+const figuresHook = (): Figures | null => frameOf(game, game.animMs())?.figures ?? null;
 /* Demo, for the browser specs: started and ended as its button and a key do, its words, and a faster pace. */
 const demoHook = { start: startDemo, stop: leaveDemo, active: () => demo.active(), view: () => demo.view(), setPace: demo.setPace };
-window.__creteTest = { demo: demoHook, endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); }, shared: sharedBank }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook,
-  /** The figures both looks draw now: mid-turn, where the animation has them. */
-  figures: () => frameOf(game, game.animMs())?.figures ?? null };
+window.__creteTest = { demo: demoHook, endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); }, shared: sharedBank }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook, figures: figuresHook };

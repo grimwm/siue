@@ -29,7 +29,7 @@ test('the rules never name the page', () => {
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
-  assert.match(read('src/main.ts'), /window\.__creteTest = \{ demo: demoHook, endless: \{ mode: endless, get saved\(\) \{ return endlessSaves\[endlessGrade\.get\(\)\]; \}, saves: endlessSaves, setBudget: \(n: number\) => \{ endlessBudget = n; \}, workers: endlessWorkers, warm: \(\) => \{ endlessWarm = true; followEndless\(\); \}, shared: sharedBank \}, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook \};/);
+  assert.match(read('src/main.ts'), /window\.__creteTest = \{ demo: demoHook, endless: \{ mode: endless, get saved\(\) \{ return endlessSaves\[endlessGrade\.get\(\)\]; \}, saves: endlessSaves, setBudget: \(n: number\) => \{ endlessBudget = n; \}, workers: endlessWorkers, warm: \(\) => \{ endlessWarm = true; followEndless\(\); \}, shared: sharedBank \}, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook, figures: figuresHook \};/);
   assert.match(read('dist/main.js'), /__creteTest/);
   assert.doesNotMatch(read('dist/main.js'), /__mazeTest/);
 });

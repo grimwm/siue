@@ -162,9 +162,16 @@ body.cylon-game-live * {
 }
 
 
-/* Scattered page — no point scrolling (wheel/touch blocked in JS too) */
+/* Scattered page — no point scrolling. src/scroll-lock.ts holds the root, and any wrapper a theme scrolls instead,
+ * while a run is live, and refuses the wheel, touch drags and the scroll keys outside the game's own panels. */
 body.cylon-game-live {
   overscroll-behavior: none;
+}
+
+html.cylon-scroll-held,
+.cylon-scroll-held {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
 }
 
 

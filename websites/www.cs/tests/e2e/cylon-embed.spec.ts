@@ -3,7 +3,7 @@
 // games/cylon/dist/embed.js. Until Play is pressed the post keeps its own look;
 // pressed, the game takes the post over and destroys it; Leave gives it back.
 import { test, expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { CDPSession, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -135,4 +135,103 @@ test('without a slot the launcher waits in a corner', async ({ page, baseURL }) 
   const launch = page.locator('body > #cic-embed-launch');
   await expect(launch).toBeVisible();
   expect(await launch.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+});
+
+/** Drags one finger from (x, y0) to (x, y1) through Chrome's own touch input, the way a phone pans a page. */
+async function touchDrag(page: Page, cdp: CDPSession, x: number, y0: number, y1: number): Promise<void> {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0 }] });
+  for (let i = 1; i <= 10; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 + ((y1 - y0) * i) / 10 }] });
+    await page.waitForTimeout(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(400);
+}
+
+const scrollY = (page: Page) => page.evaluate(() => Math.round(window.scrollY));
+
+/** Presses the keys a browser scrolls a page with, with nothing focused. */
+async function pressScrollKeys(page: Page): Promise<void> {
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+  for (const key of ['PageDown', 'Space', 'ArrowDown', 'End']) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(150);
+  }
+}
+
+test('a long post holds still while a run is live, and scrolls again once the game is off', async ({ page, baseURL }) => {
+  test.setTimeout(90_000);
+  test.skip(new URL(baseURL!).protocol !== 'http:', 'the stand-in post is served over http, next to a local site');
+  await page.setViewportSize({ width: 1280, height: 640 });
+  await page.goto(await serveBlog(page, baseURL!, { slot: true, paragraphs: 200 }));
+  // Read a little way down, as a visitor does before pressing Play.
+  await page.evaluate(() => window.scrollTo(0, 120));
+  await page.locator('#cic-embed-launch').click();
+  await expect(page.locator('body')).toHaveClass(/cylon-game-live/, { timeout: 15_000 });
+  await expect(page.locator('html')).toHaveClass(/cylon-scroll-held/);
+  // The game's own move to the top, then nothing moves the page.
+  await expect.poll(() => scrollY(page), { timeout: 5_000 }).toBe(0);
+  await page.mouse.move(640, 420);
+  for (let i = 0; i < 3; i++) await page.mouse.wheel(0, 600);
+  await page.waitForTimeout(400);
+  expect(await scrollY(page)).toBe(0);
+  await pressScrollKeys(page);
+  expect(await scrollY(page)).toBe(0);
+  // A script or a focus that scrolls the page is put back.
+  await page.evaluate(() => window.scrollTo({ top: 900, behavior: 'instant' }));
+  await expect.poll(() => scrollY(page), { timeout: 2_000 }).toBe(0);
+
+  // How to Play still scrolls inside itself.
+  await page.locator('#cylon-help-btn').click();
+  const panel = page.locator('.cylon-help-panel');
+  await expect(panel).toBeVisible();
+  expect(await panel.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  const box = (await panel.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => panel.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  expect(await scrollY(page)).toBe(0);
+  await page.keyboard.press('q');
+  await expect(panel).toBeHidden();
+
+  // Game Off: the page is the visitor's again, nothing left on <html>.
+  await page.locator('#cylon-game-toggle').click();
+  await expect(page.locator('body')).not.toHaveClass(/cylon-game-live/);
+  await expect(page.locator('html')).not.toHaveClass(/cylon-scroll-held/);
+  expect(await page.evaluate(() => document.documentElement.getAttribute('style'))).toBeNull();
+  await page.mouse.move(640, 420);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => scrollY(page)).toBeGreaterThan(0);
+});
+
+test('on a phone a touch drag, on the post or the combat bar, never scrolls a live run; Leave gives the post its scroll back', async ({ browser, baseURL }) => {
+  test.setTimeout(90_000);
+  test.skip(new URL(baseURL!).protocol !== 'http:', 'the stand-in post is served over http, next to a local site');
+  const context = await browser.newContext({ viewport: { width: 412, height: 839 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
+  await page.goto(await serveBlog(page, baseURL!, { slot: true, paragraphs: 200 }));
+  const launch = page.locator('#cic-embed-launch');
+  await launch.scrollIntoViewIfNeeded();
+  await launch.tap();
+  await expect(page.locator('body')).toHaveClass(/cylon-game-live/, { timeout: 15_000 });
+  await expect.poll(() => scrollY(page), { timeout: 5_000 }).toBe(0);
+  const bar = (await page.locator('#cic-embed-bar').boundingBox())!;
+  for (const [x, from, to] of [[206, 600, 150], [60, 750, 300], [206, 400, 820], [bar.x + 8, bar.y + bar.height - 4, 0]] as const) {
+    await touchDrag(page, cdp, x, from, to);
+    expect(await scrollY(page), `drag at ${x},${from}`).toBe(0);
+  }
+  // Once the intro is over (touch play), still nothing.
+  await expect(page.locator('body')).toHaveClass(/cylon-touch-play/, { timeout: 30_000 });
+  await touchDrag(page, cdp, 206, 700, 100);
+  expect(await scrollY(page)).toBe(0);
+  await pressScrollKeys(page);
+  expect(await scrollY(page)).toBe(0);
+
+  await page.locator('#cic-embed-leave').tap();
+  await expect(page.locator('#cic-embed-launch')).toBeVisible({ timeout: 10_000 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await touchDrag(page, cdp, 206, 700, 200);
+  await expect.poll(() => scrollY(page)).toBeGreaterThan(0);
+  await context.close();
 });

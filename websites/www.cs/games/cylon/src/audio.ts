@@ -58,6 +58,9 @@ export interface CylonAudio {
   pageShow(): void;
   /** The page is gone for good: the context is closed. */
   pageClose(): void;
+  /** The player clicked out of the game's frame on another page (on) or back in (off), kit audio-focus.ts: out,
+   *  the sound fades, the context is suspended and the bed stops; back, the bed follows the settings again. */
+  frameAway(on: boolean): void;
 }
 
 /* ---------- the voices ---------- */
@@ -105,6 +108,8 @@ export function createAudio(deps: AudioDeps): CylonAudio {
   let musicTimer: ReturnType<typeof setInterval> | null = null;
   let musicPlaying = false;
   let pageHidden = false;
+  /** The player is out of the game's frame (frameAway): as quiet as a hidden page. */
+  let frameOut = false;
 
   /** The buses follow the settings: effects are muted when off or at 0, and the
    *  bed is heard only while it plays in a live session. */
@@ -129,7 +134,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
   function unlock(): void {
     const s = settings();
-    if (pageHidden || (!s.soundEnabled && !s.musicEnabled)) return;
+    if (pageHidden || frameOut || (!s.soundEnabled && !s.musicEnabled)) return;
     applyBusVolumes();
     core.unlock(syncMusic);
   }
@@ -343,7 +348,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
   function syncMusic(): void {
     const s = settings();
-    const want = !pageHidden && deps.sessionActive() && s.musicEnabled && s.musicVolume > 0;
+    const want = !pageHidden && !frameOut && deps.sessionActive() && s.musicEnabled && s.musicVolume > 0;
     if (want) {
       if (!musicPlaying) startMusic();
       else applyBusVolumes();
@@ -502,11 +507,11 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
   return {
     sfx(name) {
-      if (pageHidden) return;
+      if (pageHidden || frameOut) return;
       applyBusVolumes();
       voices[name]();
     },
-    prime() { if (!pageHidden) ensureAudio(); },
+    prime() { if (!pageHidden && !frameOut) ensureAudio(); },
     unlock,
     syncMusic,
     settingChanged(key) {
@@ -531,6 +536,17 @@ export function createAudio(deps: AudioDeps): CylonAudio {
       pageHidden = true;
       stopMusic(false);
       core.close();
+    },
+    frameAway(on) {
+      if (on === frameOut) return;
+      frameOut = on;
+      if (on) {
+        core.setAway(true);
+        stopMusic(true);
+        return;
+      }
+      core.setAway(false);
+      syncMusic();
     },
   };
 }

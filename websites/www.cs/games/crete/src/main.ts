@@ -53,6 +53,7 @@ import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
+import { followFocus } from '../../_kit/audio-focus.ts';
 import { createEndlessSaved, gradePref, partStore } from './endless/saved.ts';
 import { GRADES } from './puzzle/rating.ts';
 import type { Grade } from './puzzle/rating.ts';
@@ -996,6 +997,12 @@ followPage({ doc: document, win: window }, {
     demoClient.resize();
     demo.update();
   },
+});
+// In a frame on another page (a blog's embed, the site's play page), clicking out of the frame fades the sound out
+// and clicking back in brings back what was playing, whatever Music in the background says.
+followFocus({ doc: document, win: window, timers: browserTimers }, {
+  away: () => { core.setAway(true); music.away(true); },
+  back: () => { core.setAway(false); music.away(false); },
 });
 // Endless's background levels start once the page has loaded and been quiet a few seconds.
 function warmEndless(): void {

@@ -42,10 +42,12 @@ import * as state from './state.ts';
 import { createScoresClient, createLocalScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
-import { browserStorage } from '../../_kit/ports.browser.ts';
+import { followFocus } from '../../_kit/audio-focus.ts';
+import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { typesText } from '../../_kit/keys.ts';
 import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
 import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS, versionedShareUrl, versionOf } from '../../_kit/install.ts';
+import { siteName } from './site-name.ts';
 import type { Timer } from './types.ts';
 import type { EndReason } from './state.ts';
 
@@ -65,6 +67,8 @@ export interface CylonOptions {
     localScores?: boolean;
     /** Draws the scattered letters on one canvas instead of one element per letter (the embed: src/glyphs.ts). */
     glyphLayer?: GlyphLayer;
+    /** The bar's name while no run is live, when the caller has read it already (the embed, before its bar is on the page). */
+    siteName?: string;
 }
 
 // Everything the game fetches is found relative to this bundle (in dist/), wherever it is served from.
@@ -127,6 +131,7 @@ async function mountCylonDom(mountHtml?: string) {
  * @param {string} [options.mountHtml] mount.html's markup, so nothing is fetched for it.
  * @param {boolean} [options.localScores] Keep the boards in this browser and never call scores.php.
  * @param {GlyphLayer} [options.glyphLayer] Draws the scattered letters on one canvas (src/glyphs.ts).
+ * @param {string} [options.siteName] The bar's name while no run is live; read from the page (src/site-name.ts) when omitted.
  */
 export async function initializeCylonEffects(options: CylonOptions = {}) {
     const onTheme = typeof options.onTheme === 'function' ? options.onTheme : () => {};
@@ -162,7 +167,8 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const navGame = document.getElementById('site-nav-game');
     const siteBrand = document.getElementById('site-brand');
     const introTitleEl = document.getElementById('cylon-intro-title');
-    const BRAND_CIVIL = 'William Grim';
+    // The bar's name while no run is live: the host site's own (src/site-name.ts), read before the game changes it.
+    const BRAND_CIVIL = options.siteName || siteName(document, location.hostname);
     const BRAND_COMBAT = 'The CIC';
     const INTRO_TITLE_SETTLE_MS = 880;
     const helpBtn = document.getElementById('cylon-help-btn');
@@ -706,6 +712,8 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             },
             close: audio.pageClose,
         });
+        // In a frame on another page (the site's play page), clicking out of the frame silences it.
+        followFocus({ doc: document, win: window, timers: browserTimers }, { away: () => audio.frameAway(true), back: () => audio.frameAway(false) });
     }
 
     function openHelp() {

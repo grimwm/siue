@@ -6,7 +6,7 @@
 // (replacing once a grade is full), and sizes its workers by the run's memory cap.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, tupleFor, gradeStats, median, runStats, statsLines, statsMarkdown, statusLines, isLarge, workersIn, LARGE_SIDE } from '../tools/generate-bank.ts';
+import { uploadOf, difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, tupleFor, gradeStats, median, runStats, statsLines, statsMarkdown, statusLines, isLarge, workersIn, LARGE_SIDE } from '../tools/generate-bank.ts';
 import type { Counts, GenerateDeps, Made, RunOptions, Shelf, Want } from '../tools/generate-bank.ts';
 import { ENDLESS_VERSION, requestOf, sharedOf } from '../src/endless/provenance.ts';
 import type { SharedMade } from '../src/endless/provenance.ts';
@@ -14,6 +14,7 @@ import { placeOf, planOf, reachOf } from '../src/endless/generate.ts';
 import { rngOf } from '../src/endless/random.ts';
 import { BANKS } from '../src/endless/bank.ts';
 import { tupleShape } from '../src/endless/verifier.ts';
+import { backoffMs, excerpt, HALT_ERRORS, HALT_MS, noAnswer, RETRY_BASE_MS, RETRY_MAX_MS } from '../tools/bank-post.ts';
 
 const shelf = (served: number, over: Partial<Shelf> = {}, plateau = 0, large = 0): Shelf => ({
   served, pending: 0, cap: 1500,
@@ -171,17 +172,96 @@ test('from an empty bank a run makes levels for every grade, however slow Hard i
 });
 
 test('it fails quietly, posts to HTTPS only, and never prints its token', async () => {
-  const f = fake({ counts: async () => { throw new Error('offline'); } });
+  let asked = 0, clock = 0;
+  const f = fake({ counts: async () => { asked++; throw new Error('offline'); }, now: () => clock, wait: async ms => { clock += ms; } });
   assert.equal((await generateAll(f.deps, { ms: 1000 })).tried, 0);
-  assert.match(f.lines[0]!, /could not read/);
+  assert.ok(asked >= HALT_ERRORS && clock >= HALT_MS, 'the counts are asked again until the failures persist');
+  assert.match(f.lines[0]!, /^could not read the bank's counts: the bank has failed \d+ tries in a row over \d+ min \(each logged above\); nothing made$/);
+  // A bank that answers after a few failed tries: the run goes on.
+  let down = 3;
+  const back = fake({ counts: async () => { if (down-- > 0) throw new Error('offline'); return counts(shelf(0), shelf(0), shelf(0)); }, wait: async () => {} });
+  assert.ok((await generateAll(back.deps, { ms: Infinity, grades: ['easy'], count: { easy: 1 } })).added.easy === 1);
   assert.equal(safeUrl('https://www.cs.siue.edu/~wgrim/games/crete/endless-bank.php'), 'https://www.cs.siue.edu/~wgrim/games/crete/endless-bank.php');
   assert.equal(safeUrl('http://localhost:8080/games/crete/endless-bank.php'), 'http://localhost:8080/games/crete/endless-bank.php');
   assert.equal(safeUrl('http://www.cs.siue.edu/x'), null);
   assert.equal(safeUrl('sftp://www.cs.siue.edu/x'), null);
-  const g = fake({ upload: async () => 'error' });
-  await generateAll(g.deps, { ms: 60_000 });
-  assert.ok(g.lines.some(l => /keeps failing/.test(l)));
-  assert.ok(!g.lines.join('\n').includes(TOKEN));
+  assert.ok(!f.lines.join('\n').includes(TOKEN));
+  assert.equal(excerpt(`{"error":"server error","echo":"${TOKEN}"}\n\n  <b>more</b>`, TOKEN), '{"error":"server error","echo":"…"} <b>more</b>', 'a body excerpt never carries the token');
+  assert.equal(excerpt('x'.repeat(500), TOKEN).length, 161);
+});
+
+/** Deps whose clock moves on by each wait: a bank that fails every post until `upTo` ms, if ever. */
+function outage(upTo: number, over: Partial<GenerateDeps> = {}) {
+  let tries = 0;
+  const waits: number[] = [];
+  const f = fake({ random: () => 0.5, ...over });
+  let clock = 0;
+  f.deps.now = () => clock;
+  f.deps.make = async () => { clock += 1000; return level(tries % BANKS.hard.length); };
+  f.deps.wait = async ms => { waits.push(ms); clock += ms; };
+  f.deps.upload = async () => { tries++; return clock < upTo ? 'error' : 'ok'; };
+  return { ...f, waits, tries: () => tries };
+}
+
+test('a failing bank is tried again after a growing, jittered wait, and a short outage loses no level', async () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map(i => backoffMs(i, () => 0)), [2_500, 5_000, 10_000, 20_000, 40_000, 80_000, 150_000, 150_000]);
+  assert.equal(backoffMs(0, () => 0.999_999), RETRY_BASE_MS);
+  assert.equal(backoffMs(30, () => 0.999_999), RETRY_MAX_MS, 'never past the longest wait');
+  // As on 2026-11-06: the bank gave no answer for about two minutes, which stopped two runs after three failed posts.
+  const o = outage(3 * 60_000, { workers: 1 });
+  const made = await generateAll(o.deps, { ms: Infinity, grades: ['easy'], count: { easy: 4 } });
+  assert.equal(made.added.easy, 4, 'every level made went in once the bank answered');
+  assert.equal(made.refused, 0);
+  assert.equal(made.halt, null);
+  assert.ok(o.waits.length >= 3 && o.waits.every((w, i) => i === 0 || w >= o.waits[i - 1]!), `waits ${o.waits}`);
+  assert.ok(o.lines.some(l => /^easy: trying that level again in \d+ s$/.test(l)), o.lines.join('\n'));
+  assert.ok(!o.lines.some(l => /stopping/.test(l)));
+});
+
+test('only errors that persist stop a run, and the halt line says why', async () => {
+  const o = outage(Infinity, { workers: 2 });
+  const made = await generateAll(o.deps, { ms: Infinity, grades: ['easy'], count: { easy: 50 } });
+  assert.ok(o.tries() >= HALT_ERRORS, `${o.tries()} tries`);
+  assert.match(made.halt!, /^the bank has failed \d+ tries in a row over (\d+) min \(each logged above\)$/);
+  assert.ok(Number(/over (\d+) min/.exec(made.halt!)![1]) >= HALT_MS / 60_000);
+  assert.equal(o.lines.filter(l => /; stopping$/.test(l)).length, 1, 'said once');
+  assert.equal(made.added.easy, 0);
+  assert.deepEqual(made.capped, [], 'a failing bank is not a full one');
+  // Many failures in a moment are not yet persistent: a run that halts after three quick ones is what this replaces.
+  let clock = 0, tries = 0;
+  const quick = fake({ workers: 1, now: () => clock, random: () => 0, upload: async () => (++tries <= HALT_ERRORS + 2 ? 'error' : 'ok'), wait: async ms => { clock += Math.min(ms, 1000); } });
+  const q = await generateAll(quick.deps, { ms: Infinity, grades: ['easy'], count: { easy: 1 } });
+  assert.equal(q.added.easy, 1);
+  assert.equal(q.halt, null);
+  // A bank that turns this runner down stops it at once, and a spent hourly share keeps its meaning.
+  const denied = fake({ upload: async () => 'denied' });
+  assert.equal((await generateAll(denied.deps, { ms: 60_000 })).halt, 'the bank turned this runner down (logged above)');
+  const rate = fake({ upload: async () => 'rate' });
+  assert.equal((await generateAll(rate.deps, { ms: 60_000 })).halt, 'the bank\'s hourly share for this runner is spent');
+  // One level the bank refuses is only that level: the run goes on.
+  let n = 0;
+  const one = fake({ upload: async () => (n++ === 0 ? 'refused' : 'ok') });
+  const r = await generateAll(one.deps, { ms: Infinity, grades: ['easy'], count: { easy: 3 } });
+  assert.equal(r.added.easy, 3);
+  assert.equal(r.refusedBy.easy, 1);
+  assert.equal(r.halt, null);
+});
+
+test('a bank\'s answer means what its status and body say', () => {
+  assert.equal(uploadOf(200, { ok: true, h: 'abc' }), 'ok');
+  assert.equal(uploadOf(200, { ok: true, h: 'abc', retired: 'def' }), 'replaced');
+  assert.equal(uploadOf(200, null), 'error', 'a 200 that is not the bank\'s JSON (a proxy\'s page) is tried again');
+  assert.equal(uploadOf(200, { ok: true }), 'error');
+  for (const e of ['duplicate', 'retired', 'full'] as const) assert.equal(uploadOf(409, { error: e }), e);
+  assert.equal(uploadOf(409, { error: 'what' }), 'refused');
+  assert.equal(uploadOf(429, { error: 'rate' }), 'rate');
+  // A deploy replacing the endpoint or the token's hash can give a 404 or 401 for a moment: tried again too.
+  for (const status of [0, 500, 502, 503, 504, 408, 401, 404]) assert.equal(uploadOf(status, null), 'error', String(status));
+  assert.equal(uploadOf(400, { error: 'invalid', field: 'made.text' }), 'refused');
+  assert.equal(uploadOf(403, { error: 'version' }), 'denied');
+  const cause = Object.assign(new Error('fetch failed'), { name: 'TypeError', cause: { code: 'ECONNRESET' } });
+  assert.equal(noAnswer(cause), 'TypeError: fetch failed (ECONNRESET)');
+  assert.equal(noAnswer(new DOMException('The operation was aborted due to timeout', 'TimeoutError')), 'TimeoutError: The operation was aborted due to timeout');
 });
 
 test('--difficulties takes easy, medium and hard in any order and case, each once, and nothing else', () => {
@@ -290,6 +370,17 @@ test('without rollover a count stops at the cap and says so, and a full grade ge
   assert.deepEqual(made.capped, ['hard', 'medium']);
   assert.equal(made.hints[0], hard, 'kept for the summary');
   assert.equal(gradeStats(made, 'hard', 1).capped, true, 'the stats line records it');
+  // A run that stops for another reason before it fills the room is not capped, though its count was more than the
+  // room: as on 2026-11-06, when Easy had room for 1420 of 1500 and the run stopped for a failing bank after 25.
+  let added = 0;
+  const halted = fake({ counts: async () => counts(shelf(80), shelf(0), shelf(0)), upload: async () => (added++ < 25 ? 'ok' : 'denied') });
+  const h = await generateAll(halted.deps, { ms: Infinity, grades: ['easy'], count: { easy: 1500 }, rollover: false });
+  assert.equal(h.added.easy, 25);
+  assert.deepEqual(h.capped, []);
+  assert.deepEqual(h.hints, []);
+  assert.ok(!halted.lines.some(l => /full at|ROLLOVER/.test(l)), halted.lines.join('\n'));
+  assert.equal(gradeStats(h, 'easy', 1).capped, false, 'nor does the stats line say so');
+  assert.ok(halted.lines.some(l => l.startsWith('easy: 80 served, 0 waiting, making 1500, room for 1420;')), 'the plan still gives the room');
   // The bank saying full stops it too.
   const g = fake({ upload: async () => 'full' });
   await generateAll(g.deps, { ms: Infinity, grades: ['easy'], count: { easy: 4 }, rollover: false });
@@ -313,7 +404,7 @@ test('a run\'s numbers: per grade made, added, replaced, refused, part time, rat
   const made: Made = {
     tried: 10, found: { ...z(), hard: 4 }, added: { ...z(), hard: 3 }, replaced: { ...z(), hard: 1 }, empty: 5, refused: 1,
     emptyBy: { ...z(), hard: 5 }, refusedBy: { ...z(), hard: 1 }, duplicateBy: { ...z(), hard: 2 }, retiredBy: { ...z(), hard: 1 }, spentMs: { ...z(), hard: 7_200_000 },
-    levelMs: { easy: [], medium: [], hard: [60_000, 120_000, 180_000, 600_000] }, capped: [], hints: [],
+    levelMs: { easy: [], medium: [], hard: [60_000, 120_000, 180_000, 600_000] }, capped: [], hints: [], halt: null,
   };
   const s = gradeStats(made, 'hard', 1_800_000);
   assert.deepEqual(s, { made: 4, added: 2, replaced: 1, duplicate: 2, retired: 1, refused: 1, empty: 5, capped: false, partHours: 2, perHour: 6, meanSeconds: 240, medianSeconds: 150, secondsPerLevel: 1800 });

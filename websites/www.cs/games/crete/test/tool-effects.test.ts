@@ -5,7 +5,13 @@ import assert from 'node:assert/strict';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import type { State } from '../src/puzzle/state.ts';
-import { activeEffects, toolLines } from '../src/tool-effects.ts';
+import { activeEffects, pickupWatch, toolLines } from '../src/tool-effects.ts';
+import type { Tool } from '../src/puzzle/tiles.ts';
+import { createGame } from '../src/game.ts';
+import { createFoundPages } from '../src/pages.ts';
+import { createProgress } from '../src/progress.ts';
+import { parse } from '../src/puzzle/level.ts';
+import { manualClock } from '../../_kit/test/clock.ts';
 import type { Input } from '../src/tool-effects.ts';
 import { grid, mv, WAIT } from './puzzle-grid.ts';
 
@@ -92,4 +98,34 @@ test('both effects at once show both chips, stone first, each with a note', () =
 
 test('a turn with no tool in it says nothing', () => {
   assert.deepEqual(said(grid(['P.......M']), mv('right')).lines, []);
+});
+
+// The tool buttons glow the moment a tool is picked up, and never when a level opens, a turn is taken back, the level
+// begins again or the view only redraws.
+test('the pickup watch answers a tool on the turn it is picked up, and never on open, undo, restart or a redraw', () => {
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
+    reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'tools', level: () => parse('title: t\nintro: i\n\n###########\n#Pzcc...#M#\n#.......###\n###########\n') },
+  });
+  const watch = pickupWatch();
+  const look = (): Tool[] => watch(game.run!.now, game.took);
+  game.open(0);
+  assert.deepEqual(look(), [], 'a level opening');
+  game.press(mv('right'));
+  assert.deepEqual(look(), ['mirror'], 'the mirror picked up');
+  assert.deepEqual(look(), [], 'the same turn drawn again (a redraw, a look switched)');
+  game.press(mv('right'));
+  assert.deepEqual(look(), ['cow']);
+  game.press(mv('right'));
+  assert.deepEqual(look(), ['cow'], 'a second cow glows again');
+  game.press('undo');
+  assert.deepEqual(look(), [], 'a turn taken back');
+  game.press(mv('down'));
+  assert.deepEqual(look(), [], 'a turn that takes nothing');
+  game.press('restart');
+  assert.deepEqual(look(), [], 'the level begun again');
+  game.open(0);
+  assert.deepEqual(look(), [], 'the level opened again');
 });

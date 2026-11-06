@@ -14,7 +14,7 @@ import { KEYS } from './keys.ts';
 /** How the player plays: with keys at hand (a fine pointer), or by touch. Keys are named by key, buttons by face. */
 export type Input = 'keys' | 'touch';
 
-/** The tool buttons' faces (src/ui/strip.tsx). */
+/** The tools named in a line of text, for the button that shows the tool's picture (src/ui/strip.tsx). */
 export const TOOL_EMOJI: Record<Tool, string> = { mirror: '🪞', cake: '🍯', cow: '🐄' };
 
 /** "press C or tap 🐄" with keys at hand (a fine pointer is no promise of a keyboard, so the button is named too),
@@ -32,6 +32,22 @@ export function pickupLine(tool: Tool, input: Input): string {
     case 'cake':
       return `Honey cake: ${useOf('cake', input)} to eat it for one more heart.`;
   }
+}
+
+const TOOL_ORDER = Object.keys(TOOLS) as Tool[];
+
+/** Watches the try for tools picked up, for the tool buttons' pickup glow (src/ui/strip.tsx). Each call reads the
+ *  state shown now and what the last turn played took (`Game.took`, empty after open, undo and restart) and answers
+ *  the tools a new turn just picked up and still holds; a state already seen (a redraw, a look switched) answers
+ *  none, and so does the first state it sees. */
+export function pickupWatch(): (now: State, took: readonly string[]) => Tool[] {
+  let seen: State | null = null;
+  return (now, took) => {
+    const was = seen;
+    seen = now;
+    if (was === null || was === now) return [];
+    return TOOL_ORDER.filter(t => took.includes(t) && now.tools[t] > 0);
+  };
 }
 
 const turns = (n: number): string => `${n} more turn${n === 1 ? '' : 's'}`;

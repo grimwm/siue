@@ -701,6 +701,55 @@ test('taking and using the mirror and the cow says what each does; the status ba
   expect(errors).toEqual([]);
 });
 
+test('the tool buttons show each tool\'s picture; held wears the accent border, none held is greyed; a pickup glows twice, then stops', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.evaluate(text => {
+    const t = (window as unknown as FirstsHook).__creteTest;
+    t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Mirror and Cow', best: null } });
+  }, TOOL_HALL);
+  await page.locator('#start-begin').click();
+  const mirror = page.locator('#tool-mirror');
+  const look = (sel: string) => page.locator(sel).evaluate(el => {
+    const cs = getComputedStyle(el);
+    const pic = el.querySelector('.tool-pic .sprite')!.getBoundingClientRect();
+    return { border: cs.borderTopColor, filter: cs.filter, opacity: cs.opacity, pic: [Math.round(pic.width), Math.round(pic.height)] };
+  });
+  await expect(mirror.locator('.tool-pic .sprite[data-look="classic"]'), 'the Classic picture').toHaveCount(1);
+  await expect(mirror).toHaveText(/^0/);
+  await expect(mirror).toHaveClass(/\bempty\b/);
+  expect(await look('#tool-mirror'), 'none held: greyed and dark at full opacity').toMatchObject({ filter: 'grayscale(1) brightness(0.55)', opacity: '1', pic: [40, 40] });
+  await expect(page.locator('.tool-glow')).toHaveCount(0);
+  await page.keyboard.press('ArrowRight');
+  await expect(mirror).toHaveClass(/\bheld\b/);
+  await expect(mirror, 'the pickup glows').toHaveClass(/\bgot\b/);
+  await expect(mirror.locator('.tool-glow')).toHaveCount(1);
+  expect(await look('#tool-mirror'), 'held: the accent border, no filter').toMatchObject({ border: 'rgb(240, 180, 41)', filter: 'none', opacity: '1' });
+  expect(await mirror.locator('.tool-glow').evaluate(el => {
+    const a = getComputedStyle(el);
+    return [a.animationName, a.animationIterationCount, a.animationDuration];
+  }), 'twice, 1.1 s each').toEqual(['tool-glow', '2', '1.1s']);
+  await expect(page.locator('#tool-cow'), 'only the tool picked up glows').not.toHaveClass(/\bgot\b/);
+  await page.waitForTimeout(2500);
+  await expect(mirror, 'then still').not.toHaveClass(/\bgot\b/);
+  await expect(mirror.locator('.tool-glow')).toHaveCount(0);
+  await expect(mirror).toHaveClass(/\bheld\b/);
+  // A turn taken back never glows.
+  await page.keyboard.press('u');
+  await expect(mirror).toHaveClass(/\bempty\b/);
+  await expect(mirror).not.toHaveClass(/\bgot\b/);
+  // With reduced motion, a pickup holds the border and never glows.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.keyboard.press('ArrowRight');
+  await expect(mirror).toHaveClass(/\bheld\b/);
+  await expect(mirror).not.toHaveClass(/\bgot\b/);
+  expect(errors).toEqual([]);
+});
+
 test('Chapter 1, Level 2: in the start corner beside the Minotaur, walking into him is a catch, never a freeze', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));

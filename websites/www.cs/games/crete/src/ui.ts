@@ -38,7 +38,7 @@ import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter, placeWord
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
-import { TOOL_EMOJI, activeEffects } from "./tool-effects.ts";
+import { activeEffects, pickupWatch } from "./tool-effects.ts";
 import { centredOn, createSheetView, eye, holdTarget, keepInView, panned, project, sheetCell, unproject, wholeFrame } from "./sheet.ts";
 import type { Frame } from "./sheet.ts";
 import { createCompassButton } from "./modern/controls.ts";
@@ -230,6 +230,8 @@ const WHEEL_LINE_PX = 16;
 /** How long the classic view rests before the sheet is drawn again at the cell that fits it. */
 const SETTLE_MS = 200;
 /** Whether the player asked for less motion: the view jumps rather than eases. */
+/** A tool button's pickup glow and wiggle: two rounds of 1.1 s (game.css, .tool.got). */
+const PICKUP_MS = 2200;
 const reducedMotion = (): boolean => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -347,6 +349,24 @@ export function createUi(deps: UiDeps): Ui {
   let heartsLast = -1;
   let bannerSeq = 0;
   let bannerTimer = 0;
+  /** The tools just picked up, each with the number of its pickup: a tool button glows and its picture wiggles
+   *  while its number stands, and a new number plays them again. */
+  const watchPickups = pickupWatch();
+  const lit = new Map<Tool, number>();
+  const litTimers = new Map<Tool, number>();
+  let litSeq = 0;
+  /** A tool button's pickup glow: twice, then still (game.css, .tool.got). None with reduced motion. */
+  function lightTool(t: Tool): void {
+    if (reducedMotion()) return;
+    lit.set(t, ++litSeq);
+    const was = litTimers.get(t);
+    if (was !== undefined) timers.clearTimeout(was);
+    litTimers.set(t, timers.setTimeout(() => {
+      lit.delete(t);
+      litTimers.delete(t);
+      if (game?.run) drawStrip(game);
+    }, PICKUP_MS));
+  }
   /** What the Dictionary's pictures are drawn from: the look the board shows now. */
   const pics = (): Pics => (deps.icons ? { look, atlas, icons: deps.icons } : { look, atlas });
   /** The Dictionary's tab. */
@@ -983,12 +1003,13 @@ export function createUi(deps: UiDeps): Ui {
     const s = g.run!.now;
     return TOOL_KINDS.map((kind) => ({
       kind,
-      emoji: TOOL_EMOJI[kind],
+      entry: ENTRY[kind]!,
       name: TOOLS[kind].name,
       key: TOOLS[kind].key,
       count: s.tools[kind],
       desc: TOOLS[kind].desc,
       disabled: s.outcome !== "playing" || s.tools[kind] <= 0,
+      lit: s.tools[kind] > 0 ? lit.get(kind) ?? 0 : 0,
     }));
   }
 
@@ -1115,6 +1136,7 @@ export function createUi(deps: UiDeps): Ui {
       onMenu: () => layers.open("menu"),
     });
 
+    for (const t of watchPickups(s, g.took)) lightTool(t);
     drawStrip(g);
 
     // The ending card waits for the last step to land; a try taken back or begun again lets the next ending show.
@@ -1392,6 +1414,7 @@ export function createUi(deps: UiDeps): Ui {
     if (!compact) threadOpen = false;
     renderStrip($("strip-root"), {
       tools: toolRows(g),
+      pics: pics(),
       playing: g.playing,
       route: g.thread !== null,
       over: g.run!.now.outcome !== "playing",

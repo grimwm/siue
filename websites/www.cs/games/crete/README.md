@@ -292,9 +292,9 @@ Four targets in `websites/www.cs/Makefile`, run from `websites/www.cs`, work on 
 | `make crete-bank-status` | Prints each difficulty's served, waiting, cap and room, and how many are on the plateau and large; makes nothing |
 | `make crete-verify-levels` | Checks the levels waiting in quarantine (`tools/verify-bank.ts`) |
 
-**The token.** `CRETE_BANK_VERIFIER_TOKEN` when it is set (the workflow loads it from 1Password through its service account). Otherwise the targets read it with `op read 'op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier'`, so sign in to the 1Password CLI first (`eval $(op signin)`). If `op` is missing or not signed in, the target stops with one line saying so. The token stays in the run's environment, never on a command line, and is never printed. `SAVE_ONLY` runs without one.
+**The token.** `CRETE_BANK_VERIFIER_TOKEN` when it is set (the workflow loads it from 1Password through its service account). Otherwise the file `CRETE_BANK_TOKEN_FILE` (default `~/.config/crete/bank-token`) when it exists and is readable: the token alone, a trailing newline dropped. Keep it `chmod 600`; a file whose mode is anything but 600 or 400 still works, with a one-line warning naming the file and its mode, never the token. Otherwise the targets read it with `op read 'op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier'`, so sign in to the 1Password CLI first (`eval $(op signin)`). If `op` is missing or not signed in, the target stops with one line saying so. The token stays in the run's environment, never on a command line, and is never printed. `SAVE_ONLY` runs without one.
 
-**`crete-levels`' variables.** A value it cannot take (an unknown difficulty, a count list of the wrong length, a bad number) stops it before 1Password is asked.
+**`crete-levels`' variables.** A value it cannot take (an unknown difficulty, a count list of the wrong length, a bad number) stops it before the token is read.
 
 | Variable | Default | Allowed values, and what it does |
 |---|---|---|

@@ -75,7 +75,7 @@ test('muting sound silences effects', () => {
 });
 
 // ---- the page hiding and coming back ----
-import { pageHide, pageVisible, setMusicMuted } from '../src/audio.ts';
+import { pageHide, pageVisible, setMusicMuted, frameAway } from '../src/audio.ts';
 import { installAudioPage } from '../src/audio-page.ts';
 
 test('hidden suspends the context and plays no effect; visible resumes it', () => {
@@ -153,6 +153,37 @@ test('the turn ping sounds while hidden, then the context suspends again', async
   pageVisible();
 });
 
+test('clicked out of its frame: the sound fades and suspends, no effect or ping plays; back, the music goes on', async () => {
+  initAudio({ sfx: {}, music: [] });
+  music.stop();
+  setMusicMuted(false);
+  music.start();
+  frameAway(true);
+  await new Promise(r => setTimeout(r, 250));
+  assert.equal(ctx.state, 'suspended', 'suspended once faded');
+  const n = ctx.nodes.length;
+  sfx.play('boom');
+  sfx.clockWarn();
+  sfx.turnPing();
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal(ctx.nodes.length, n, 'nothing sounds, not even the turn ping');
+  pageHide();
+  pageVisible();
+  assert.equal(ctx.state, 'suspended', 'a tab shown again while the player is still out stays quiet');
+  frameAway(false);
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(ctx.state, 'running');
+  ctx.currentTime += 5; // the fake clock stands still: move it on, so the scheduler has a window to fill
+  await new Promise(r => setTimeout(r, 150));
+  assert.ok(ctx.nodes.length > n, 'the synth plays again');
+  music.stop();
+  frameAway(true);
+  frameAway(false);
+  const m = ctx.nodes.length;
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal(ctx.nodes.length, m, 'music that was off stays off');
+});
+
 test('the page wiring: hidden pauses media and clears the session; pagehide not persisted closes', () => {
   const handlers: Record<string, (e: unknown) => void> = {};
   const paused: string[] = [];
@@ -161,9 +192,11 @@ test('the page wiring: hidden pauses media and clears the session; pagehide not 
     addEventListener: (t: string, h: (e: unknown) => void) => { handlers['d:' + t] = h; },
     querySelectorAll: () => [{ pause: () => paused.push('x') }],
   };
-  const win = { addEventListener: (t: string, h: (e: unknown) => void) => { handlers['w:' + t] = h; } };
+  // A top window: the frame's focus is not followed (kit audio-focus.ts has its own tests).
+  const win: { top?: unknown; addEventListener(t: string, h: (e: unknown) => void): void } = { addEventListener: (t, h) => { handlers['w:' + t] = h; } };
+  win.top = win;
   const session = { metadata: { title: 'x' } as unknown, playbackState: 'playing' };
-  installAudioPage({ doc: doc as never, win: win as never, nav: { mediaSession: session } });
+  installAudioPage({ doc: doc as never, win: win as never, nav: { mediaSession: session }, timers: { setTimeout: () => 0, clearTimeout: () => {} } });
   doc.visibilityState = 'hidden';
   handlers['d:visibilitychange']!({});
   assert.equal(ctx.state, 'suspended');

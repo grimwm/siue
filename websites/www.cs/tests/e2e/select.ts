@@ -69,18 +69,18 @@ const RULES: [RegExp, Selection | ((m: RegExpMatchArray) => string[])][] = [
   [new RegExp(`^${SITE}tests/e2e/(helpers\\.ts|playwright\\.config\\.ts|package(-lock)?\\.json|run\\.sh|select\\.ts)$`), 'ALL'],
   [new RegExp(`^${SITE}tests/e2e/(.+\\.spec\\.ts)$`), m => [m[1]!]],
   // The stand-in WordPress post the embed spec serves.
-  [new RegExp(`^${SITE}tests/e2e/fixtures/wp-post\\.html$`), ['cylon-embed.spec.ts']],
+  [new RegExp(`^${SITE}tests/e2e/fixtures/wp-post\\.html$`), ['cylon-embed.spec.ts', 'games-embed-sound.spec.ts']],
   [/^(compose\.yaml|Makefile|\.github\/workflows\/ci\.yml)$/, 'ALL'],
   [new RegExp(`^${SITE}(Makefile|compose\\.yaml|docker/)`), 'ALL'],
   [new RegExp(`^${SITE}games/\\.htaccess$`), 'ALL'],
   // Tankity's TypeScript: the sources, the bundles the browser loads, and the
   // settings that decide how one becomes the other.
-  [new RegExp(`^${SITE}games/tankity/(src/|dist/|build\\.json$|tsconfig\\.json$)`), [...tankity, 'games-pwa.spec.ts', 'games-hub.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts']],
+  [new RegExp(`^${SITE}games/tankity/(src/|dist/|build\\.json$|tsconfig\\.json$)`), [...tankity, 'games-pwa.spec.ts', 'games-hub.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts', 'games-embed-sound.spec.ts']],
   // A game's own folder.
-  [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.ts', 'games-hub.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts']],
+  [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.ts', 'games-hub.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts', 'games-embed-sound.spec.ts']],
   // Cylon's folder (src/, the dist/ bundle the kit builds, build.json, tests): the home page and the games hub load it.
-  [new RegExp(`^${SITE}games/cylon/`), [...shell, 'cylon-embed.spec.ts']],
-  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts', 'crete-pieces.spec.ts', 'crete-layout.spec.ts', 'crete-chapter.spec.ts', 'crete-editor.spec.ts', 'crete-editor-looks.spec.ts', 'crete-solver.spec.ts', 'crete-music.spec.ts', 'crete-modern.spec.ts', 'crete-classic-view.spec.ts', 'crete-gate.spec.ts', 'crete-bubble.spec.ts', 'crete-look-sizes.spec.ts', 'crete-touch.spec.ts', 'crete-tips.spec.ts', 'crete-title.spec.ts', 'crete-endless.spec.ts', 'crete-demo.spec.ts', 'crete-shared-bank.spec.ts', 'crete-wall-cues.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts']],
+  [new RegExp(`^${SITE}games/cylon/`), [...shell, 'cylon-embed.spec.ts', 'games-embed-sound.spec.ts']],
+  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts', 'crete-pieces.spec.ts', 'crete-layout.spec.ts', 'crete-chapter.spec.ts', 'crete-editor.spec.ts', 'crete-editor-looks.spec.ts', 'crete-solver.spec.ts', 'crete-music.spec.ts', 'crete-modern.spec.ts', 'crete-classic-view.spec.ts', 'crete-gate.spec.ts', 'crete-bubble.spec.ts', 'crete-look-sizes.spec.ts', 'crete-touch.spec.ts', 'crete-tips.spec.ts', 'crete-title.spec.ts', 'crete-endless.spec.ts', 'crete-demo.spec.ts', 'crete-shared-bank.spec.ts', 'crete-wall-cues.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts', 'games-embed-sound.spec.ts']],
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the
   // settings that decide how: the lockfile only pins the compiler.
   [new RegExp(`^${SITE}package-lock\\.json$`), 'NONE'],

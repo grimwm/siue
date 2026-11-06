@@ -7,6 +7,7 @@
  * nothing past its end to overlap, so the join is a short equal-power dip (the first deck's last moments fade
  * out, the second's first fade in) that hides a decoder's gap. DOM-free: the decks and timers are ports. */
 import type { Timers } from "../../_kit/ports.ts";
+import { AWAY_FADE_S } from "../../_kit/audio-focus.ts";
 
 /** A fade's curve: linear, or equal-power (constant loudness across a crossfade). */
 export type FadeShape = "linear" | "equal-power";
@@ -46,6 +47,9 @@ export interface Music {
   hold(): void;
   /** The page showed again: goes on from there. */
   release(): void;
+  /** The player clicked out of the game's frame (kit audio-focus.ts): on, the music fades out over AWAY_FADE_S and
+   *  stops, remembering where, whatever the background switch says; off, it goes on from there if it may play. */
+  away(on: boolean): void;
 }
 
 /** Seconds the music takes to come in from silence. */
@@ -84,7 +88,9 @@ export function createMusic(ports: MusicPorts): Music {
   let enabled = false;
   let held = false;
   let background = true;
-  /** Where the music was when the page hid. */
+  let gone = false;
+  let goneTimer = 0;
+  /** Where the music was when the page hid or the player left. */
   let heldAt = 0;
 
   /** The player, its two decks made and loading on the first call. */
@@ -224,13 +230,13 @@ export function createMusic(ports: MusicPorts): Music {
 
   /** Brings the sound in line with the switches and the page: music plays when enabled and shown. */
   function apply(): void {
-    const target = enabled && !held;
+    const target = enabled && !held && !gone;
     if (target === !!player?.on) return;
     if (target) {
       start(heldAt);
       heldAt = 0;
     } else if (player) {
-      if (held) heldAt = player.decks[player.live].position();
+      if (held || gone) heldAt = player.decks[player.live].position();
       stop(player);
     }
   }
@@ -261,6 +267,23 @@ export function createMusic(ports: MusicPorts): Music {
     release() {
       held = false;
       apply();
+    },
+    away(on) {
+      if (on === gone) return;
+      gone = on;
+      clearTimer(goneTimer);
+      goneTimer = 0;
+      const p = player?.on ? player : null;
+      if (on) {
+        if (!p) return;
+        p.decks[p.live].fade(0, AWAY_FADE_S);
+        goneTimer = timers.setTimeout(() => { goneTimer = 0; apply(); }, AWAY_FADE_S * 1000);
+      } else if (p) {
+        // Back within the fade: the music never stopped, so it swells again from where the fade left it.
+        p.decks[p.live].fade(1, AWAY_FADE_S);
+      } else {
+        apply();
+      }
     },
   };
 }

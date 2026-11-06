@@ -102,6 +102,9 @@ let gestured = false;
 /* True while the page is hidden or gone: the context is held suspended, no
    effect plays and no music timer runs (see pageHidden/pageVisible below). */
 let pageHidden = false;
+/* True while the player has clicked out of the game's frame on another page
+   (frameAway): as quiet as a hidden page, and the turn ping stays silent too. */
+let frameOut = false;
 let pingTimer: ReturnType<typeof setTimeout> | 0 = 0;
 const PING_AWAKE_MS = 700;
 const SFX_FILES: Record<string, SfxFile> = {}; // event -> the file that voices it
@@ -178,10 +181,11 @@ function playSample(name: SfxName): boolean {
 /** Sound effects. */
 export const sfx = {
   /** The event's file when game.json has one that loaded, else its synthesized voice. */
-  play(name: SfxName): void { if (pageHidden) return; if (!playSample(name)) SYNTH[name](); },
+  play(name: SfxName): void { if (pageHidden || frameOut) return; if (!playSample(name)) SYNTH[name](); },
   /** The two-note ping for a turn that comes up in a hidden tab: wakes the
    *  suspended context for the ping alone, then suspends it again. */
   turnPing(): void {
+    if (frameOut) return;
     if (pageHidden && !core.isMuted('sfx')) {
       core.wake();
       clearTimeout(pingTimer);
@@ -190,7 +194,7 @@ export const sfx = {
     blip(880, 0.12, 'sine', 0.08, null, 0); blip(1320, 0.18, 'sine', 0.07, null, 0.13);
   },
   /** Three beeps as the turn clock runs low. */
-  clockWarn(): void { if (pageHidden) return; for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16); },
+  clockWarn(): void { if (pageHidden || frameOut) return; for (let i = 0; i < 3; i++) blip(988, 0.09, 'square', 0.07, null, i * 0.16); },
 };
 
 /* Punchy procedural war-grooves: four songs of 32 steps (two bars each),
@@ -358,7 +362,7 @@ function playPass(play: Play, entry: TrackEntry, vol: number, when: number, fade
 function armPass(play: Play): void {
   clearTimeout(play.timer);
   const ac = audioCtx();
-  if (!ac || !play.again || pageHidden) return;
+  if (!ac || !play.again || pageHidden || frameOut) return;
   const again = play.again;
   play.timer = setTimeout(again, Math.max(0, (play.againAt - ac.currentTime - 1) * 1000));
 }
@@ -494,10 +498,24 @@ export const music = {
  *  a suspended clock holds each voice where it is. */
 export function pageHide(): void {
   pageHidden = true;
+  holdMusic();
+  core.hold();
+}
+/** Stops the synth's scheduler and every track's next-pass timer; a suspended
+ *  clock holds each voice where it is. */
+function holdMusic(): void {
   stopSynth();
   clearTimeout(trackPlay?.timer);
   clearTimeout(trackPlay?.heard?.timer);
-  core.hold();
+}
+/** Music comes back if it is on and not muted, from where each track was. */
+function wakeMusic(): void {
+  if (!musicOn || musicMuted) return;
+  if (trackPlay) {
+    armPass(trackPlay);
+    if (trackPlay.heard) armPass(trackPlay.heard);
+  } else if (trackMode()) playTrack();
+  else if (!musicTimer && audioCtx()) musicTimer = setInterval(musicStep, 60);
 }
 /** The page is visible again: the context resumes, and music resumes only if
  *  it is on and not muted, from where each track was. */
@@ -506,12 +524,22 @@ export function pageVisible(): void {
   pageHidden = false;
   clearTimeout(pingTimer);
   core.release();
-  if (!musicOn || musicMuted) return;
-  if (trackPlay) {
-    armPass(trackPlay);
-    if (trackPlay.heard) armPass(trackPlay.heard);
-  } else if (trackMode()) playTrack();
-  else if (!musicTimer && audioCtx()) musicTimer = setInterval(musicStep, 60);
+  if (!frameOut) wakeMusic();
+}
+/** The player clicked out of the game's frame on another page (on), or back
+ *  in (off): kit audio-focus.ts. Out, the sound fades and the context is
+ *  suspended (the core's setAway) and nothing plays, not even the turn ping;
+ *  back, only what was playing comes back, and only if the page shows. */
+export function frameAway(on: boolean): void {
+  if (on === frameOut) return;
+  frameOut = on;
+  if (on) {
+    holdMusic();
+    core.setAway(true);
+    return;
+  }
+  core.setAway(false);
+  if (!pageHidden) wakeMusic();
 }
 /** The page is gone for good (pagehide, not persisted): close the context. */
 export function pageClose(): void {

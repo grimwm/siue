@@ -151,6 +151,40 @@ test('a hidden page holds the context, stops the bed and plays nothing; shown ag
   assert.equal(ctx.closes, 1);
 });
 
+test('clicked out of its frame the sound fades and suspends, the bed stops and nothing plays; back the bed comes back', async () => {
+  const { audio, ctx } = rig();
+  audio.syncMusic();
+  await tick();
+  audio.frameAway(true);
+  assert.equal(musicBus(ctx).gain.calls.at(-1)?.[0], 'lin', 'the buses fade');
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(ctx.state, 'suspended');
+  const out = ctx.nodes.length;
+  SFX.forEach(n => audio.sfx(n));
+  audio.syncMusic();
+  audio.prime();
+  audio.unlock();
+  await tick();
+  assert.equal(ctx.nodes.length, out, 'nothing is made while out');
+  audio.pageHide();
+  audio.pageShow();
+  await tick();
+  assert.equal(ctx.state, 'suspended', 'a tab shown again while the player is out stays quiet');
+  audio.frameAway(false);
+  await tick();
+  assert.equal(ctx.state, 'running');
+  assert.equal(musicBus(ctx).gain.value, volumeToGain(50, 'music'), 'the bed is back');
+});
+
+test('back in the frame with the music off, no bed starts', async () => {
+  const { audio, ctx } = rig({ settings: { musicEnabled: false } });
+  audio.sfx(SFX[0]!);
+  audio.frameAway(true);
+  audio.frameAway(false);
+  await tick();
+  assert.equal(musicBus(ctx).gain.value, 0);
+});
+
 test('no music outside a session or at volume 0', async () => {
   const outside = rig({ session: false });
   outside.audio.syncMusic();

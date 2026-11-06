@@ -121,6 +121,14 @@ buses, `sfx` and `music`, each a gain node to the speakers. `setGain` and
 `setMuted` set a bus at once (a muted bus is 0, and nothing sent to it is even
 made); `unlock(onReady)` is for a gesture: it resumes the context and, the
 first time it runs, primes it with a silent blip and calls `onReady`.
+`setAway(on)` is for a player who clicked out of the game's frame
+(`audio-focus.ts`): on, both buses fade to silence over `AWAY_FADE_S`
+(150 ms), the context is then suspended, no sound is made (so none waits in
+the suspended context to play on the return) and nothing resumes it, not a
+sound, `release()` or `wake()`; a gain or mute set meanwhile waits. Off, the
+buses take their gains again (a muted bus stays muted) and the context
+resumes only if it was running when the player left, or a `release()` came
+while away; a context never made stays unmade.
 `tone(spec, bus)` and `noise(spec, bus)` are the two envelopes every voice is
 built from: an oscillator or filtered noise whose gain falls exponentially to
 silence, with an optional attack and pitch or filter slide. Voices, songs and
@@ -152,6 +160,26 @@ from the back/forward cache also calls `close`. A page that starts hidden
 hides at once. Each game decides what going quiet means: Tankity suspends its
 sound and pauses its media; Cylon pauses the run as How to Play does and
 holds its sound; Crete stops its play-through and hint timers (`pause()`, `resume()`) and re-arms them on show. Tankity's own `visibilitychange` listeners (the on-screen report and toast/poll catch-up in `main.ts`, the room catch-up in `room.ts`) stay outside it: they act on the visibility change alone, and `followPage` would also fire them on `freeze`, `resume`, `pageshow` and `pagehide`.
+
+## Frame focus (`audio-focus.ts`)
+
+`followFocus({ doc, win, timers }, { away, back })` is for a game in a frame
+on another page: a blog's embed or the site's `play/<id>/` page. Clicking
+out of the frame calls `away`; a press (`pointerdown` or `keydown`, caught on
+the window before the game's own handlers) or `focus` back in the frame,
+while it shows, calls `back`. A hidden tab is away too, and shown again it
+comes back only when the frame has focus. A blur waits `BLUR_SETTLE_MS`
+(50 ms) and then asks `document.hasFocus()`: focus that moved within the
+frame (the game's own input or frame), a blur followed at once by `focus`
+(an alert, a fullscreen change) and the frame's document in full screen are
+not leaving. In a top window (`isEmbedded` is false: `window.top` is the
+window itself) it listens to nothing and returns false; `followPage` already
+quiets a game when its tab hides. Each game decides what away means: all
+three call the core's `setAway`; Crete also fades its music out and stops it
+where it is (`music.away`), whatever Music in the Background says; Tankity
+and Cylon stop their music as for a hidden page and play nothing, Tankity's
+turn ping included. `test/audio-focus.test.ts` runs it with the core and the
+fake context.
 
 ## Components (`ui/`)
 

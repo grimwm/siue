@@ -1,5 +1,5 @@
 {
-  "accept": [2],
+  "accept": [2, 3],
   "parts": 12,
   "servedCap": 1500,
   "pendingCap": 300,

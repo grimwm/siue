@@ -830,12 +830,15 @@ final class Bank
     }
 
     /**
-     * A provenance tuple, checked, every run text blanked.
+     * A provenance tuple, checked, every run text blanked. A grown tuple
+     * (version 3 on) also names its climb: the easier grade its parent was
+     * made at, the climb's seed, and the most changes it tries.
      * @return array<string, mixed>
      */
     private function tuple(mixed $data): array
     {
-        self::fields($data, ['v', 'seed', 'tier', 'grade', 'depth', 'k', 'run'], 'tuple');
+        $names = ['v', 'seed', 'tier', 'grade', 'depth', 'k', 'run'];
+        self::fields($data, is_array($data) && array_key_exists('grow', $data) ? [...$names, 'grow'] : $names, 'tuple');
         if (!is_string($data['seed']) || !preg_match('/^[a-z0-9-]{1,32}\z/', $data['seed'])) {
             throw Refusal::invalid('tuple.seed');
         }
@@ -852,7 +855,7 @@ final class Bank
                 'score' => self::int($p['score'], 0, 10000, "tuple.run.$i.score"),
             ];
         }
-        return [
+        $out = [
             'v' => self::int($data['v'], 1, 1000000, 'tuple.v'),
             'seed' => $data['seed'],
             'tier' => self::int($data['tier'], 1, 10, 'tuple.tier'),
@@ -861,6 +864,31 @@ final class Bank
             'k' => self::int($data['k'], 0, $this->config['parts'] - 1, 'tuple.k'),
             'run' => $played,
         ];
+        if (array_key_exists('grow', $data)) {
+            $out['grow'] = self::grow($data['grow'], $out['v'], $out['grade']);
+        }
+        return $out;
+    }
+
+    /**
+     * A grown tuple's climb, checked: only from version 3, from a grade
+     * easier than the tuple's, a seed like a run's, and 1 to 1,000 changes.
+     * @return array{from: string, seed: string, steps: int}
+     */
+    private static function grow(mixed $data, int $v, string $grade): array
+    {
+        self::fields($data, ['from', 'seed', 'steps'], 'tuple.grow');
+        if ($v < 3) {
+            throw Refusal::invalid('tuple.grow');
+        }
+        $from = self::grade($data['from'], 'tuple.grow.from');
+        if (array_search($from, self::GRADES, true) >= array_search($grade, self::GRADES, true)) {
+            throw Refusal::invalid('tuple.grow.from');
+        }
+        if (!is_string($data['seed']) || !preg_match('/^[a-z0-9-]{1,32}\z/', $data['seed'])) {
+            throw Refusal::invalid('tuple.grow.seed');
+        }
+        return ['from' => $from, 'seed' => $data['seed'], 'steps' => self::int($data['steps'], 1, 1000, 'tuple.grow.steps')];
     }
 
     /** @param array<string, mixed> $a @param array<string, mixed> $b both checked by made() */

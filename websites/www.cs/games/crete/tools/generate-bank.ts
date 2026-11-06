@@ -42,9 +42,9 @@ import { dirname, join } from 'node:path';
 import { levelFile } from './bank-file.ts';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import { ENDLESS_VERSION, requestOf } from '../src/endless/provenance.ts';
-import type { SharedMade, Tuple } from '../src/endless/provenance.ts';
-import { PARTS, SIDES, placeOf, planOf, reachOf } from '../src/endless/generate.ts';
+import { ENDLESS_VERSION, childOf, requestOf } from '../src/endless/provenance.ts';
+import type { Child, SharedMade, Tuple } from '../src/endless/provenance.ts';
+import { PARTS, SIDES, growOf, placeOf, planOf, reachOf } from '../src/endless/generate.ts';
 import type { BankLevel } from '../src/endless/generate.ts';
 import { GRADE_BANDS, hidesWalls } from '../src/endless/gate.ts';
 import { rngOf } from '../src/endless/random.ts';
@@ -142,21 +142,29 @@ function memoryPool(grade: Grade, plateau: boolean): BankLevel[] {
 
 const SEED_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
 
-/** A tuple for `want`, drawn from `random`. For a large board it tries seeds until the first rounds' drafts are large
- *  (the plan alone, no search), which leans the part toward a large level. */
+/** A tuple for `want`, drawn from `random`: its part k, and with it a grown part's climb where generate.ts's growOf
+ *  names one (Hard's odd parts, grown from a Medium search). For a large board the part is a search for a draft (a
+ *  grown part's board is its Medium parent's), and it tries seeds until the first rounds' drafts are large (the plan
+ *  alone, no search), which leans the part toward a large level. A Medium plateau tuple's run memory is a Hard plateau
+ *  level (Medium's band is its plateau either way), and its seed one whose Hard place agrees with it on hiding walls,
+ *  so its level can be the parent of a Hard child on Hard's plateau (provenance.ts's childOf). */
 export function tupleFor(want: Want, random: () => number): Tuple {
   const int = (n: number) => Math.floor(random() * n);
-  const pool = memoryPool(want.grade, want.plateau);
+  const parenting = want.grade === 'medium' && want.plateau;
+  const pool = memoryPool(parenting ? 'hard' : want.grade, want.plateau);
   const before = pool[int(pool.length)]!;
   const tier = 1 + int(10);
   const depth = want.plateau ? 6 + int(25) : 2 + int(4);
-  const k = int(PARTS);
+  let k = int(PARTS);
+  if (want.large && growOf(want, k)) k = (k + 1) % PARTS;
+  const grow = growOf(want, k);
   const draw = (): Tuple => {
     let seed = 'ci-';
     for (let i = 0; i < 8; i++) seed += SEED_CHARS[int(SEED_CHARS.length)]!;
-    return { v: ENDLESS_VERSION, seed, tier, grade: want.grade, depth, k, run: [{ text: before.text, explored: before.explored, score: before.score }] };
+    return { v: ENDLESS_VERSION, seed, tier, grade: want.grade, depth, k, run: [{ text: before.text, explored: before.explored, score: before.score }], ...(grow ? { grow } : {}) };
   };
   let t = draw();
+  if (parenting) for (let i = 0; i < 50 && !childOf(t); i++) t = draw();
   if (!want.large) return t;
   for (let i = 0; i < 200; i++, t = draw()) {
     const { band, hides } = placeOf(requestOf(t));
@@ -166,7 +174,7 @@ export function tupleFor(want: Want, random: () => number): Tuple {
       const plan = planOf(rngOf('endless', t.seed, t.tier, t.grade, t.depth, 'part', t.k, round), t.tier, t.grade, hides, null, reach);
       large = isLarge(t.grade, plan.rows, plan.cols);
     }
-    if (large) return t;
+    if (large && (!parenting || childOf(t))) return t;
   }
   return t;
 }
@@ -180,8 +188,9 @@ export interface GenerateDeps {
   counts(): Promise<Counts | null>;
   /** How many parts run at once. */
   workers: number;
-  /** Runs a tuple's part: the level it made, or null. */
-  make(t: Tuple): Promise<SharedMade | null>;
+  /** Runs a tuple's part: the level it made, marked `grown` when a climb made it (grow.ts), or null; with `child`, a
+   *  Medium level's Hard child too, when its climb reached Hard's band. */
+  make(t: Tuple, child: boolean): Promise<Making | null>;
   /** Posts a level; with `replace`, a full grade retires one served level for it. */
   upload(t: Tuple, made: SharedMade, replace: boolean): Promise<Upload>;
   tupleFor(w: Want): Tuple;
@@ -195,6 +204,10 @@ export interface GenerateDeps {
 
 type PerGrade<T> = Record<Grade, T>;
 
+/** A level a worker made, whether a climb grew it from a Medium parent rather than finding it as a draft, and a
+ *  Medium level's Hard child (provenance.ts's childOf) when one was asked for and its climb reached Hard's band. */
+export type Making = SharedMade & { grown?: boolean; child?: Child | null };
+
 /** What a run did: parts tried, levels made and posted per grade (`replaced` the posted ones that retired a served
  *  level), parts that made nothing, and posts the bank refused; per grade too, with the levels the bank (or this run)
  *  already held, which count for nothing, the part time spent on it (ms) and how long each part that made a level
@@ -202,6 +215,8 @@ type PerGrade<T> = Record<Grade, T>;
 export interface Made {
   tried: number; found: PerGrade<number>; added: PerGrade<number>; replaced: PerGrade<number>; empty: number; refused: number;
   emptyBy: PerGrade<number>; refusedBy: PerGrade<number>; duplicateBy: PerGrade<number>; retiredBy: PerGrade<number>; spentMs: PerGrade<number>; levelMs: PerGrade<number[]>;
+  /** How long each part that made a grown level took (ms): a subset of levelMs. */
+  grownMs: PerGrade<number[]>;
   /** The grades stopped at their cap with rollover off, and what the run says about each. */
   capped: Grade[]; hints: string[];
 }
@@ -244,7 +259,8 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
   const zero = () => ({ easy: 0, medium: 0, hard: 0 });
   const out: Made = {
     tried: 0, found: zero(), added: zero(), replaced: zero(), empty: 0, refused: 0,
-    emptyBy: zero(), refusedBy: zero(), duplicateBy: zero(), retiredBy: zero(), spentMs: zero(), levelMs: { easy: [], medium: [], hard: [] }, capped: [], hints: [],
+    emptyBy: zero(), refusedBy: zero(), duplicateBy: zero(), retiredBy: zero(), spentMs: zero(), levelMs: { easy: [], medium: [], hard: [] },
+    grownMs: { easy: [], medium: [], hard: [] }, capped: [], hints: [],
   };
   let counts: Counts | null;
   try { counts = await deps.counts(); } catch { counts = null; }
@@ -269,7 +285,7 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
   let halted = false, errors = 0;
   const running = new Set<Promise<void>>();
 
-  const finish = async (want: Want, t: Tuple, made: SharedMade | null, started: number): Promise<void> => {
+  const finish = async (want: Want, t: Tuple, making: Making | null, started: number): Promise<void> => {
     const g = tally[want.grade];
     const took = Math.max(0, deps.now() - started);
     g.running--; g.done++; g.spent += took;
@@ -278,37 +294,53 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
       lastProgress = deps.now();
       deps.log(`progress after ${Math.round((lastProgress - started0) / 60_000)} min: ${grades.map(x => `${x} ${out.added[x]}${count !== null ? `/${count[x] ?? 0}` : ''}`).join(', ')}`);
     }
-    if (!made) { out.empty++; out.emptyBy[want.grade]++; g.room++; return; }
+    if (!making) { out.empty++; out.emptyBy[want.grade]++; g.room++; return; }
+    const { grown, child, ...made } = making;
     out.found[want.grade]++;
     out.levelMs[want.grade].push(took);
-    const s = tally[want.grade];
+    if (grown) out.grownMs[want.grade].push(took);
+    await post(want.grade, t, made);
+    // A Medium level's Hard child (childOf): a Hard level of its own, its climb's time Hard's, while Hard has room.
+    if (!child) return;
+    const h = tally.hard;
+    h.spent += child.ms; out.spentMs.hard += child.ms;
+    if (h.room <= 0 || halted) return;
+    h.room--;
+    out.found.hard++;
+    out.levelMs.hard.push(child.ms); out.grownMs.hard.push(child.ms);
+    await post('hard', child.tuple, child.made);
+  };
+
+  /** Posts a level made for `grade` and counts what the bank said. */
+  const post = async (grade: Grade, t: Tuple, made: SharedMade): Promise<void> => {
+    const s = tally[grade];
     const again = seen.has(made.text);
     seen.add(made.text);
     const sent = again ? 'duplicate' : halted ? 'error' : await deps.upload(t, made, s.replace).catch((): Upload => 'error');
     if (sent === 'duplicate' || sent === 'retired') {
       // Held already, or served once and let go: it counts toward nothing (not the count, the room or the cap), so
       // the grade makes another.
-      (sent === 'duplicate' ? out.duplicateBy : out.retiredBy)[want.grade]++; g.room++;
+      (sent === 'duplicate' ? out.duplicateBy : out.retiredBy)[grade]++; s.room++;
       const why = sent === 'retired' ? 'the bank retired this layout' : again ? 'made twice this run' : 'the bank has it';
-      deps.log(`${want.grade}: ${sent} (score ${made.score}), ${why}; not counted`);
+      deps.log(`${grade}: ${sent} (score ${made.score}), ${why}; not counted`);
       return;
     }
     if (sent === 'ok' || sent === 'replaced') {
       errors = 0;
-      out.added[want.grade]++;
-      if (sent === 'replaced') out.replaced[want.grade]++;
+      out.added[grade]++;
+      if (sent === 'replaced') out.replaced[grade]++;
       s.total++;
-      if (onPlateau(want.grade, made.score, made.hides)) {
+      if (onPlateau(grade, made.score, made.hides)) {
         s.plateau++;
         const rows = made.text.split('\n').filter((l, i, all) => i > all.indexOf('') && l !== '');
-        if (isLarge(want.grade, rows.length, rows[0]?.length ?? 0)) s.large++;
+        if (isLarge(grade, rows.length, rows[0]?.length ?? 0)) s.large++;
       }
       return;
     }
     out.refused++;
-    out.refusedBy[want.grade]++;
+    out.refusedBy[grade]++;
     s.room++;
-    if (sent === 'full') { s.room = 0; full.add(want.grade); deps.log(`${want.grade} is full`); }
+    if (sent === 'full') { s.room = 0; full.add(grade); deps.log(`${grade} is full`); }
     if (sent === 'rate') { halted = true; deps.log('the bank\'s hourly share for this runner is spent; stopping'); }
     if (sent === 'error' && !halted && ++errors >= 3) { halted = true; deps.log('the bank keeps failing; stopping'); }
   };
@@ -323,7 +355,9 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
       const t = deps.tupleFor(want);
       const started = deps.now();
       out.tried++;
-      const job: Promise<void> = deps.make(t).catch(() => null).then(m => finish(want, t, m, started)).finally(() => { running.delete(job); });
+      // A Medium plateau level is climbed toward Hard too while Hard has room (provenance.ts's childOf).
+      const child = want.grade === 'medium' && want.plateau && tally.hard.room > 0;
+      const job: Promise<void> = deps.make(t, child).catch(() => null).then(m => finish(want, t, m, started)).finally(() => { running.delete(job); });
       running.add(job);
     }
     if (!running.size) break;
@@ -359,10 +393,13 @@ export function median(xs: readonly number[]): number {
 
 /** One grade's numbers from a run: levels made (by a part), added into room, replacing a served one, refused by the
  *  bank, parts that made none; the part time spent on it, levels in per hour of the run, and the seconds a part that
- *  made a level took, mean and median, and the part time per level made counting the empty parts. */
+ *  made a level took, mean and median, and the part time per level made counting the empty parts; and of the levels
+ *  made, how many a climb grew from an easier one (grow.ts) and how many were found fresh as drafts, with the mean
+ *  seconds of each's parts. */
 export interface GradeStats {
   made: number; added: number; replaced: number; duplicate: number; retired: number; refused: number; empty: number; capped: boolean;
   partHours: number; perHour: number; meanSeconds: number; medianSeconds: number; secondsPerLevel: number;
+  grown: number; fresh: number; grownMeanSeconds: number; freshMeanSeconds: number;
 }
 /** The machine a run ran on. */
 export interface Machine { host: string; cpu: string; cores: number; totalMb: number }
@@ -374,16 +411,21 @@ export interface RunStats {
 
 const round = (n: number, places = 1) => Math.round(n * 10 ** places) / 10 ** places;
 
+const meanSeconds = (ms: readonly number[]) => (ms.length ? round(ms.reduce((a, b) => a + b, 0) / ms.length / 1000) : 0);
+
 export function gradeStats(made: Made, g: Grade, wallMs: number): GradeStats {
-  const ms = made.levelMs[g], found = made.found[g];
+  const ms = made.levelMs[g], found = made.found[g], grown = made.grownMs[g];
+  const freshMs = [...ms];
+  for (const x of grown) freshMs.splice(freshMs.indexOf(x), 1);
   return {
     made: found, added: made.added[g] - made.replaced[g], replaced: made.replaced[g], duplicate: made.duplicateBy[g], retired: made.retiredBy[g], refused: made.refusedBy[g], empty: made.emptyBy[g],
     capped: made.capped.includes(g),
     partHours: round(made.spentMs[g] / 3_600_000, 2),
     perHour: wallMs > 0 ? round(made.added[g] / (wallMs / 3_600_000)) : 0,
-    meanSeconds: ms.length ? round(ms.reduce((a, b) => a + b, 0) / ms.length / 1000) : 0,
+    meanSeconds: meanSeconds(ms),
     medianSeconds: round(median(ms) / 1000),
     secondsPerLevel: found ? round(made.spentMs[g] / found / 1000) : 0,
+    grown: grown.length, fresh: found - grown.length, grownMeanSeconds: meanSeconds(grown), freshMeanSeconds: meanSeconds(freshMs),
   };
 }
 
@@ -398,15 +440,16 @@ const hm = (seconds: number) => `${Math.floor(seconds / 3600)}h${String(Math.rou
 /** A run's numbers as log lines: one per grade, then the run's. */
 export function statsLines(r: RunStats): string[] {
   const lines = Object.entries(r.grades).map(([g, s]) => `${g}: made ${s.made}, added ${s.added}, replaced ${s.replaced}, duplicate ${s.duplicate}, retired ${s.retired}, refused ${s.refused}, parts with none ${s.empty}; `
-    + `${s.partHours} part-hours, ${s.perHour} per hour, ${s.meanSeconds} s mean and ${s.medianSeconds} s median a level (${s.secondsPerLevel} s of part time each, empty parts counted)`);
+    + `${s.partHours} part-hours, ${s.perHour} per hour, ${s.meanSeconds} s mean and ${s.medianSeconds} s median a level (${s.secondsPerLevel} s of part time each, empty parts counted); `
+    + `${s.grown} grown (${s.grownMeanSeconds} s mean), ${s.fresh} fresh (${s.freshMeanSeconds} s mean)`);
   lines.push(`run: ${hm(r.wallSeconds)} on ${r.workers} worker(s)${r.memoryMb !== null ? ` in ${r.memoryMb} MB` : ''}, ${r.machine.cores} cores (${r.machine.cpu}), ${Math.round(r.machine.totalMb)} MB`);
   return lines;
 }
 
 /** A run's numbers as a markdown table, for a CI step summary. */
 export function statsMarkdown(r: RunStats): string {
-  const rows = Object.entries(r.grades).map(([g, s]) => `| ${g} | ${s.made} | ${s.added} | ${s.replaced} | ${s.duplicate} | ${s.retired} | ${s.refused} | ${s.empty} | ${s.partHours} | ${s.perHour} | ${s.meanSeconds} | ${s.medianSeconds} |`);
-  return ['### Crete levels made', '', '| Difficulty | Made | Added | Replaced | Duplicate | Retired | Refused | Parts with none | Part-hours | Per hour | Mean s | Median s |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|', ...rows, '',
+  const rows = Object.entries(r.grades).map(([g, s]) => `| ${g} | ${s.made} | ${s.grown} | ${s.fresh} | ${s.added} | ${s.replaced} | ${s.duplicate} | ${s.retired} | ${s.refused} | ${s.empty} | ${s.partHours} | ${s.perHour} | ${s.meanSeconds} | ${s.grownMeanSeconds} | ${s.freshMeanSeconds} | ${s.medianSeconds} |`);
+  return ['### Crete levels made', '', '| Difficulty | Made | Grown | Fresh | Added | Replaced | Duplicate | Retired | Refused | Parts with none | Part-hours | Per hour | Mean s | Grown mean s | Fresh mean s | Median s |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|', ...rows, '',
     `${hm(r.wallSeconds)} on ${r.workers} worker(s)${r.memoryMb !== null ? ` in ${r.memoryMb} MB` : ''}, ${r.machine.cores} cores (${r.machine.cpu})`, ''].join('\n');
 }
 
@@ -433,7 +476,7 @@ export function statusLines(counts: Counts): string[] {
 }
 
 /** Up to `n` worker threads, each running one part at a time with a heap limit; one that dies is replaced. */
-export function workerPool(n: number): { make(t: Tuple): Promise<SharedMade | null>; stop(): void } {
+export function workerPool(n: number): { make(t: Tuple, child: boolean): Promise<Making | null>; stop(): void } {
   const url = new URL('./generate-bank-worker.ts', import.meta.url);
   const idle: Worker[] = [];
   const all = new Set<Worker>();
@@ -448,21 +491,23 @@ export function workerPool(n: number): { make(t: Tuple): Promise<SharedMade | nu
   const take = (): Promise<Worker> => (idle.length ? Promise.resolve(idle.pop()!) : new Promise(r => queue.push(() => r(idle.pop()!))));
   const give = (w: Worker) => { idle.push(w); queue.shift()?.(); };
   return {
-    async make(t) {
+    async make(t, child) {
       if (stopped) return null;
       const w = await take();
       const mine = ++id;
       return new Promise(resolve => {
-        const done = (found: SharedMade | null, dead: boolean) => {
+        const done = (found: Making | null, dead: boolean) => {
           w.off('message', onMessage); w.off('error', onError); w.off('exit', onExit);
           if (dead) { all.delete(w); if (!stopped) give(spawn()); } else give(w);
           resolve(found);
         };
-        const onMessage = (m: { id: number; found: SharedMade | null }) => { if (m.id === mine) done(m.found, false); };
+        const onMessage = (m: { id: number; found: SharedMade | null; grown: boolean; child: Child | null }) => {
+          if (m.id === mine) done(m.found && { ...m.found, ...(m.grown ? { grown: true } : {}), ...(m.child ? { child: m.child } : {}) }, false);
+        };
         const onError = () => { void w.terminate(); done(null, true); };
         const onExit = () => done(null, true);
         w.on('message', onMessage); w.on('error', onError); w.on('exit', onExit);
-        w.postMessage({ id: mine, tuple: t });
+        w.postMessage({ id: mine, tuple: t, child });
       });
     },
     stop() { stopped = true; for (const w of all) void w.terminate(); },
@@ -619,7 +664,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const made = await generateAll({
         workers,
         counts: save !== null && !token ? async () => unboundedCounts() : counts,
-        make: t => pool.make(t),
+        make: (t, child) => pool.make(t, child),
         async upload(tuple, made, replace) {
           if (save !== null) {
             const { result, name } = saveLevel(save, tuple, made);

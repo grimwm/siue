@@ -3,12 +3,13 @@
  * levels. Over HTTPS only, it asks the bank (games/crete/endless-bank.php) for the
  * levels waiting in quarantine, makes each again from its tuple with this checkout's generator, and posts whether it
  * made the same level. The bank admits a level on one trusted match, and rejects it on a mismatch. Its token is the
- * CRETE_BANK_VERIFIER_TOKEN secret, sent in the X-Crete-Verifier header; it is never printed. A level of another
- * generator version is left for the players' devices. Each run stops after `--items` levels or `--minutes`, and it
- * always exits 0: a failed run only leaves levels waiting for the next.
+ * CRETE_BANK_VERIFIER_TOKEN secret, sent in the X-Crete-Verifier header; it is never printed. It checks every version
+ * this generator makes again (provenance.ts's VERSIONS); a level of another is left for the players' devices. Each
+ * run stops after `--items` levels or `--minutes`, and it always exits 0: a failed run only leaves levels waiting for
+ * the next.
  *
  *   CRETE_BANK_VERIFIER_TOKEN=… node tools/verify-bank.ts [--items 25] [--minutes 12] [--url <endpoint>] */
-import { ENDLESS_VERSION, regenerate, sameMade } from '../src/endless/provenance.ts';
+import { VERSIONS, regenerate, sameMade } from '../src/endless/provenance.ts';
 import type { SharedMade, Tuple } from '../src/endless/provenance.ts';
 import { tupleShape } from '../src/endless/verifier.ts';
 import { knownOf } from '../src/endless/gate.ts';
@@ -59,7 +60,7 @@ export async function verifyAll(deps: VerifyDeps, limits: { items: number; ms: n
     const item = raw as { grade?: unknown; h?: unknown; tuple?: unknown; made?: unknown };
     const tuple = tupleShape(item.tuple);
     if (!tuple || typeof item.h !== 'string' || typeof item.grade !== 'string' || typeof item.made !== 'object' || item.made === null) { tally.skipped++; continue; }
-    if (tuple.v !== ENDLESS_VERSION) { tally.skipped++; deps.log(`${item.h}: version ${tuple.v}, left for the players`); continue; }
+    if (!VERSIONS.includes(tuple.v)) { tally.skipped++; deps.log(`${item.h}: version ${tuple.v}, left for the players`); continue; }
     let found: SharedMade | null;
     try { found = deps.regenerate(tuple); } catch { found = null; }
     const verdict = sameMade(found, item.made as SharedMade) ? 'match' : 'mismatch';

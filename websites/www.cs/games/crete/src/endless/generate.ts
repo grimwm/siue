@@ -33,6 +33,8 @@ import {
 } from './gate.ts';
 import type { Band, Checked, Known } from './gate.ts';
 import type { Dir } from '../puzzle/tiles.ts';
+import { grow } from './grow.ts';
+import type { Grown } from './grow.ts';
 
 /** The most chapters a tier counts: Chapter 10 brings no new piece, so its pieces are Chapter 9's. */
 export const TIERS = 10;
@@ -70,6 +72,8 @@ export interface Made {
   /** Its shortest line, as move letters (cache.ts's lineText), for Ariadne's thread. */
   line: string;
   from: 'made' | 'bank';
+  /** Grown from an easier level (grow.ts) rather than found as a draft. */
+  grown?: boolean;
   /** Changes tried, and the situations the search spent. */
   tries: number;
   spent: number;
@@ -497,19 +501,48 @@ export function holds(level: Level, family: Family): boolean {
 /** What a part of a level's search came to: the level it found, or null once it spent its budget. */
 export interface Part { found: Made | null; tries: number; spent: number }
 
+/** The band a plain level at `req.depth` falls in: the climb from the run's last plain level. */
+function plainBand(req: Request): Band {
+  return bandAfter(lastPlain(req.run)?.score ?? null, req.grade);
+}
+
 /** The place `req.depth` holds in its run: its band, whether its level hides walls (one in HIDDEN_EVERY, from the
  *  seed, once the tier has hidden walls), and the run's level before it. */
 export function placeOf(req: Request): { band: Band; hides: boolean; before: Played | null } {
   const before = req.run.at(-1) ?? null;
-  const plain = bandAfter(lastPlain(req.run)?.score ?? null, req.grade);
+  const plain = plainBand(req);
   const hides = req.depth > 1 && familiesOf(req.tier).some(f => HIDING.includes(f))
     && hash('endless-hides', req.seed, req.tier, req.grade, req.depth) % HIDDEN_EVERY === 0;
   return { band: hides ? hiddenBand(plain) : plain, hides, before };
 }
 
-/** Part `k` of the search for the run's level at `req.depth` (2 or more). */
-export function makePart(req: Request, k: number, known: Known, opts: { progress?: (p: Progress) => void } = {}): Part {
-  const { band, hides, before } = placeOf(req);
+/** A grown part's climb: the easier grade its parent is searched at, the climb's seed, and the most changes it
+ *  tries (grow.ts). */
+export interface Grow { from: Grade; seed: string; steps: number }
+
+/** Hard's odd parts are grown: a Medium search at the Hard level's place, whose level is then climbed toward Hard's
+ *  band for up to GROWN_STEPS changes, each kept only when the level still passes Hard's whole gate and scores
+ *  higher. A Medium search finds a level about twice as often as a Hard one at the same place, and most Medium levels
+ *  near the top of their band climb into Hard's within a few hundred changes; the even parts keep Hard's own drafts, its larger boards among them. */
+export const GROWN_STEPS = 300;
+export function growOf(req: Pick<Request, 'grade'>, k: number): Grow | null {
+  return req.grade === 'hard' && k % 2 === 1 ? { from: 'medium', seed: 'part', steps: GROWN_STEPS } : null;
+}
+
+/** Part `k` of the search for the run's level at `req.depth` (2 or more): a search for a draft, or the grown part
+ *  growOf names (`opts.grow` names another, or with null none). */
+export function makePart(req: Request, k: number, known: Known, opts: { progress?: (p: Progress) => void; grow?: Grow | null } = {}): Part {
+  const g = opts.grow === undefined ? growOf(req, k) : opts.grow;
+  return g ? grownPart(req, k, g, known, opts).part : searchPart(req, k, known, opts);
+}
+
+/** Part `k` as a search for a draft at `req`'s grade, in its place, or with `hides` given, in its place as a level
+ *  that hides walls or not. */
+export function searchPart(req: Request, k: number, known: Known, opts: { progress?: (p: Progress) => void; hides?: boolean } = {}): Part {
+  const place = placeOf(req);
+  const { before } = place;
+  const { band, hides } = opts.hides === undefined || opts.hides === place.hides ? place
+    : { band: opts.hides ? hiddenBand(plainBand(req)) : plainBand(req), hides: opts.hides };
   const { parts, budget } = partsOf(req);
   if (!before || k < 0 || k >= parts) throw new RangeError(`no part ${k} of a search for level ${req.depth}`);
   const at: Spent = { tries: 0, spent: 0 };
@@ -520,6 +553,25 @@ export function makePart(req: Request, k: number, known: Known, opts: { progress
     ? { text: found.text, explored: found.d.explored, shortest: found.d.shortest as number, score: found.score, line: found.d.line, from: 'made', tries: at.tries, spent: at.spent }
     : null;
   return { found: made, ...at };
+}
+
+/** Part `k` grown by `g`: its parent, part `k` searched at `g.from` in `req`'s place (hiding walls where that place
+ *  does), then the climb from it toward `req`'s band, drawn from the tuple and `g.seed`, for at most `g.steps`
+ *  changes and no more than a part's budget in situations. The part is the climb's level, and what both spent. */
+export function grownPart(req: Request, k: number, g: Grow, known: Known, opts: { progress?: (p: Progress) => void; search?: (req: Request, k: number, known: Known, opts: { hides: boolean }) => Part } = {}): { parent: Made | null; climb: Grown | null; part: Part } {
+  const place = placeOf(req);
+  const { budget } = partsOf(req);
+  const p = (opts.search ?? ((r, kk, kn, o) => searchPart(r, kk, kn, { ...o, progress: x => opts.progress?.({ ...x, budget: 2 * budget }) })))({ ...req, grade: g.from }, k, known, { hides: place.hides });
+  const parent = p.found;
+  if (!parent || hidesWalls(parse(parent.text)) !== place.hides) return { parent, climb: null, part: { found: null, tries: p.tries, spent: p.spent } };
+  const run = req.run.slice(-RUN_MEMORY).map(x => parse(x.text));
+  const climb = grow(parent.text, { grade: req.grade, band: place.band }, [req.seed, req.tier, req.grade, req.depth, 'part', k, g.from, g.seed], g.steps, known, run, budget);
+  const tries = p.tries + climb.tries, spent = p.spent + climb.spent;
+  const f = climb.found;
+  const found: Made | null = f
+    ? { text: f.text, explored: f.d.explored, shortest: f.d.shortest as number, score: f.score, line: f.d.line, from: 'made', grown: true, tries, spent }
+    : null;
+  return { parent, climb, part: { found, tries, spent } };
 }
 
 /** The bank's level for the run's level at `req.depth`, after parts that spent `tries` and `spent`. */

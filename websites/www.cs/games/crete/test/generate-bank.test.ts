@@ -8,8 +8,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, tupleFor, gradeStats, median, runStats, statsLines, statsMarkdown, statusLines, isLarge, workersIn, LARGE_SIDE } from '../tools/generate-bank.ts';
 import type { Counts, GenerateDeps, Made, RunOptions, Shelf, Want } from '../tools/generate-bank.ts';
-import { ENDLESS_VERSION, requestOf, sharedOf } from '../src/endless/provenance.ts';
-import type { SharedMade } from '../src/endless/provenance.ts';
+import { ENDLESS_VERSION, childOf, requestOf, sharedOf } from '../src/endless/provenance.ts';
+import type { SharedMade, Tuple } from '../src/endless/provenance.ts';
 import { placeOf, planOf, reachOf } from '../src/endless/generate.ts';
 import { rngOf } from '../src/endless/random.ts';
 import { BANKS } from '../src/endless/bank.ts';
@@ -98,6 +98,58 @@ function fake(over: Partial<GenerateDeps> & { partMs?: number; empty?: (n: numbe
   };
   return { deps, posted, lines, stopped: () => stopped, parts: () => n };
 }
+
+test('a level a climb grew counts as grown, and goes up without the mark', async () => {
+  let t = 0, n = 0;
+  const f = fake({ now: () => t, make: async () => { const i = n++; t += 1000; return i % 2 ? { ...level(i), grown: true } : level(i); } });
+  const made = await generateAll(f.deps, { ms: Infinity, grades: ['hard'], count: { hard: 4 } });
+  assert.equal(made.added.hard, 4);
+  assert.equal(made.grownMs.hard.length, 2);
+  const s = gradeStats(made, 'hard', 4000);
+  assert.deepEqual([s.grown, s.fresh], [2, 2]);
+  for (const p of f.posted as { made: object }[]) assert.equal('grown' in p.made, false, 'the bank takes a level\'s own fields only');
+});
+
+test('a Medium plateau level\'s Hard child goes into Hard while Hard has room, its climb\'s time Hard\'s', async () => {
+  let t = 0, n = 0;
+  const asked: boolean[] = [];
+  const child = { tuple: { v: 3, seed: 'ci-child', tier: 1, grade: 'hard' as const, depth: 9, k: 0, run: [], grow: { from: 'medium' as const, seed: 'part', steps: 300 } }, made: level(30), ms: 5000 };
+  const f = fake({ now: () => t, make: async (_t, c) => { asked.push(c); const i = n++; t += 1000; return { ...level(i), ...(c ? { child } : {}) }; } });
+  const made = await generateAll(f.deps, { ms: Infinity, grades: ['medium', 'hard'], count: { medium: 2, hard: 3 } });
+  const posts = f.posted as { tuple: Tuple; made: object }[];
+  const hard = posts.filter(p => p.tuple.grade === 'hard');
+  assert.ok(asked.includes(true), 'a Medium plateau part is asked for its child');
+  assert.equal(made.added.hard, 3, 'the child counts toward Hard\'s levels');
+  assert.equal(made.added.medium, 2);
+  assert.ok(hard.some(p => p.tuple === child.tuple), 'the child, with its own tuple');
+  for (const p of posts) assert.equal('child' in p.made, false);
+  assert.ok(made.grownMs.hard.includes(5000));
+  assert.ok(made.spentMs.hard >= 5000);
+  // With no Hard room, no child is asked for.
+  const g = fake({ make: async (_t, c) => { asked.length = 0; asked.push(c); return level(1); } });
+  await generateAll(g.deps, { ms: Infinity, grades: ['medium'], count: { medium: 1 } });
+  assert.deepEqual(asked, [false]);
+});
+
+test('a Medium plateau tuple can be a Hard child\'s parent', () => {
+  let x = 7;
+  const random = () => ((x = (x * 9301 + 49297) % 233280) / 233280);
+  for (let i = 0; i < 10; i++) {
+    const t = tupleFor({ grade: 'medium', plateau: true, large: false }, random);
+    assert.ok(childOf(t));
+    assert.ok(t.run[0]!.score >= 110, 'its memory a Hard plateau level');
+  }
+});
+
+test('a Hard tuple for an odd part is grown from Medium; a large board\'s is a Hard search', () => {
+  let x = 0;
+  const random = () => ((x = (x * 9301 + 49297) % 233280) / 233280);
+  const tuples = Array.from({ length: 40 }, () => tupleFor({ grade: 'hard', plateau: true, large: false }, random));
+  for (const t of tuples) assert.equal(!!t.grow, t.k % 2 === 1);
+  assert.ok(tuples.some(t => t.grow) && tuples.some(t => !t.grow));
+  for (let i = 0; i < 10; i++) assert.equal(tupleFor({ grade: 'hard', plateau: true, large: true }, random).grow, undefined);
+  assert.equal(tupleFor({ grade: 'medium', plateau: true, large: false }, random).grow, undefined);
+});
 
 test('it stops starting parts once its time is spent, and ends the ones still running', async () => {
   const f = fake({ partMs: 1000 });
@@ -305,7 +357,7 @@ test('without rollover a count stops at the cap and says so, and a full grade ge
   assert.match(optionsOf(['--rollover', 'maybe'], 8, 16_384) as string, /yes or no/);
 });
 
-test('a run\'s numbers: per grade made, added, replaced, refused, part time, rate and seconds a level', () => {
+test('a run\'s numbers: per grade made, added, replaced, refused, part time, rate and seconds a level, grown and fresh', () => {
   assert.equal(median([]), 0);
   assert.equal(median([3, 1, 2]), 2);
   assert.equal(median([4, 1, 3, 2]), 2.5);
@@ -313,11 +365,11 @@ test('a run\'s numbers: per grade made, added, replaced, refused, part time, rat
   const made: Made = {
     tried: 10, found: { ...z(), hard: 4 }, added: { ...z(), hard: 3 }, replaced: { ...z(), hard: 1 }, empty: 5, refused: 1,
     emptyBy: { ...z(), hard: 5 }, refusedBy: { ...z(), hard: 1 }, duplicateBy: { ...z(), hard: 2 }, retiredBy: { ...z(), hard: 1 }, spentMs: { ...z(), hard: 7_200_000 },
-    levelMs: { easy: [], medium: [], hard: [60_000, 120_000, 180_000, 600_000] }, capped: [], hints: [],
+    levelMs: { easy: [], medium: [], hard: [60_000, 120_000, 180_000, 600_000] }, grownMs: { easy: [], medium: [], hard: [60_000, 180_000] }, capped: [], hints: [],
   };
   const s = gradeStats(made, 'hard', 1_800_000);
-  assert.deepEqual(s, { made: 4, added: 2, replaced: 1, duplicate: 2, retired: 1, refused: 1, empty: 5, capped: false, partHours: 2, perHour: 6, meanSeconds: 240, medianSeconds: 150, secondsPerLevel: 1800 });
-  assert.deepEqual(gradeStats(made, 'easy', 0), { made: 0, added: 0, replaced: 0, duplicate: 0, retired: 0, refused: 0, empty: 0, capped: false, partHours: 0, perHour: 0, meanSeconds: 0, medianSeconds: 0, secondsPerLevel: 0 });
+  assert.deepEqual(s, { made: 4, added: 2, replaced: 1, duplicate: 2, retired: 1, refused: 1, empty: 5, capped: false, partHours: 2, perHour: 6, meanSeconds: 240, medianSeconds: 150, secondsPerLevel: 1800, grown: 2, fresh: 2, grownMeanSeconds: 120, freshMeanSeconds: 360 });
+  assert.deepEqual(gradeStats(made, 'easy', 0), { made: 0, added: 0, replaced: 0, duplicate: 0, retired: 0, refused: 0, empty: 0, capped: false, partHours: 0, perHour: 0, meanSeconds: 0, medianSeconds: 0, secondsPerLevel: 0, grown: 0, fresh: 0, grownMeanSeconds: 0, freshMeanSeconds: 0 });
   const o = optionsOf(['--difficulties', 'hard', '--memory-mb', '8192'], 8, 16_000) as RunOptions;
   const r = runStats(made, o, ['--difficulties', 'hard'], { host: 'box', cpu: 'Intel i7-9700', cores: 8, totalMb: 16_000 }, 1_800_000, new Date(0));
   assert.deepEqual(Object.keys(r.grades), ['hard'], 'only the grades the run named');
@@ -327,7 +379,8 @@ test('a run\'s numbers: per grade made, added, replaced, refused, part time, rat
   const lines = statsLines(r);
   assert.match(lines[0]!, /^hard: made 4, added 2, replaced 1, duplicate 2, retired 1, refused 1, parts with none 5; 2 part-hours, 6 per hour, 240 s mean and 150 s median/);
   assert.equal(lines[1], 'run: 0h30m on 4 worker(s) in 8192 MB, 8 cores (Intel i7-9700), 16000 MB');
-  assert.match(statsMarkdown(r), /\| hard \| 4 \| 2 \| 1 \| 2 \| 1 \| 1 \| 5 \| 2 \| 6 \| 240 \| 150 \|/);
+  assert.match(lines[0]!, /; 2 grown \(120 s mean\), 2 fresh \(360 s mean\)$/);
+  assert.match(statsMarkdown(r), /\| hard \| 4 \| 2 \| 2 \| 2 \| 1 \| 2 \| 1 \| 1 \| 5 \| 2 \| 6 \| 240 \| 120 \| 360 \| 150 \|/);
 });
 
 test('a long run logs its progress about every five minutes', async () => {

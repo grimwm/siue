@@ -244,14 +244,15 @@ test('a search that ran dry takes a shared level before the bundled bank\'s; Nex
   assert.equal(mode.view().finding, null);
 });
 
-/** A worker that answers a part message with `found`, or never when `found` is undefined. */
+/** A worker that answers a tuple message with `found`, as the shared bank keeps it, or never when `found` is
+ *  undefined. */
 function partWorker(found: Made | null | undefined) {
   const w: WorkerLike & { terminated: boolean; posted: unknown[] } = {
     terminated: false, posted: [], onmessage: null, onerror: null,
     terminate() { w.terminated = true; },
     postMessage(m) {
       w.posted.push(m);
-      if (found !== undefined) setTimeout(() => { if (!w.terminated) w.onmessage?.({ data: { type: 'part', id: 1, part: 0, result: { found, tries: 1, spent: 1 } } }); }, 0);
+      if (found !== undefined) setTimeout(() => { if (!w.terminated) w.onmessage?.({ data: { type: 'remade', id: 1, found: found && sharedOf(found) } }); }, 0);
     },
   };
   return w;
@@ -272,7 +273,7 @@ function verifierWith(found: Made | null | undefined, claim: () => Promise<{ tic
   return { v, sent, workers, timers, later: (ms: number) => { now += ms; for (const t of timers.filter(t => t.at <= now)) { timers.splice(timers.indexOf(t), 1); t.f(); } } };
 }
 
-test('the verifier runs the claimed part and sends what it made; it never claims while not allowed', async () => {
+test('the verifier makes the claimed tuple again and sends what it made; it never claims while not allowed', async () => {
   const made: Made = { ...FIRST[0]!, from: 'made', tries: 1, spent: 1 };
   let claims = 0;
   const h = verifierWith(made, async () => { claims++; return { ticket: 't'.repeat(32), tuple: TUPLE }; });
@@ -281,7 +282,7 @@ test('the verifier runs the claimed part and sends what it made; it never claims
   h.v.allow(true);
   for (let i = 0; i < 5; i++) await flush();
   assert.equal(claims, 1);
-  assert.deepEqual(h.workers[0]!.posted[0], { type: 'part', id: 1, request: { seed: 'abc', tier: 1, grade: 'easy', depth: 2, run: TUPLE.run }, part: 4 });
+  assert.deepEqual(h.workers[0]!.posted[0], { type: 'tuple', id: 1, tuple: TUPLE });
   assert.deepEqual(h.sent, [{ ticket: 't'.repeat(32), found: sharedOf(made) }]);
   assert.equal(h.workers[0]!.terminated, true);
   h.later(WAIT_MS - 1);

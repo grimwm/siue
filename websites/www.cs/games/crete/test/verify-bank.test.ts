@@ -30,19 +30,20 @@ function bank(items: unknown[], over: { failList?: boolean } = {}) {
 /** The generator, standing in: seed 'a' makes level 1, seed 'b' level 2. */
 const regen = (t: Tuple): SharedMade | null => (t.seed === 'a' ? level(1) : t.seed === 'b' ? level(2) : null);
 
-test('a level its tuple makes is a match; a tampered text is a mismatch; another version is left alone', async () => {
+test('a level its tuple makes is a match; a tampered text is a mismatch; an older version still made again is checked; another is left alone', async () => {
   const tampered = { ...level(2), text: level(2).text.replace('#.#', '...') };
   assert.notEqual(tampered.text, level(2).text);
   const b = bank([
     { grade: 'medium', h: 'a'.repeat(16), tuple: tuple('a'), made: level(1) },
     { grade: 'medium', h: 'b'.repeat(16), tuple: tuple('b'), made: tampered },
     { grade: 'medium', h: 'c'.repeat(16), tuple: tuple('a', ENDLESS_VERSION + 1), made: level(1) },
+    { grade: 'medium', h: 'd'.repeat(16), tuple: tuple('a', 2), made: level(1) },
   ]);
   const lines: string[] = [];
   const tally = await verifyAll({ fetch: b.fetch, url: 'x', token: TOKEN, regenerate: regen, now: () => 0, log: l => lines.push(l) }, { items: 10, ms: 60_000 });
-  assert.deepEqual(tally, { checked: 2, matched: 1, mismatched: 1, skipped: 1 });
+  assert.deepEqual(tally, { checked: 3, matched: 2, mismatched: 1, skipped: 1 });
   const verdicts = b.calls.filter(c => c.body.op === 'trusted-verify').map(c => [c.body.h, c.body.verdict]);
-  assert.deepEqual(verdicts, [['a'.repeat(16), 'match'], ['b'.repeat(16), 'mismatch']]);
+  assert.deepEqual(verdicts, [['a'.repeat(16), 'match'], ['b'.repeat(16), 'mismatch'], ['d'.repeat(16), 'match']]);
   for (const c of b.calls) {
     assert.equal(c.headers[TOKEN_HEADER], TOKEN, 'the token rides in its header');
     assert.ok(!JSON.stringify(c.body).includes(TOKEN), 'and never in a body');

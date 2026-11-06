@@ -211,6 +211,7 @@ export function createEndlessClient(spawn: () => WorkerLike, size: () => number 
         if (m.type === 'progress') { if (s.busy !== null && s.busy >= 0) { live.set(s.busy, m.progress); report(); } return; }
         if (m.type === 'failed') { fail(m.message); return; }
         if (m.type === 'made') { finish(() => settleJob.resolve(m.made)); return; }
+        if (m.type !== 'part') return;
         s.busy = null;
         drop(m.part);
         results[m.part] = m.result;

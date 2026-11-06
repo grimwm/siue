@@ -254,6 +254,11 @@ final class EndlessBankTest extends TestCase
             'a bad run text' => [static function (array $b): array { $b['tuple']['run'][0]['text'] = "title: \nintro: \n\nP\n"; return $b; }, 'tuple.run.0.text'],
             'a run score too high' => [static function (array $b): array { $b['tuple']['run'][0]['score'] = 10001; return $b; }, 'tuple.run.0.score'],
             'an extra played field' => [static function (array $b): array { $b['tuple']['run'][0]['name'] = 'x'; return $b; }, 'tuple.run.0.name'],
+            'a climb before version 3' => [static fn(array $b): array => array_replace_recursive($b, ['tuple' => ['grow' => ['from' => 'easy', 'seed' => 'part', 'steps' => 300]]]), 'tuple.grow'],
+            'a climb from the same grade' => [static fn(array $b): array => array_replace_recursive($b, ['tuple' => ['v' => 3, 'grow' => ['from' => 'easy', 'seed' => 'part', 'steps' => 300]]]), 'tuple.grow.from'],
+            'a climb seed with capitals' => [static fn(array $b): array => array_replace_recursive($b, ['tuple' => ['v' => 3, 'grade' => 'hard', 'grow' => ['from' => 'medium', 'seed' => 'part', 'steps' => 300]]], ['tuple' => ['grow' => ['seed' => 'Part']]]), 'tuple.grow.seed'],
+            'a climb of 1,001 changes' => [static fn(array $b): array => array_replace_recursive($b, ['tuple' => ['v' => 3, 'grade' => 'hard', 'grow' => ['from' => 'medium', 'seed' => 'part', 'steps' => 300]]], ['tuple' => ['grow' => ['steps' => 1001]]]), 'tuple.grow.steps'],
+            'an unknown climb field' => [static fn(array $b): array => array_replace_recursive($b, ['tuple' => ['v' => 3, 'grade' => 'hard', 'grow' => ['from' => 'medium', 'seed' => 'part', 'steps' => 300]]], ['tuple' => ['grow' => ['to' => 'hard']]]), 'tuple.grow.to'],
             'a line with a digit' => [static fn(array $b): array => array_replace_recursive($b, ['made' => ['line' => 'rr2']]), 'made.line'],
             'an empty line' => [static fn(array $b): array => array_replace_recursive($b, ['made' => ['line' => '']]), 'made.line'],
             'no shortest' => [static fn(array $b): array => array_replace_recursive($b, ['made' => ['shortest' => 0]]), 'made.shortest'],
@@ -271,6 +276,17 @@ final class EndlessBankTest extends TestCase
         [$status, $payload] = self::refusal(fn() => $this->bank()->submit($body, self::A));
         self::assertSame([400, ['error' => 'invalid', 'field' => $field]], [$status, $payload]);
         self::assertSame([], $this->stored('pending-easy.json'));
+    }
+
+    public function testAGrownTupleIsKeptWithItsClimbAndGoesToAVerifierOfItsVersion(): void
+    {
+        $bank = $this->bank(['accept' => [2, 3]]);
+        $grow = ['from' => 'medium', 'seed' => 'part', 'steps' => 300];
+        $this->submit($bank, self::level(30), tuple: ['v' => 3, 'grade' => 'hard', 'grow' => $grow]);
+        self::assertSame(['none' => true], $this->claim($bank, 'old', self::B, 2), 'a version 2 device is never handed one');
+        $claim = $this->claim($bank, 'new', self::B, 3);
+        self::assertSame($grow, $claim['tuple']['grow']);
+        self::assertSame('hard', $claim['tuple']['grade']);
     }
 
     public function testRunTextsAreBlankedAndOnlyTheTupleGoesToAVerifier(): void

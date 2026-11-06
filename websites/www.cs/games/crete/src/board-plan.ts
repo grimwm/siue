@@ -130,6 +130,8 @@ interface BlockPath { origin: Cell; end: Cell; segs: Seg[] }
 /** A hazard of the state before the turn: where it stands now in the reading of the events, and its path. */
 interface HazardPath { kind: HazardKind; start: Cell; end: Cell; segs: Seg[]; moved: boolean; exploded: boolean }
 
+/** How far into the Minotaur's cell Theseus lunges when he walks into him. */
+const LUNGE = 0.6;
 const lerp = (a: Cell, b: Cell, t: number): Pos => ({ r: a.r + (b.r - a.r) * t, c: a.c + (b.c - a.c) * t });
 /** Where a path puts its figure at `ms`, or `rest` before it starts. */
 function along(segs: readonly Seg[], ms: number, rest: Pos): Pos {
@@ -192,6 +194,13 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
           b.end = e.to;
         }
       }
+    } else if (e.kind === 'caught' && e.walked && before.minotaur) {
+      // A walk into the live Minotaur: Theseus lunges most of the way into his cell and is held there a beat, as a
+      // catch by the Minotaur shows him arriving; then the catch lands (a heart, the throw back).
+      const lunge = lerp(e.at, before.minotaur, LUNGE);
+      step(player, e.at, lunge, playerT);
+      step(player, lunge, lunge, playerT + SLIDE_MS);
+      playerT += 2 * SLIDE_MS;
     } else if ((e.kind === 'moved' || e.kind === 'slid') && e.who === 'player') {
       step(player, e.from, e.to, playerT);
       playerT += SLIDE_MS;

@@ -769,3 +769,68 @@ test('Chapter 1, Level 2: in the start corner beside the Minotaur, walking into 
   await expect.poll(() => now(page), 'a turn and a heart').toEqual({ moves: 4, hearts: 2, outcome: 'playing' });
   expect(errors).toEqual([]);
 });
+
+/* ---- a walk into the Minotaur plays like a move: Theseus lunges into his cell, then the catch lands ---- */
+const WALK_IN = ['title: Walk In', 'intro: One heart.', 'hearts: 1', '', '#######', '#*....#', '#.PM..#', '#....E#', '#######', ''].join('\n');
+
+for (const look of ['classic', 'modern'] as const) {
+  test(`${look}: walking into the Minotaur lunges Theseus into his cell before "The Minotaur has you"`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.addInitScript((l: string) => localStorage.setItem('crete-look', l), look);
+    await page.goto(PAGE);
+    await expect(page.locator('#title-veil')).toBeVisible();
+    await page.evaluate(text => {
+      const t = (window as unknown as FirstsHook).__creteTest;
+      t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Walk In', best: null } });
+    }, WALK_IN);
+    await page.locator('#start-begin').click();
+    if (look === 'modern') {
+      await page.waitForFunction(() => {
+        const m = (window as unknown as { __creteTest: { modern: { active: boolean; frames(): number } } }).__creteTest.modern;
+        return m.active && m.frames() > 0;
+      }, null, { timeout: 30_000 });
+    }
+    // Every few ms from the press on (a software-drawn 3D board paints few frames): where both looks draw Theseus,
+    // and whether the ending card shows.
+    await page.evaluate(() => {
+      const w = window as unknown as { __creteTest: { figures(): { player: { r: number; c: number } } | null }; __walk: { c: number; card: boolean }[] };
+      w.__walk = [];
+      const t0 = performance.now();
+      const id = setInterval(() => {
+        const f = w.__creteTest.figures();
+        if (f) w.__walk.push({ c: f.player.c, card: !document.getElementById('end-veil')!.hidden });
+        if (performance.now() - t0 > 1500) clearInterval(id);
+      }, 5);
+    });
+    // The turn the press makes, read as the press returns (a software-drawn 3D board can paint past it at once).
+    await page.evaluate(() => {
+      type Tl = { duration: number; at(ms: number): { player: { r: number; c: number } } };
+      type G = { anim: { timeline: Tl } | null; press(a: unknown): void };
+      const w = window as unknown as { __creteTest: { game: G }; __turn: unknown };
+      const g = w.__creteTest.game;
+      const press = g.press.bind(g);
+      g.press = (a: unknown) => {
+        press(a);
+        const tl = g.anim?.timeline;
+        w.__turn = tl ? { duration: tl.duration, held: tl.at(tl.duration * 0.75).player, card: !document.getElementById('end-veil')!.hidden } : null;
+      };
+    });
+    await page.keyboard.press('ArrowRight');
+    const turn = await page.evaluate(() => (window as unknown as { __turn: unknown }).__turn);
+    expect(turn, 'the walk-in animates, held in his cell, before any ending card').toEqual({ duration: 240, held: { r: 2, c: 2.6 }, card: false });
+    await expect(page.locator('#end-veil')).toBeVisible();
+    await expect(page.locator('#end-title')).toHaveText('The Minotaur has you');
+    await page.waitForTimeout(1600);
+    const walk = await page.evaluate(() => (window as unknown as { __walk: { c: number; card: boolean }[] }).__walk);
+    const lunging = walk.filter(x => x.c > 2 && x.c < 3);
+    // A software-drawn 3D board (as in CI) paints too few frames to count; the classic board paints every one.
+    if (look === 'classic') {
+      expect(lunging.length, 'Theseus is drawn between his cell and the Minotaur\'s over several frames').toBeGreaterThan(2);
+      expect(Math.max(...walk.map(x => x.c)), 'most of the way into his cell').toBeGreaterThan(2.5);
+    }
+    expect(lunging.every(x => !x.card), 'the ending card waits for the lunge').toBe(true);
+    expect(errors).toEqual([]);
+  });
+}

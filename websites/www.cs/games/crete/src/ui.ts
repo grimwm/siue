@@ -1754,11 +1754,11 @@ export function createUi(deps: UiDeps): Ui {
         return;
       }
       // The title's New Game is worded N: there it opens the new-game card, elsewhere N opens the list (not over the
-      // new-game card, which has no list to show).
+      // new-game card, which has no list to show, nor over the Help Build card, which waits for its answer).
       if (action === "new") {
         ev.preventDefault();
         if (layers.isOpen("title")) newGame();
-        else if (!layers.isOpen("look")) layers.open("levels");
+        else if (!layers.isOpen("look") && !layers.isOpen("help")) layers.open("levels");
         return;
       }
       if (action === "mute") {

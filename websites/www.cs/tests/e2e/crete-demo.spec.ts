@@ -112,6 +112,19 @@ test('on a phone, in Modern, the Demo button starts it and a tap on the board go
 test.describe('Demo from a title card the player came back to, never asked about Help Build', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
+  test('on a fresh page with Help Build never answered, D starts Demo and no card asks', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('crete-met', '["*"]'));
+    await page.goto(PAGE);
+    await expect(page.locator('#title-veil')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('crete-help-build'))).toBeNull();
+    await prepare(page);
+    await page.keyboard.press('d');
+    await expect(page.locator('#demo-line')).toHaveText('Demo · Endless Medium · Level 1', { timeout: 30_000 });
+    await expect(page.locator('#help-veil')).toBeHidden();
+    expect(await page.evaluate(() => (window as unknown as Hooked).__demoSeen), 'no card asks anything').toEqual([]);
+    expect(await page.evaluate(() => localStorage.getItem('crete-help-build'))).toBeNull();
+  });
+
   test('D starts Demo with no question; its board shows only its own level, F toggles full screen and Demo plays on', async ({ page }) => {
     test.setTimeout(120_000);
     const errors: string[] = [];

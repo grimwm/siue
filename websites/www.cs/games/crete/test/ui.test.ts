@@ -589,6 +589,8 @@ test('the Help Build card: down and up move between its buttons and Enter presse
   flow.showTitle(false);
   key('n');
   assert.equal(flow.top(), 'help');
+  key('n');
+  assert.equal(flow.top(), 'help', 'N opens no level list over the card');
   key('ArrowDown');
   assert.equal(globalThis.__focused?.id, 'help-no');
   fireDocument('keydown', { key: 'Enter', target: byId(rootOf('help'), 'help-no') });

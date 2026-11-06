@@ -751,6 +751,59 @@ final class EndlessBankTest extends TestCase
         self::assertSame([], glob($this->dir . '/.*.tmp'), 'no temporary file is left behind');
     }
 
+    /** Two trusted runners at once (the scheduled run and a workstation run) turning over one full grade: each gets an answer to every post, the grade stays at its cap, and every level either is served or was retired. */
+    public function testTwoTrustedRunnersAtOnceBothMakeProgressOnAFullGrade(): void
+    {
+        $cap = 30;
+        $each = 25;
+        $bank = $this->bank(['servedCap' => $cap]);
+        $verifier = $this->verifierFile();
+        for ($i = 0; $i < $cap; $i++) {
+            $this->add($bank, self::level(7000 + $i));
+        }
+        $script = $this->dir . '/../' . basename($this->dir) . '-runner.php';
+        file_put_contents($script, '<?php
+            require ' . var_export(dirname(__DIR__, 2) . '/bank/Bank.php', true) . ';
+            [, $dir, $jobs, $verifier, $token] = $argv;
+            $bank = new Crete\Bank(json_decode(' . var_export(json_encode(self::config(['servedCap' => $cap])), true) . ', true), $dir);
+            $said = [];
+            foreach (json_decode(file_get_contents($jobs), true) as $body) {
+                $r = $bank->handleTrusted($body, $token, $verifier);
+                $said[] = isset($r["retired"]) ? "replaced" : "added";
+            }
+            echo json_encode(array_count_values($said)), "\n";
+        ');
+        $procs = [];
+        $new = [];
+        foreach (['scheduled', 'workstation'] as $w => $who) {
+            $bodies = [];
+            for ($i = 0; $i < $each; $i++) {
+                $text = self::level(8000 + $w * 100 + $i);
+                $new[] = Bank::layoutHash($text);
+                $bodies[] = ['op' => 'trusted-add', 'tuple' => self::tuple(['seed' => "$who-$i"]), 'made' => self::made($text), 'replace' => true];
+            }
+            $jobs = "{$this->dir}/../" . basename($this->dir) . "-trusted$w.json";
+            file_put_contents($jobs, json_encode($bodies));
+            $procs[] = [proc_open([PHP_BINARY, $script, $this->dir, $jobs, $verifier, self::TOKEN], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes), $pipes, $jobs];
+        }
+        foreach ($procs as [$proc, $pipes, $jobs]) {
+            $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+            self::assertSame(0, proc_close($proc), $out);
+            self::assertSame(['replaced' => $each], json_decode($out, true), 'every post of each runner turned one level over');
+            @unlink($jobs);
+        }
+        @unlink($script);
+        $served = array_column($this->stored('served-easy.json'), 'h');
+        self::assertCount($cap, $served, 'the grade stays at its cap');
+        self::assertCount($cap, array_unique($served));
+        $retired = $this->stored('retired-easy.json');
+        self::assertCount(2 * $each, $retired, 'one out for each one in');
+        foreach ($new as $h) {
+            self::assertTrue(in_array($h, $served, true) || in_array($h, $retired, true), "$h is served or retired, never lost");
+        }
+        self::assertSame([], glob($this->dir . '/.*.tmp'), 'no temporary file is left behind');
+    }
+
     public function testAFullStoreOfTheLargestBoardsIsUnderFourMegabytes(): void
     {
         $entries = [];

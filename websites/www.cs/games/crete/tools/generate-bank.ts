@@ -16,11 +16,30 @@
  * fresh seed, a tier, the grade, a depth and a part, and a run memory of one level from the grade's bundled bank
  * that sets the place (on the plateau, or on the climb). Anyone can make the level again from that tuple.
  *
- * Over HTTPS only (never ssh or sftp); the CRETE_BANK_VERIFIER_TOKEN secret goes in the X-Crete-Verifier header and is
- * never printed. It always exits 0: a failed run only leaves the bank as it was.
+ * On a machine of our own (the site's `make crete-levels`), `--difficulties` names the grades to make (the others get
+ * no time; the named ones keep their TIME_SHARE weights), `--count` makes that many levels of each named grade (one
+ * number for all, or one per grade in `--difficulties`'s order, easy,medium,hard when it is left out) and then
+ * stops it, its share passing on (each posted with `replace`, so the server fills a grade's room first and then
+ * retires one served level for each), with no time limit unless `--minutes` is also given, and `--memory-mb` is the
+ * run's memory cap, which sets the workers (WORKER_MB each). `--rollover no` stops a full grade at its cap instead of
+ * replacing served levels (a count is then cut short, and says so). `--plan` prints what a run would do and exits;
+ * `--status` prints the bank's shelves and exits. Each run ends with its numbers per grade (made, added, replaced,
+ * refused, part time, levels per hour, seconds a level), appended as one JSON line to `--stats-file` and written as a
+ * table to GITHUB_STEP_SUMMARY when that is set. `--save-only <dir>` saves each level there (tools/bank-file.ts) instead of
+ * posting it, for tools/upload-bank.ts to post later; it needs no token, and with one it still keeps to the room.
  *
- *   CRETE_BANK_VERIFIER_TOKEN=… node tools/generate-bank.ts [--minutes 35] [--workers n] [--url <endpoint>] */
-import { availableParallelism, totalmem } from 'node:os';
+ * Over HTTPS only (never ssh or sftp); the CRETE_BANK_VERIFIER_TOKEN secret goes in the X-Crete-Verifier header and is
+ * never printed. A run always exits 0 once it starts: a failed run only leaves the bank as it was (`--status` exits 1
+ * when it cannot read the bank). Options it cannot take
+ * exit 2 before anything starts.
+ *
+ *   CRETE_BANK_VERIFIER_TOKEN=… node tools/generate-bank.ts [--minutes 35] [--workers n] [--url <endpoint>]
+ *     [--difficulties easy,medium,hard] [--count n | n,n,n] [--memory-mb n] [--rollover yes|no] [--stats-file <path>]
+ *     [--save-only <dir>] [--plan | --status] */
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { availableParallelism, cpus, hostname, totalmem } from 'node:os';
+import { dirname, join } from 'node:path';
+import { levelFile } from './bank-file.ts';
 import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { ENDLESS_VERSION, requestOf } from '../src/endless/provenance.ts';
@@ -51,7 +70,7 @@ export const LARGE_SIDE: Readonly<Record<Grade, number>> = { hard: SIDES.hard.pl
 export const TURNOVER_SHARE = 0.015;
 /** Memory a worker may use: its heap limit, and what the planner keeps free for the rest of the runner. */
 export const WORKER_HEAP_MB = 1536;
-const WORKER_MB = 2048;
+export const WORKER_MB = 2048;
 const RESERVE_MB = 2048;
 
 /** A grade's shelf as trusted-counts reports it: each served level as [score, chapter, rows, cols, hides]. */
@@ -152,7 +171,9 @@ export function tupleFor(want: Want, random: () => number): Tuple {
   return t;
 }
 
-export type Upload = 'ok' | 'duplicate' | 'full' | 'rate' | 'error';
+/** A post's outcome: `ok` took room, `replaced` retired a served level for it; `duplicate` is a layout the bank holds
+ *  and `retired` one it served once and let go, neither taken. */
+export type Upload = 'ok' | 'replaced' | 'duplicate' | 'retired' | 'full' | 'rate' | 'error';
 
 export interface GenerateDeps {
   /** Each grade's shelf, or null when the bank would not say. */
@@ -172,29 +193,110 @@ export interface GenerateDeps {
   log(line: string): void;
 }
 
-export interface Made { tried: number; added: Record<Grade, number>; empty: number; refused: number }
+type PerGrade<T> = Record<Grade, T>;
 
-/** Makes and posts levels until `ms` have passed or every grade is full; what it did. Never throws. */
-export async function generateAll(deps: GenerateDeps, limits: { ms: number }): Promise<Made> {
-  const out: Made = { tried: 0, added: { easy: 0, medium: 0, hard: 0 }, empty: 0, refused: 0 };
+/** What a run did: parts tried, levels made and posted per grade (`replaced` the posted ones that retired a served
+ *  level), parts that made nothing, and posts the bank refused; per grade too, with the levels the bank (or this run)
+ *  already held, which count for nothing, the part time spent on it (ms) and how long each part that made a level
+ *  took (ms). */
+export interface Made {
+  tried: number; found: PerGrade<number>; added: PerGrade<number>; replaced: PerGrade<number>; empty: number; refused: number;
+  emptyBy: PerGrade<number>; refusedBy: PerGrade<number>; duplicateBy: PerGrade<number>; retiredBy: PerGrade<number>; spentMs: PerGrade<number>; levelMs: PerGrade<number[]>;
+  /** The grades stopped at their cap with rollover off, and what the run says about each. */
+  capped: Grade[]; hints: string[];
+}
+
+/** What a run says of a grade it stopped at its cap with rollover off: how many it still owes, and how to go on. */
+export function capHint(g: Grade, cap: number, left: number | null, count: number | null): string {
+  const owed = left !== null && count !== null ? ` — stopped with ${left} of ${count} left` : '';
+  return `${g}: full at ${cap}${owed}. To keep making levels that replace older ones, run again with ROLLOVER=yes.`;
+}
+
+/** Each named grade's count of levels to make. */
+export type Quota = Partial<Record<Grade, number>>;
+
+/** What a run makes: for `ms` (Infinity: no time limit), the named grades only, and with `count`, that many levels of
+ *  each. With `rollover` (the default) a full grade's levels go in with `replace`, retiring served ones; without it a
+ *  grade stops at its cap. */
+export interface Limits { ms: number; grades?: readonly Grade[]; count?: Quota | null; rollover?: boolean }
+
+/** The room left under a grade's cap. */
+const roomOf = (s: Shelf) => Math.max(0, s.cap - s.served - s.pending);
+
+/** The tally for a run limited to `grades`: the others get no room. With `count` each named grade's room is its count;
+ *  with `rollover` it is posted with `replace` (the server fills its room first, then retires one served level for
+ *  each), and without it no more than fits under the cap. Without `rollover` a full grade gets no turnover. */
+export function limitedTally(counts: Counts, grades: readonly Grade[], count: Quota | null, rollover = true): Record<Grade, Tally> {
+  const t = tallyOf(counts);
+  for (const g of GRADES) {
+    if (!grades.includes(g)) { t[g].room = 0; continue; }
+    if (count !== null) { t[g].room = rollover ? count[g] ?? 0 : Math.min(count[g] ?? 0, roomOf(counts[g])); t[g].replace = rollover; }
+    else if (!rollover && t[g].replace) { t[g].room = 0; t[g].replace = false; }
+  }
+  return t;
+}
+
+/** How often a long run logs its progress. */
+export const PROGRESS_MS = 5 * 60_000;
+
+/** Makes and posts levels until `ms` have passed, or every grade is full or has its count; what it did. Never throws. */
+export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<Made> {
+  const zero = () => ({ easy: 0, medium: 0, hard: 0 });
+  const out: Made = {
+    tried: 0, found: zero(), added: zero(), replaced: zero(), empty: 0, refused: 0,
+    emptyBy: zero(), refusedBy: zero(), duplicateBy: zero(), retiredBy: zero(), spentMs: zero(), levelMs: { easy: [], medium: [], hard: [] }, capped: [], hints: [],
+  };
   let counts: Counts | null;
   try { counts = await deps.counts(); } catch { counts = null; }
   if (!counts) { deps.log('could not read the bank\'s counts; nothing made'); return out; }
-  const tally = tallyOf(counts);
-  for (const g of GRADES) deps.log(`${g}: ${counts[g].served} served, ${counts[g].pending} waiting, ${tally[g].replace ? `full, replacing up to ${tally[g].room}` : `room for ${tally[g].room}`}; ${tally[g].plateau} on the plateau, ${tally[g].large} of them large`);
-  const deadline = deps.now() + limits.ms;
+  const grades = limits.grades ?? GRADES, count = limits.count ?? null, rollover = limits.rollover ?? true;
+  const tally = limitedTally(counts, grades, count, rollover);
+  const full = new Set<Grade>();
+  for (const g of GRADES) {
+    const asked = count?.[g] ?? 0;
+    if (grades.includes(g) && !rollover && (count !== null ? tally[g].room < asked : roomOf(counts[g]) === 0)) full.add(g);
+    const plan = !grades.includes(g) ? 'not asked for'
+      : count !== null ? `making ${asked}${full.has(g) ? `, room for ${tally[g].room}` : ''}`
+      : full.has(g) ? 'full, rollover off: none made'
+      : tally[g].replace ? `full, replacing up to ${tally[g].room}` : `room for ${tally[g].room}`;
+    deps.log(`${g}: ${counts[g].served} served, ${counts[g].pending} waiting, ${plan}; ${tally[g].plateau} on the plateau, ${tally[g].large} of them large`);
+  }
+  const started0 = deps.now();
+  const deadline = started0 + limits.ms;
+  let lastProgress = started0;
+  // The levels this run made, so one it makes twice is not sent twice.
+  const seen = new Set<string>();
   let halted = false, errors = 0;
   const running = new Set<Promise<void>>();
 
   const finish = async (want: Want, t: Tuple, made: SharedMade | null, started: number): Promise<void> => {
     const g = tally[want.grade];
-    g.running--; g.done++; g.spent += Math.max(0, deps.now() - started);
-    if (!made) { out.empty++; g.room++; return; }
+    const took = Math.max(0, deps.now() - started);
+    g.running--; g.done++; g.spent += took;
+    out.spentMs[want.grade] += took;
+    if (deps.now() - lastProgress >= PROGRESS_MS) {
+      lastProgress = deps.now();
+      deps.log(`progress after ${Math.round((lastProgress - started0) / 60_000)} min: ${grades.map(x => `${x} ${out.added[x]}${count !== null ? `/${count[x] ?? 0}` : ''}`).join(', ')}`);
+    }
+    if (!made) { out.empty++; out.emptyBy[want.grade]++; g.room++; return; }
+    out.found[want.grade]++;
+    out.levelMs[want.grade].push(took);
     const s = tally[want.grade];
-    const sent = halted ? 'error' : await deps.upload(t, made, s.replace).catch((): Upload => 'error');
-    if (sent === 'ok') {
+    const again = seen.has(made.text);
+    seen.add(made.text);
+    const sent = again ? 'duplicate' : halted ? 'error' : await deps.upload(t, made, s.replace).catch((): Upload => 'error');
+    if (sent === 'duplicate' || sent === 'retired') {
+      // Held already, or served once and let go: it counts toward nothing (not the count, the room or the cap), so
+      // the grade makes another.
+      (sent === 'duplicate' ? out.duplicateBy : out.retiredBy)[want.grade]++; g.room++;
+      const why = sent === 'retired' ? 'the bank retired this layout' : again ? 'made twice this run' : 'the bank has it';
+      deps.log(`${want.grade}: ${sent} (score ${made.score}), ${why}; not counted`);
+      return;
+    }
+    if (sent === 'ok' || sent === 'replaced') {
       errors = 0;
       out.added[want.grade]++;
+      if (sent === 'replaced') out.replaced[want.grade]++;
       s.total++;
       if (onPlateau(want.grade, made.score, made.hides)) {
         s.plateau++;
@@ -204,8 +306,9 @@ export async function generateAll(deps: GenerateDeps, limits: { ms: number }): P
       return;
     }
     out.refused++;
+    out.refusedBy[want.grade]++;
     s.room++;
-    if (sent === 'full') { s.room = 0; deps.log(`${want.grade} is full`); }
+    if (sent === 'full') { s.room = 0; full.add(want.grade); deps.log(`${want.grade} is full`); }
     if (sent === 'rate') { halted = true; deps.log('the bank\'s hourly share for this runner is spent; stopping'); }
     if (sent === 'error' && !halted && ++errors >= 3) { halted = true; deps.log('the bank keeps failing; stopping'); }
   };
@@ -228,7 +331,9 @@ export async function generateAll(deps: GenerateDeps, limits: { ms: number }): P
     // Past the deadline, parts that already came back still post their levels; the rest are ended.
     const timedOut = left <= 0
       ? (await new Promise(r => setImmediate(r)), running.size > 0)
-      : await Promise.race([...running].map(p => p.then(() => false)).concat(deps.wait(left).then(() => true)));
+      : left === Infinity
+        ? await Promise.race([...running]).then(() => false)
+        : await Promise.race([...running].map(p => p.then(() => false)).concat(deps.wait(left).then(() => true)));
     if (timedOut) {
       deps.log('stopping: this run\'s time is spent');
       deps.stop();
@@ -237,7 +342,94 @@ export async function generateAll(deps: GenerateDeps, limits: { ms: number }): P
       break;
     }
   }
+  for (const g of grades) {
+    if (!full.has(g) || (count !== null && out.added[g] >= (count[g] ?? 0))) continue;
+    const hint = capHint(g, counts[g].cap, count !== null ? (count[g] ?? 0) - out.added[g] : null, count?.[g] ?? null);
+    out.capped.push(g); out.hints.push(hint); deps.log(hint);
+  }
   return out;
+}
+
+/** The middle of `xs` (the mean of the two middle ones for an even count), or 0 for none. */
+export function median(xs: readonly number[]): number {
+  if (!xs.length) return 0;
+  const a = [...xs].sort((x, y) => x - y), m = a.length >> 1;
+  return a.length % 2 ? a[m]! : (a[m - 1]! + a[m]!) / 2;
+}
+
+/** One grade's numbers from a run: levels made (by a part), added into room, replacing a served one, refused by the
+ *  bank, parts that made none; the part time spent on it, levels in per hour of the run, and the seconds a part that
+ *  made a level took, mean and median, and the part time per level made counting the empty parts. */
+export interface GradeStats {
+  made: number; added: number; replaced: number; duplicate: number; retired: number; refused: number; empty: number; capped: boolean;
+  partHours: number; perHour: number; meanSeconds: number; medianSeconds: number; secondsPerLevel: number;
+}
+/** The machine a run ran on. */
+export interface Machine { host: string; cpu: string; cores: number; totalMb: number }
+/** A run's numbers, as one line of the stats file. */
+export interface RunStats {
+  at: string; machine: Machine; args: readonly string[]; workers: number; memoryMb: number | null;
+  wallSeconds: number; grades: Partial<Record<Grade, GradeStats>>;
+}
+
+const round = (n: number, places = 1) => Math.round(n * 10 ** places) / 10 ** places;
+
+export function gradeStats(made: Made, g: Grade, wallMs: number): GradeStats {
+  const ms = made.levelMs[g], found = made.found[g];
+  return {
+    made: found, added: made.added[g] - made.replaced[g], replaced: made.replaced[g], duplicate: made.duplicateBy[g], retired: made.retiredBy[g], refused: made.refusedBy[g], empty: made.emptyBy[g],
+    capped: made.capped.includes(g),
+    partHours: round(made.spentMs[g] / 3_600_000, 2),
+    perHour: wallMs > 0 ? round(made.added[g] / (wallMs / 3_600_000)) : 0,
+    meanSeconds: ms.length ? round(ms.reduce((a, b) => a + b, 0) / ms.length / 1000) : 0,
+    medianSeconds: round(median(ms) / 1000),
+    secondsPerLevel: found ? round(made.spentMs[g] / found / 1000) : 0,
+  };
+}
+
+export function runStats(made: Made, o: RunOptions, args: readonly string[], machine: Machine, wallMs: number, at: Date): RunStats {
+  const grades: Partial<Record<Grade, GradeStats>> = {};
+  for (const g of o.grades) grades[g] = gradeStats(made, g, wallMs);
+  return { at: at.toISOString(), machine, args, workers: o.workers, memoryMb: o.memoryMb, wallSeconds: Math.round(wallMs / 1000), grades };
+}
+
+const hm = (seconds: number) => `${Math.floor(seconds / 3600)}h${String(Math.round((seconds % 3600) / 60)).padStart(2, '0')}m`;
+
+/** A run's numbers as log lines: one per grade, then the run's. */
+export function statsLines(r: RunStats): string[] {
+  const lines = Object.entries(r.grades).map(([g, s]) => `${g}: made ${s.made}, added ${s.added}, replaced ${s.replaced}, duplicate ${s.duplicate}, retired ${s.retired}, refused ${s.refused}, parts with none ${s.empty}; `
+    + `${s.partHours} part-hours, ${s.perHour} per hour, ${s.meanSeconds} s mean and ${s.medianSeconds} s median a level (${s.secondsPerLevel} s of part time each, empty parts counted)`);
+  lines.push(`run: ${hm(r.wallSeconds)} on ${r.workers} worker(s)${r.memoryMb !== null ? ` in ${r.memoryMb} MB` : ''}, ${r.machine.cores} cores (${r.machine.cpu}), ${Math.round(r.machine.totalMb)} MB`);
+  return lines;
+}
+
+/** A run's numbers as a markdown table, for a CI step summary. */
+export function statsMarkdown(r: RunStats): string {
+  const rows = Object.entries(r.grades).map(([g, s]) => `| ${g} | ${s.made} | ${s.added} | ${s.replaced} | ${s.duplicate} | ${s.retired} | ${s.refused} | ${s.empty} | ${s.partHours} | ${s.perHour} | ${s.meanSeconds} | ${s.medianSeconds} |`);
+  return ['### Crete levels made', '', '| Difficulty | Made | Added | Replaced | Duplicate | Retired | Refused | Parts with none | Part-hours | Per hour | Mean s | Median s |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|', ...rows, '',
+    `${hm(r.wallSeconds)} on ${r.workers} worker(s)${r.memoryMb !== null ? ` in ${r.memoryMb} MB` : ''}, ${r.machine.cores} cores (${r.machine.cpu})`, ''].join('\n');
+}
+
+/** The shelves a run saving levels without the bank's counts works from: nothing served, no cap to reach. */
+export const unboundedCounts = (): Counts => {
+  const shelf = (): Shelf => ({ served: 0, pending: 0, cap: Number.MAX_SAFE_INTEGER, levels: [] });
+  return { easy: shelf(), medium: shelf(), hard: shelf() };
+};
+
+/** Saves a level to `dir` as tools/bank-file.ts's file; `duplicate` when that file is there already. */
+export function saveLevel(dir: string, tuple: Tuple, made: SharedMade): { result: Upload; name: string } {
+  const f = levelFile(tuple, made);
+  const path = join(dir, f.name);
+  if (existsSync(path)) return { result: 'duplicate', name: f.name };
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, f.text, { flag: 'wx' });
+  return { result: 'ok', name: f.name };
+}
+
+/** The bank's shelves, one line per grade: served, waiting, cap, room, and the plateau and large boards. */
+export function statusLines(counts: Counts): string[] {
+  const t = tallyOf(counts);
+  return DIFFICULTY_ORDER.map(g => `${g}: ${counts[g].served} served, ${counts[g].pending} waiting, cap ${counts[g].cap}, room ${roomOf(counts[g])}; ${t[g].plateau} on the plateau, ${t[g].large} of them large`);
 }
 
 /** Up to `n` worker threads, each running one part at a time with a heap limit; one that dies is replaced. */
@@ -277,10 +469,88 @@ export function workerPool(n: number): { make(t: Tuple): Promise<SharedMade | nu
   };
 }
 
-/** The workers this machine can hold: one per core, as memory allows. */
-export function workersHere(): number {
-  const mb = totalmem() / 2 ** 20;
-  return Math.max(1, Math.min(availableParallelism(), Math.floor((mb - RESERVE_MB) / WORKER_MB)));
+/** The workers a machine with `cores` and `totalMb` of memory can hold: one per core, as memory allows. */
+export const workersOf = (cores: number, totalMb: number) => Math.max(1, Math.min(cores, Math.floor((totalMb - RESERVE_MB) / WORKER_MB)));
+
+/** The workers this machine can hold. */
+export const workersHere = () => workersOf(availableParallelism(), totalmem() / 2 ** 20);
+
+/** The workers a run capped at `limitMb` may use on a machine with `cores` and `totalMb`: WORKER_MB each, never more
+ *  than the machine holds. */
+export const workersIn = (limitMb: number, cores: number, totalMb: number) => Math.max(1, Math.min(cores, Math.floor(limitMb / WORKER_MB), workersOf(cores, totalMb)));
+
+/** The difficulties a run names when it names none, in the order a `--count` list follows. */
+export const DIFFICULTY_ORDER: readonly Grade[] = ['easy', 'medium', 'hard'];
+
+/** The grades a `--difficulties` list names (comma separated, in any case), in its order, or a message naming what it
+ *  cannot take. */
+export function difficultiesOf(raw: string): Grade[] | string {
+  const names = raw.split(',').map(n => n.trim().toLowerCase()).filter(n => n !== '');
+  const unknown = names.filter(n => !(GRADES as readonly string[]).includes(n));
+  if (unknown.length) return `unknown difficulty ${unknown.join(', ')} (easy, medium or hard)`;
+  if (!names.length) return 'no difficulty named (easy, medium or hard)';
+  const twice = names.filter((n, i) => names.indexOf(n) !== i);
+  if (twice.length) return `difficulty ${twice.join(', ')} named twice`;
+  return names as Grade[];
+}
+
+const positive = (raw: string | undefined) => (raw !== undefined && /^[1-9][0-9]*$/.test(raw) ? Number(raw) : null);
+
+/** Each of `grades`' counts from a `--count` list: one number for every grade, or one per grade in order; otherwise a
+ *  message naming both lists. */
+export function quotaOf(raw: string, grades: readonly Grade[]): Quota | string {
+  const parts = raw.split(',').map(n => n.trim());
+  const both = `--count ${raw} for --difficulties ${grades.join(',')}`;
+  if (parts.some(n => positive(n) === null)) return `${both}: each count must be a whole number of levels, 1 or more`;
+  if (parts.length !== 1 && parts.length !== grades.length) return `${both}: give one count for all, or ${grades.length}, one per difficulty in order`;
+  return Object.fromEntries(grades.map((g, i) => [g, Number(parts[parts.length === 1 ? 0 : i])]));
+}
+
+/** A run's options, read from the command line on a machine with `cores` and `totalMb`. */
+export interface RunOptions {
+  minutes: number; grades: readonly Grade[]; count: Quota | null; workers: number; memoryMb: number | null; rollover: boolean;
+  plan: boolean; status: boolean; statsFile: string | null; saveOnly: string | null;
+}
+
+/** The run `argv` asks for, or a message naming what it cannot take. With none of --difficulties, --count,
+ *  --memory-mb and --rollover it is the runner's run: every grade, `--minutes` (35 by default), the workers the machine
+ *  holds (`--workers` at most), and a full grade turning over. */
+export function optionsOf(argv: readonly string[], cores: number, totalMb: number): RunOptions | string {
+  const arg = (name: string) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : undefined; };
+  const has = (name: string) => argv.includes(`--${name}`);
+  let grades: readonly Grade[] = DIFFICULTY_ORDER;
+  if (has('difficulties')) {
+    const g = difficultiesOf(arg('difficulties') ?? '');
+    if (typeof g === 'string') return g;
+    grades = g;
+  }
+  const count = has('count') ? quotaOf(arg('count') ?? '', grades) : null;
+  if (typeof count === 'string') return count;
+  const memoryMb = has('memory-mb') ? positive(arg('memory-mb')) : null;
+  if (has('memory-mb') && memoryMb === null) return '--memory-mb must be a whole number of megabytes';
+  if (memoryMb !== null && memoryMb < WORKER_MB) return `--memory-mb ${memoryMb} is less than one worker needs (${WORKER_MB} MB)`;
+  let minutes = count !== null ? Infinity : 35;
+  if (has('minutes')) {
+    minutes = Number(arg('minutes'));
+    if (!Number.isFinite(minutes)) return '--minutes must be a number';
+    minutes = Math.max(1, minutes);
+  }
+  let workers: number;
+  if (memoryMb === null) workers = Math.max(1, Math.min(workersOf(cores, totalMb), Number(arg('workers')) || Infinity));
+  else {
+    const most = workersIn(memoryMb, cores, totalMb);
+    const asked = has('workers') ? positive(arg('workers')) : most;
+    if (asked === null) return '--workers must be a whole number, 1 or more';
+    if (asked > most) return `${asked} workers need ${asked * WORKER_MB} MB; ${memoryMb} MB allows ${most} on this machine (${cores} cores, ${Math.round(totalMb)} MB)`;
+    workers = asked;
+  }
+  const roll = arg('rollover');
+  if (has('rollover') && roll !== 'yes' && roll !== 'no') return `--rollover ${roll ?? ''} must be yes or no`;
+  const statsFile = has('stats-file') ? arg('stats-file') ?? '' : null;
+  if (statsFile === '') return '--stats-file needs a path';
+  const saveOnly = has('save-only') ? arg('save-only') ?? '' : null;
+  if (saveOnly === '' || saveOnly?.startsWith('--')) return '--save-only needs a folder';
+  return { minutes, grades, count, workers, memoryMb, rollover: roll !== 'no', plan: has('plan'), status: has('status'), statsFile, saveOnly };
 }
 
 /** The bank's endpoint, when it is one this script may post to: HTTPS, or plain HTTP to this machine (a local dry run). */
@@ -297,46 +567,73 @@ function arg(name: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
+/** What a run will do, in one line. */
+export function planLine(o: RunOptions): string {
+  const what = o.count !== null ? o.grades.map(g => `${o.count![g]} ${g}`).join(', ') : o.grades.join(', ');
+  const time = o.minutes === Infinity ? 'no time limit' : `${o.minutes} minute(s)`;
+  return `${what}; ${o.workers} worker(s)${o.memoryMb !== null ? ` in ${o.memoryMb} MB` : ''} for ${time}, ${o.saveOnly !== null ? `saving to ${o.saveOnly}` : `rollover ${o.rollover ? 'on' : 'off'}`}`;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const log = (line: string) => console.log(`generate-bank: ${line}`);
   const token = process.env.CRETE_BANK_VERIFIER_TOKEN ?? '';
   const url = safeUrl(arg('url') ?? BANK_URL);
-  const minutes = Number(arg('minutes') ?? 35);
-  if (!token) {
+  const args = process.argv.slice(2);
+  const totalMb = totalmem() / 2 ** 20;
+  const options = optionsOf(args, availableParallelism(), totalMb);
+  if (typeof options === 'string') { console.error(`generate-bank: ${options}`); process.exit(2); }
+  const { minutes, workers } = options;
+  let code = 0;
+  const post = async (body: Record<string, unknown>): Promise<{ status: number; body: unknown }> => {
+    const res = await fetch(url!, {
+      method: 'POST', signal: AbortSignal.timeout(60_000),
+      headers: { 'Content-Type': 'application/json', [TOKEN_HEADER]: token },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const counts = async (): Promise<Counts | null> => {
+    const r = await post({ op: 'trusted-counts' });
+    if (r.status !== 200) { log(`the bank answered ${r.status} for its counts`); return null; }
+    return (r.body as { grades: Counts }).grades;
+  };
+  const save = options.saveOnly;
+  if (options.plan) {
+    log(planLine(options));
+  } else if (!token && save === null) {
     log('no CRETE_BANK_VERIFIER_TOKEN; skipping (it comes from the bank-verifier field of the "Crete Config" item in 1Password)');
-  } else if (!url) {
+    if (options.status) code = 1;
+  } else if (!url && (save === null || token)) {
     log('the bank\'s URL must be HTTPS; nothing made');
+    if (options.status) code = 1;
+  } else if (options.status) {
+    const c = await counts().catch(() => null);
+    if (c) for (const line of statusLines(c)) log(line);
+    else { log('could not read the bank\'s counts'); code = 1; }
   } else {
-    const workers = Math.max(1, Math.min(workersHere(), Number(arg('workers')) || Infinity));
-    const post = async (body: Record<string, unknown>): Promise<{ status: number; body: unknown }> => {
-      const res = await fetch(url, {
-        method: 'POST', signal: AbortSignal.timeout(60_000),
-        headers: { 'Content-Type': 'application/json', [TOKEN_HEADER]: token },
-        body: JSON.stringify(body),
-      });
-      return { status: res.status, body: await res.json().catch(() => null) };
-    };
     const pool = workerPool(workers);
-    log(`${workers} worker(s) for ${minutes} minute(s)`);
+    if (save !== null) log(token ? `saving to ${save}; the bank's counts set the room` : `saving to ${save}; no token, so the bank's room is not known: making the counts asked`);
+    log(options.grades.length === 3 && options.count === null && options.memoryMb === null && options.rollover ? `${workers} worker(s) for ${minutes} minute(s)` : planLine(options));
     const started = Date.now();
     try {
       const made = await generateAll({
         workers,
-        async counts() {
-          const r = await post({ op: 'trusted-counts' });
-          if (r.status !== 200) { log(`the bank answered ${r.status} for its counts`); return null; }
-          return (r.body as { grades: Counts }).grades;
-        },
+        counts: save !== null && !token ? async () => unboundedCounts() : counts,
         make: t => pool.make(t),
         async upload(tuple, made, replace) {
+          if (save !== null) {
+            const { result, name } = saveLevel(save, tuple, made);
+            if (result === 'ok') log(`${tuple.grade}: saved ${name} (score ${made.score})`);
+            return result;
+          }
           const r = await post(replace ? { op: 'trusted-add', tuple, made, replace } : { op: 'trusted-add', tuple, made });
           const error = (r.body as { error?: unknown } | null)?.error;
           if (r.status === 200) {
             const { h, retired } = r.body as { h: string; retired?: string };
-            log(`${tuple.grade}: added ${h} (score ${made.score})${retired ? `, retired ${retired}` : ''}`);
-            return 'ok';
+            log(retired ? `${tuple.grade}: replaced ${retired} with ${h} (score ${made.score})` : `${tuple.grade}: added ${h} (score ${made.score})`);
+            return retired ? 'replaced' : 'ok';
           }
-          if (r.status === 409 && (error === 'duplicate' || error === 'full')) return error;
+          if (r.status === 409 && (error === 'duplicate' || error === 'retired' || error === 'full')) return error;
           if (r.status === 429) return 'rate';
           log(`${tuple.grade}: the bank answered ${r.status}`);
           return 'error';
@@ -346,14 +643,26 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         wait: ms => new Promise(r => setTimeout(r, ms).unref()),
         stop: () => pool.stop(),
         log,
-      }, { ms: Math.max(1, minutes) * 60_000 });
-      const hours = (Date.now() - started) / 3_600_000;
-      const rate = (n: number) => (hours > 0 ? Math.round(n / hours) : 0);
-      log(`tried ${made.tried}, none found ${made.empty}, refused ${made.refused}; added hard ${made.added.hard}, medium ${made.added.medium}, easy ${made.added.easy} (per hour: ${rate(made.added.hard)}, ${rate(made.added.medium)}, ${rate(made.added.easy)})`);
+      }, { ms: minutes * 60_000, grades: options.grades, count: options.count, rollover: options.rollover });
+      const wallMs = Date.now() - started;
+      log(`tried ${made.tried}, none found ${made.empty}, refused ${made.refused}; added hard ${made.added.hard}, medium ${made.added.medium}, easy ${made.added.easy}`);
+      const machine: Machine = { host: hostname(), cpu: cpus()[0]?.model.trim() ?? 'unknown', cores: availableParallelism(), totalMb: Math.round(totalMb) };
+      const stats = runStats(made, options, args, machine, wallMs, new Date());
+      for (const line of [...statsLines(stats), ...made.hints]) log(line);
+      if (options.statsFile) {
+        try {
+          mkdirSync(dirname(options.statsFile), { recursive: true });
+          appendFileSync(options.statsFile, `${JSON.stringify(stats)}\n`);
+          log(`stats appended to ${options.statsFile}`);
+        } catch (e) { log(`could not write the stats file: ${e instanceof Error ? e.message : String(e)}`); }
+      }
+      if (process.env.GITHUB_STEP_SUMMARY) {
+        try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, statsMarkdown(stats)); } catch { /* the summary is a nicety */ }
+      }
     } catch (e) {
       log(`stopped: ${e instanceof Error ? e.message : String(e)}`);
     }
     pool.stop();
   }
-  process.exit(0);
+  process.exit(code);
 }

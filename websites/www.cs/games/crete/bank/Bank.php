@@ -81,6 +81,8 @@ final class Bank
     private readonly \Closure $clock;
     private readonly \Closure $rng;
     private readonly int $fileMode;
+    /** The layouts admitted into served during the current withGrade, so one rolled out at once is retired too. @var list<string> */
+    private array $admitted = [];
 
     /**
      * @param array<string, mixed> $config through validateConfig()
@@ -201,7 +203,8 @@ final class Bank
     }
 
     /**
-     * A level a device made, with the tuple that made it, into quarantine.
+     * A level a device made, with the tuple that made it, into quarantine;
+     * a layout the grade holds answers 409 duplicate, one it retired 409 retired.
      * @param array<string, mixed> $body {op, install, tuple, made}
      * @return array{ok: true}
      */
@@ -222,7 +225,10 @@ final class Bank
         }
         $h = self::layoutHash($made['text']);
         $now = ($this->clock)();
-        $this->withGrade($tuple['grade'], $keys, function (array &$served, array &$pending) use ($h, $tuple, $made, $who, $addr, $current, $now): void {
+        $this->withGrade($tuple['grade'], $keys, function (array &$served, array &$pending, array $retired) use ($h, $tuple, $made, $who, $addr, $current, $now): void {
+            if (isset($retired[$h])) {
+                throw new Refusal(409, ['error' => 'retired']);
+            }
             foreach ([$served, $pending] as $pool) {
                 foreach ($pool as $entry) {
                     if ($entry['h'] === $h) {
@@ -563,8 +569,10 @@ final class Bank
      * picked here by rollOut's weighting, and takes the new one in its place,
      * in one locked step: one out for each one in, so turnover never shrinks
      * the grade. A grade with room takes the level without retiring any, and
-     * one with nothing served to retire still answers 409 full. No strike
-     * either way.
+     * one with nothing served to retire still answers 409 full. A layout the
+     * grade holds (served or waiting) answers 409 duplicate, and one it retired
+     * 409 retired, before anything else is decided: neither takes room or
+     * retires a level, with replace or without. No strike either way.
      * @param array<string, mixed> $body {op, tuple, made, replace?}
      * @return array{ok: true, h: string, retired?: string}
      */
@@ -583,7 +591,10 @@ final class Bank
         $grade = $tuple['grade'];
         $h = self::layoutHash($made['text']);
         $now = ($this->clock)();
-        $retired = $this->withGrade($grade, $this->keys(), function (array &$served, array &$pending) use ($h, $tuple, $made, $grade, $now, $replace): ?string {
+        $retired = $this->withGrade($grade, $this->keys(), function (array &$served, array &$pending, array $gone) use ($h, $tuple, $made, $grade, $now, $replace): ?string {
+            if (isset($gone[$h])) {
+                throw new Refusal(409, ['error' => 'retired']);
+            }
             foreach ([$served, $pending] as $pool) {
                 if (in_array($h, array_column($pool, 'h'), true)) {
                     throw new Refusal(409, ['error' => 'duplicate']);
@@ -907,6 +918,7 @@ final class Bank
             return;
         }
         $served[] = self::servedEntry($entry['made'], $entry['h'], $entry['v'], ($this->clock)());
+        $this->admitted[] = $entry['h'];
         $this->rollOut($served);
     }
 
@@ -1070,6 +1082,12 @@ final class Bank
      * its levels at the grade's next request; so do pending levels past
      * pendingDays, of a version no longer accepted, or made under a deleted
      * network key.
+     *
+     * Every served level that leaves (turned over, rolled out past the cap,
+     * reported, or of a retired version) has its layout hash kept in
+     * retired-<grade>.json, written under the same lock before the served
+     * store, so it can never be served again: $fn gets that set, keyed by
+     * hash, as its third argument. About 19 bytes a level, kept for good.
      * @param array<string, array{id: string, key: string, at: int}> $keys
      */
     private function withGrade(string $grade, array $keys, \Closure $fn): mixed
@@ -1077,10 +1095,15 @@ final class Bank
         return $this->locked($grade, function () use ($grade, $keys, $fn): mixed {
             $servedPath = "{$this->dir}/served-$grade.json";
             $pendingPath = "{$this->dir}/pending-$grade.json";
+            $retiredPath = "{$this->dir}/retired-$grade.json";
             $servedRaw = self::read($servedPath);
             $pendingRaw = self::read($pendingPath);
+            $retiredRaw = self::read($retiredPath);
+            $retired = array_fill_keys(self::decodeHashes($retiredRaw, $retiredPath), true);
+            $stored = self::decodeList($servedRaw, $servedPath);
+            $before = array_column($stored, 'h');
             $accepted = fn(array $e): bool => in_array($e['v'] ?? null, $this->config['accept'], true);
-            $served = array_values(array_filter(self::decodeList($servedRaw, $servedPath), $accepted));
+            $served = array_values(array_filter($stored, $accepted));
             $since = ($this->clock)() - $this->config['pendingDays'] * self::DAY;
             $pending = array_values(array_filter(
                 self::decodeList($pendingRaw, $pendingPath),
@@ -1097,7 +1120,13 @@ final class Bank
                     }
                 }
             }
-            $result = $fn($served, $pending);
+            $this->admitted = [];
+            $result = $fn($served, $pending, $retired);
+            foreach (array_diff([...$before, ...$this->admitted], array_column($served, 'h')) as $gone) {
+                $retired[$gone] = true;
+            }
+            // An all-digit hash is an integer key in PHP: written back as the string it is.
+            $this->writeIfChanged($retiredPath, $retiredRaw, array_map('strval', array_keys($retired)));
             $this->writeIfChanged($servedPath, $servedRaw, array_values($served));
             $this->writeIfChanged($pendingPath, $pendingRaw, array_values($pending));
             return $result;
@@ -1151,6 +1180,20 @@ final class Bank
             throw new \RuntimeException('not a JSON list: ' . $path);
         }
         return $data;
+    }
+
+    /**
+     * The retired store's hashes; an empty file is none. A store that will not
+     * parse is left alone for repair rather than overwritten.
+     * @return list<string>
+     */
+    private static function decodeHashes(string $raw, string $path): array
+    {
+        $list = $raw === '' ? [] : json_decode($raw, true);
+        if (!is_array($list) || !array_is_list($list) || array_filter($list, static fn(mixed $h): bool => !is_string($h)) !== []) {
+            throw new \RuntimeException('not a JSON list of hashes: ' . $path);
+        }
+        return $list;
     }
 
     /** The bytes a store is written as. */

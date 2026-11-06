@@ -8,7 +8,7 @@ description: >
   takes two steps to your one.
 button: Enter the labyrinth
 play: index.html
-order: 30
+order: 10
 image: og.png
 short_name: Crete
 theme_color: "#0e1320"

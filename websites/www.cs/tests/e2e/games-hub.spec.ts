@@ -5,7 +5,7 @@ declare global {
   interface Window { __same: number }
 }
 
-const GAMES = ['cylon', 'tankity', 'crete'];
+const GAMES = ['crete', 'tankity', 'cylon']; // Games page order: newest first
 
 test('the Games page builds a card per metadata.yaml, each with a share link', async ({ page }) => {
   await page.goto('./');

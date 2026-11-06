@@ -9,7 +9,7 @@ description: >
   Central. You can also start from the nav Game Off toggle.
 button: Enter The CIC
 start: cylonStartGame
-order: 10
+order: 30
 image: og.png
 short_name: The CIC
 theme_color: "#05060d"

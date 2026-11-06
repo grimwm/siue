@@ -131,21 +131,32 @@ stats-e2e: ## Visitor statistics browser check in a throwaway docker project
 # crete-levels-upload (games/crete/tools/upload-bank.ts); served levels are replaced only with ROLLOVER=yes. Each
 # crete-levels run appends its numbers as one JSON line to STATS_FILE. crete-bank-status prints how full the bank is
 # and crete-verify-levels checks the levels waiting in quarantine (games/crete/tools/verify-bank.ts). The token is
-# CRETE_BANK_VERIFIER_TOKEN when it is set (the workflow loads it), otherwise it is read with op from 1Password; it
-# lives in the recipe's environment only and is never printed. crete-levels caps the whole run at MEMORY_LIMIT with
+# CRETE_BANK_VERIFIER_TOKEN when it is set (the workflow loads it), otherwise the file CRETE_BANK_TOKEN_FILE (default
+# ~/.config/crete/bank-token) when it is readable, otherwise it is read with op from 1Password; it lives in the
+# recipe's environment only and is never printed. crete-levels caps the whole run at MEMORY_LIMIT with
 # systemd-run --user and sizes its workers by MEMORY_LIMIT; where systemd-run cannot cap it, it refuses to start unless
 # ALLOW_UNCAPPED=yes (as on GitHub's runner, a throwaway VM), which runs it uncapped with each worker's heap capped.
 .PHONY: crete-levels crete-levels-upload crete-bank-status crete-verify-levels
 MEMORY_LIMIT ?= 8G
 CRETE_TOKEN_REF = op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
+# The token from CRETE_BANK_TOKEN_FILE when the environment has none and the file is readable, its trailing newlines
+# dropped. A file whose mode is not 600 or 400 gets a warning that names the file, never what is in it.
+CRETE_TOKEN_FROM_FILE = test -n "$$CRETE_BANK_VERIFIER_TOKEN" || { \
+	f="$${CRETE_BANK_TOKEN_FILE:-$$HOME/.config/crete/bank-token}"; \
+	if [ -f "$$f" ] && [ -r "$$f" ]; then \
+		m=$$(stat -c %a "$$f" 2>/dev/null || stat -f %Lp "$$f" 2>/dev/null); \
+		case "$$m" in 600|400) ;; *) echo "$@: warning: $$f has mode $$m, open to more than its owner (chmod 600 it)" >&2;; esac; \
+		CRETE_BANK_VERIFIER_TOKEN=$$(cat "$$f"); \
+	fi; }; \
+	export CRETE_BANK_VERIFIER_TOKEN;
 # The token, or a one-line reason and exit 1.
-CRETE_TOKEN = test -n "$$CRETE_BANK_VERIFIER_TOKEN" || { \
+CRETE_TOKEN = $(CRETE_TOKEN_FROM_FILE) test -n "$$CRETE_BANK_VERIFIER_TOKEN" || { \
 	command -v op >/dev/null || { echo "$@: needs the 1Password CLI (op), signed in, to read the bank's token" >&2; exit 1; }; \
 	CRETE_BANK_VERIFIER_TOKEN=$$(op read '$(CRETE_TOKEN_REF)' 2>/dev/null) && test -n "$$CRETE_BANK_VERIFIER_TOKEN" || \
 		{ echo "$@: could not read the token from 1Password (sign in with: eval \$$(op signin)); nothing done" >&2; exit 1; }; }; \
 	export CRETE_BANK_VERIFIER_TOKEN
 # The token when one is to be had, for SAVE_ONLY (which runs without one).
-CRETE_TOKEN_IF_ANY = test -n "$$CRETE_BANK_VERIFIER_TOKEN" || ! command -v op >/dev/null || \
+CRETE_TOKEN_IF_ANY = $(CRETE_TOKEN_FROM_FILE) test -n "$$CRETE_BANK_VERIFIER_TOKEN" || ! command -v op >/dev/null || \
 	CRETE_BANK_VERIFIER_TOKEN=$$(op read '$(CRETE_TOKEN_REF)' 2>/dev/null) || CRETE_BANK_VERIFIER_TOKEN=; \
 	export CRETE_BANK_VERIFIER_TOKEN
 CRETE_LEVEL_ARGS = $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") $(if $(COUNT_PER_DIFFICULTY),--count "$(COUNT_PER_DIFFICULTY)") \

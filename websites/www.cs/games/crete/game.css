@@ -97,6 +97,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   line-height: 1.4;
   white-space: nowrap;
 }
+.fx-short { display: none; }
 .fx-stone { color: #d7dbe2; border-color: #8a93a3; background: rgba(138, 147, 163, 0.18); }
 .fx-cow { color: #f0cf9a; border-color: #b9894b; background: rgba(185, 137, 75, 0.18); }
 
@@ -243,6 +244,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .toast.good { border-color: var(--good); }
 .toast.bad { border-color: var(--bad); }
 .toast.info { border-color: var(--safe); }
+/* A tool's button named in the line by its own picture, 1.25 times the text, centred on the line. */
+.toast-pic { display: inline-block; vertical-align: middle; margin: -0.2em 0.1em 0; line-height: 0; }
+.toast-pic .sprite { display: block; }
 
 /* Demo's strip (src/ui/demo.tsx): a quiet pill at the foot of the board, over it and under every card, between the
    mini map and the compass. It takes no pointer: a tap anywhere ends Demo. */
@@ -699,11 +703,14 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .hud { display: grid; grid-template-columns: repeat(3, auto); gap: 2px 8px; }
   .menu-btn { padding: 0 0.55rem; }
   .stat { flex-direction: column; align-items: flex-start; gap: 0; }
-  /* The level has no label to show, so it takes a row of its own over the other five. */
-  .stat-trial { grid-column: 1 / -1; }
-  /* The effect chips share the level's row, at its right end; two that will not fit beside it wrap within half the row. */
-  .stat-effects { grid-row: 1; grid-column: 1 / -1; justify-self: end; max-width: 50%; flex-direction: row; }
-  .stat-effects dd { justify-content: flex-end; }
+  /* The level has no label to show, so it takes the first row, over the other five. */
+  .stat-trial { grid-row: 1; grid-column: 1 / -1; justify-self: start; }
+  /* The effect chips share the level's row, at its right end, on one line no taller than the level's: a chip coming
+     or going never changes the bar's height, so the board keeps its size. Two at once on a narrow phone take their
+     short words (the cow's chip says Cow), so both fit beside the longest level. */
+  .stat-effects { grid-row: 1; grid-column: 1 / -1; justify-self: end; align-self: center; flex-direction: row; }
+  .stat-effects dd { flex-wrap: nowrap; justify-content: flex-end; }
+  .fx-chip { line-height: 1.2; }
   .strip {
     position: relative;
     display: grid;
@@ -733,6 +740,8 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 /* Up to 440 px, Menu and the look swap share half a row: a smaller label keeps Classic and Modern whole. */
 @container frame (max-width: 440px) and (orientation: portrait) {
   .strip .view.with-menu button { font-size: 0.78rem; padding: 0 0.15rem; }
+  #hud-effects:has(> .fx-chip + .fx-chip) .fx-long { display: none; }
+  #hud-effects:has(> .fx-chip + .fx-chip) .fx-short { display: inline; }
 }
 /* The narrowest phones (320 px to 400 px): three stats a row, and a smaller strip. */
 @container frame (max-width: 400px) and (orientation: portrait) {

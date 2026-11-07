@@ -14,23 +14,52 @@ import { KEYS } from './keys.ts';
 /** How the player plays: with keys at hand (a fine pointer), or by touch. Keys are named by key, buttons by face. */
 export type Input = 'keys' | 'touch';
 
-/** The tools named in a line of text, for the button that shows the tool's picture (src/ui/strip.tsx). */
-export const TOOL_EMOJI: Record<Tool, string> = { mirror: '🪞', cake: '🍯', cow: '🐄' };
+/** A piece of a line the page says: words, or a tool's button named by its picture (src/ui.ts draws the picture the
+ *  tool's button shows, src/ui/strip.tsx, with `TOOL_ALT` as its text). */
+export type Part = string | { tool: Tool };
+/** A line the page says: plain words, or words with tools' pictures among them. */
+export type Said = string | readonly Part[];
 
-/** "press C or tap 🐄" with keys at hand (a fine pointer is no promise of a keyboard, so the button is named too),
- *  "tap 🐄" by touch. */
-const useOf = (tool: Tool, input: Input): string =>
-  (input === 'keys' ? `press ${TOOLS[tool].key} or tap ${TOOL_EMOJI[tool]}` : `tap ${TOOL_EMOJI[tool]}`);
+/** A tool's picture in words, for a screen reader and the story log. */
+export const TOOL_ALT: Record<Tool, string> = { mirror: 'Mirror', cake: 'Honey Cake', cow: 'Cow' };
+
+/** A line in words alone: each tool's picture by its `TOOL_ALT`. */
+export function saidText(said: Said): string {
+  return typeof said === 'string' ? said : said.map(p => (typeof p === 'string' ? p : TOOL_ALT[p.tool])).join('');
+}
+
+/** A turn's lines joined into one, a space between each: plain words while every line is. Neighbouring words merge,
+ *  so a line with pictures holds words and pictures in turn. */
+export function joinSaid(lines: readonly Said[]): Said {
+  if (lines.every(l => typeof l === 'string')) return lines.join(' ');
+  return merged(lines.flatMap((l, i) => [...(i > 0 ? [' '] : []), ...(typeof l === 'string' ? [l] : l)]));
+}
+
+/** `parts` with neighbouring words run together. */
+function merged(parts: readonly Part[]): Part[] {
+  const out: Part[] = [];
+  for (const p of parts) {
+    const last = out[out.length - 1];
+    if (typeof p === 'string' && typeof last === 'string') out[out.length - 1] = last + p;
+    else out.push(p);
+  }
+  return out;
+}
+
+/** "press C or tap [the cow's picture]" with keys at hand (a fine pointer is no promise of a keyboard, so the button
+ *  is named too), "tap [the cow's picture]" by touch. */
+const useOf = (tool: Tool, input: Input): Part[] =>
+  [input === 'keys' ? `press ${TOOLS[tool].key} or tap ` : 'tap ', { tool }];
 
 /** What a tool just picked up does, and how to use it. */
-export function pickupLine(tool: Tool, input: Input): string {
+export function pickupLine(tool: Tool, input: Input): Part[] {
   switch (tool) {
     case 'cow':
-      return `Daedalus's cow: ${useOf('cow', input)} to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it.`;
+      return merged(["Daedalus's cow: ", ...useOf('cow', input), ' to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it.']);
     case 'mirror':
-      return `Medusa's mirror: ${useOf('mirror', input)} to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall.`;
+      return merged(["Medusa's mirror: ", ...useOf('mirror', input), ' to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall.']);
     case 'cake':
-      return `Honey cake: ${useOf('cake', input)} to eat it for one more heart.`;
+      return merged(['Honey cake: ', ...useOf('cake', input), ' to eat it for one more heart.']);
   }
 }
 
@@ -55,8 +84,8 @@ const turns = (n: number): string => `${n} more turn${n === 1 ? '' : 's'}`;
 /** What a turn's tools said: each tool picked up, a tool used, and an effect that ended. `a` is the action played,
  *  `events` the turn's, `before` and `after` the states either side of it. A turn that ended in a catch says nothing
  *  of a cow it took: the catch is said. */
-export function toolLines(a: Action, events: readonly GameEvent[], before: State, after: State, input: Input): string[] {
-  const out: string[] = [];
+export function toolLines(a: Action, events: readonly GameEvent[], before: State, after: State, input: Input): Said[] {
+  const out: Said[] = [];
   for (const e of events) {
     if (e.kind === 'took' && (e.what === 'cow' || e.what === 'mirror' || e.what === 'cake')) out.push(pickupLine(e.what, input));
   }
@@ -78,6 +107,8 @@ export function toolLines(a: Action, events: readonly GameEvent[], before: State
 export interface Effect {
   id: 'stone' | 'cow';
   label: string;
+  /** Its label in short, where it has one, for a narrow phone showing two chips at once. */
+  short?: string;
   note: string;
 }
 
@@ -93,7 +124,7 @@ export function activeEffects(s: State): Effect[] {
     });
   }
   if (s.cow) {
-    out.push({ id: 'cow', label: 'Chasing the Cow', note: 'The Minotaur goes for the cow, not you, until he reaches it.' });
+    out.push({ id: 'cow', label: 'Chasing the Cow', short: 'Cow', note: 'The Minotaur goes for the cow, not you, until he reaches it.' });
   }
   return out;
 }

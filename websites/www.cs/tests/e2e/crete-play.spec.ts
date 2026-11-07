@@ -679,9 +679,12 @@ test('taking and using the mirror and the cow says what each does; the status ba
   await page.locator('#start-begin').click();
   const toast = page.locator('#toast');
   await page.keyboard.press('ArrowRight');
-  await expect(toast).toHaveText("Medusa's mirror: press Z or tap 🪞 to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall.");
+  // The tool's button is named by its own picture, drawn as the strip draws it, and by name for a screen reader.
+  await expect(toast).toHaveText("Medusa's mirror: press Z or tap  to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall.");
+  await expect(toast.locator('.toast-pic[role="img"][aria-label="Mirror"] .sprite[data-look="classic"]')).toHaveCount(1);
   await page.keyboard.press('ArrowRight');
-  await expect(toast).toHaveText("Daedalus's cow: press C or tap 🐄 to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it.");
+  await expect(toast).toHaveText("Daedalus's cow: press C or tap  to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it.");
+  await expect(toast.locator('.toast-pic[role="img"][aria-label="Cow"]')).toHaveCount(1);
   await expect(page.locator('#hud-effects'), 'no effect at work yet').toHaveCount(0);
   await page.keyboard.press('z');
   await expect(toast).toHaveText('The Minotaur is stone for 3 more turns. Stone blocks everyone like a wall.');

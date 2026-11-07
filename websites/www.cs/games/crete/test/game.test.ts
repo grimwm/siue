@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, threadSolve } from '../src/game.ts';
+import { saidText } from '../src/tool-effects.ts';
 import { createFoundPages } from '../src/pages.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
@@ -237,7 +238,7 @@ function lone(rows: string[], header = '') {
   const said: string[] = [];
   const m = manualClock();
   const game = createGame({
-    sfx: n => sounds.push(n), say: t => said.push(t), progress: createProgress(null), pages: createFoundPages(null),
+    sfx: n => sounds.push(n), say: t => said.push(saidText(t)), progress: createProgress(null), pages: createFoundPages(null),
     timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
     levels: { count: 1, id: () => 'lone', level: () => parse(`title: t\nintro: i\n${header}\n${rows.join('\n')}\n`) },
   });
@@ -396,7 +397,7 @@ test('retracing a step back to where the try stood is an undo, said as "Back to 
   const said: string[] = [];
   const m = manualClock();
   const game = createGame({
-    sfx() {}, say: t => { said.push(t); }, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
+    sfx() {}, say: t => { said.push(saidText(t)); }, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
     reducedMotion: () => true, changed() {}, levels: CAMPAIGN_LEVELS,
   });
   game.open(0);
@@ -449,7 +450,7 @@ test('undo back onto the line uses it again', () => {
 test('a tool picked up, used and worn off is said; a catch in the same turn is said last', () => {
   const { game, said } = lone(['#############', '#Pz........M#', '#############']);
   game.press(R_);
-  assert.match(said.at(-1)!, /^Medusa's mirror: press Z or tap 🪞 to raise it\./);
+  assert.match(said.at(-1)!, /^Medusa's mirror: press Z or tap Mirror to raise it\./);
   game.press({ kind: 'tool', tool: 'mirror' });
   assert.equal(said.at(-1), 'The Minotaur is stone for 3 more turns. Stone blocks everyone like a wall.');
   for (let i = 0; i < 3; i++) game.press({ kind: 'wait' });
@@ -466,7 +467,7 @@ test('boxed in, the turn and each bump after say what still plays, by key or by 
   const { game, said, sounds } = lone(rows);
   game.press(R_);
   game.press(R_);
-  assert.equal(said.at(-1), "Medusa's mirror: press Z or tap 🪞 to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall. No way to move: Wait (.) or Undo (U).",
+  assert.equal(said.at(-1), "Medusa's mirror: press Z or tap Mirror to raise it. The Minotaur turns to stone for that turn and the 3 after; stone blocks everyone like a wall. No way to move: Wait (.) or Undo (U).",
     "the turn's lines in one toast: the pickup, then the boxed-in line");
   said.length = 0;
   game.press(mv('down'));
@@ -475,7 +476,7 @@ test('boxed in, the turn and each bump after say what still plays, by key or by 
   const m = manualClock();
   const said2: string[] = [];
   const touch = createGame({
-    sfx() {}, say: t => said2.push(t), progress: createProgress(null), pages: createFoundPages(null), input: () => 'touch',
+    sfx() {}, say: t => said2.push(saidText(t)), progress: createProgress(null), pages: createFoundPages(null), input: () => 'touch',
     timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
     levels: { count: 1, id: () => 'lone', level: () => parse(`title: t\nintro: i\n\n${rows.join('\n')}\n`) },
   });
@@ -536,12 +537,12 @@ test("a pickup and a catch in the same turn are said together, the pickup first,
   const said: string[] = [];
   const m = manualClock();
   const game = createGame({
-    sfx() {}, say: (t, tone) => { said.push(t); tones.push(tone); }, progress: createProgress(null), pages: createFoundPages(null),
+    sfx() {}, say: (t, tone) => { said.push(saidText(t)); tones.push(tone); }, progress: createProgress(null), pages: createFoundPages(null),
     timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
     levels: { count: 1, id: () => 'lone', level: () => parse('title: t\nintro: i\n\n#######\n#Pc.M.#\n#######\n') },
   });
   game.open(0);
   game.press(R_);
-  assert.deepEqual(said, ["Daedalus's cow: press C or tap 🐄 to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it. Caught! 2 hearts left."]);
+  assert.deepEqual(said, ["Daedalus's cow: press C or tap Cow to set it down where you stand. The Minotaur goes for the cow, not you, until he reaches it. Caught! 2 hearts left."]);
   assert.deepEqual(tones, ['bad']);
 });

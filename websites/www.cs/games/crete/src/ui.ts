@@ -38,7 +38,9 @@ import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter, placeWord
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
-import { activeEffects, pickupWatch } from "./tool-effects.ts";
+import { activeEffects, pickupWatch, saidText } from "./tool-effects.ts";
+import type { Said } from "./tool-effects.ts";
+import { renderToast } from "./ui/toast.tsx";
 import { centredOn, createSheetView, eye, holdTarget, keepInView, panned, project, sheetCell, unproject, wholeFrame } from "./sheet.ts";
 import type { Frame } from "./sheet.ts";
 import { createCompassButton } from "./modern/controls.ts";
@@ -156,7 +158,7 @@ export interface Controls {
 
 export interface Ui {
   /** A line for the toast and the story log. */
-  say(text: string, tone?: Tone): void;
+  say(text: Said, tone?: Tone): void;
   render(game: Game): void;
   setMuted(muted: boolean): void;
   setMusic(on: boolean): void;
@@ -896,13 +898,16 @@ export function createUi(deps: UiDeps): Ui {
     return fewest === undefined ? {} : { fewest, yourBest: progress.get(id!).best };
   }
 
-  function say(text: string, tone?: Tone): void {
+  function say(said: Said, tone?: Tone): void {
+    // The story log keeps the line in words: each tool's picture by its name.
+    const text = saidText(said);
     log.push(tone ? { text, tone } : { text });
     while (log.length > LOG_LIMIT) log.shift();
     // Demo plays quietly: its lines go to the story log, not the toast.
     if (demo) return;
     const toast = $("toast");
-    toast.textContent = text;
+    // A tool's button is named by its own picture, in the look the board shows now.
+    renderToast(toast, said, pics());
     toast.className = tone ? `toast show ${tone}` : "toast show";
     timers.clearTimeout(toastTimer);
     toastTimer = timers.setTimeout(() => { toast.className = toast.className.split(" ").filter((c) => c !== "show").join(" "); }, toastMs(text));

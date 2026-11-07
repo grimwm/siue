@@ -6,6 +6,7 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import { fireDocument, installDocument } from '../../_kit/test/dom-stub.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { createGame } from '../src/game.ts';
+import { saidText } from '../src/tool-effects.ts';
 import type { Game } from '../src/game.ts';
 import { createFoundPages } from '../src/pages.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
@@ -30,7 +31,7 @@ const page = ui.createUi({
   pages: createFoundPages(null),
 });
 game = createGame({
-  sfx() {}, say: t => said.push(t), progress: createProgress(null), pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => true,
+  sfx() {}, say: t => said.push(saidText(t)), progress: createProgress(null), pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => true,
   changed: () => page.render(game),
 });
 page.bindControls({ game, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play() {} });

@@ -170,6 +170,73 @@ test.describe('with every tip seen', () => {
   });
 });
 
+/** Medusa's mirror and Daedalus's cow to the right, the Minotaur at the far end of a room. */
+const TOOLS_ROOM = ['title: The tools', 'intro: Take them.', '', '################', '#Pzc..........M#', '#..............#', '#.............E#', '################', ''].join('\n');
+
+/** Every box the board's size shows in: its row, and the drawn board of the look in play. */
+const boardBoxes = (page: Page) => page.evaluate(() => {
+  const box = (id: string) => {
+    const r = document.getElementById(id)!.getBoundingClientRect();
+    return [r.x, r.y, r.width, r.height].map(n => Math.round(n * 100) / 100).join(' ');
+  };
+  return { board: box('board'), stage: box('stage'), stage3d: box('stage3d'), status: box('status-root') };
+});
+
+for (const look of ['modern', 'classic'] as const) {
+  for (const size of [{ width: 390, height: 844 }, { width: 360, height: 740 }, { width: 320, height: 568 }, { width: 740, height: 360 }]) {
+    test.describe(`on a ${size.width}×${size.height} phone in ${look}`, () => {
+      test.use({ viewport: size });
+      test.beforeEach(async ({ context }) => {
+        await context.addInitScript(allMet);
+        await context.addInitScript(l => localStorage.setItem('crete-look', l), look);
+      });
+
+      test('a pickup names the tool\'s button by its own picture, a tap puts the toast away, and the effect chips never resize the board', async ({ page }) => {
+        const errors = await open(page, TOOLS_ROOM);
+        if (look === 'modern') await expect(page.locator('#stage3d')).toBeVisible();
+        else await page.waitForSelector('#stage[data-cell]');
+        const cdp = await page.context().newCDPSession(page);
+        const before = await boardBoxes(page);
+        await touch(cdp, [[await centre(page, '.pad .mv-right')]]);
+        const toast = page.locator('#toast');
+        await expect(toast).toHaveClass(/\bshow\b/);
+        const pic = toast.locator('.toast-pic[role="img"][aria-label="Mirror"]');
+        await expect(pic, 'the mirror\'s picture, named for a screen reader').toHaveCount(1);
+        await expect(pic.locator(`.sprite[data-look="${look}"]`), 'drawn in the look in play, as its button is').toHaveCount(1);
+        await expect(toast).toHaveText(/^Medusa's mirror: tap +to raise it\./);
+        expect(await toast.textContent(), 'no emoji').not.toMatch(/\p{Extended_Pictographic}/u);
+        const picBox = (await pic.boundingBox())!;
+        expect(picBox.height, 'the size of the line').toBeGreaterThan(14);
+        expect(picBox.height).toBeLessThan(24);
+        await page.screenshot({ path: test.info().outputPath(`toast-${look}.png`) });
+
+        const was = await now(page);
+        await touch(cdp, [[await centre(page, '#toast')]]);
+        await expect(toast, 'a tap puts it away').not.toHaveClass(/\bshow\b/);
+        await page.waitForTimeout(150);
+        expect(await now(page), 'and moves no one').toEqual(was);
+
+        expect(await boardBoxes(page), 'a pickup leaves the board as it was').toEqual(before);
+        await touch(cdp, [[await centre(page, '#tool-mirror')]]);
+        await expect(page.locator('#fx-stone')).toBeVisible();
+        expect(await boardBoxes(page), 'the stone chip leaves the board as it was').toEqual(before);
+        await page.screenshot({ path: test.info().outputPath(`stone-${look}.png`) });
+        await touch(cdp, [[await centre(page, '.pad .mv-right')]]);
+        await touch(cdp, [[await centre(page, '#tool-cow')]]);
+        await expect(page.locator('#fx-cow')).toBeVisible();
+        await expect(page.locator('#fx-stone')).toBeVisible();
+        expect(await boardBoxes(page), 'both chips leave the board as it was').toEqual(before);
+        for (let i = 0; i < 4 && await page.locator('#fx-stone').count() > 0; i++) await touch(cdp, [[await centre(page, '#btn-wait')]]);
+        await expect(page.locator('#fx-stone')).toHaveCount(0);
+        await expect(page.locator('#fx-cow')).toBeVisible();
+        expect(await boardBoxes(page), 'the cow chip alone leaves it so').toEqual(before);
+        await page.screenshot({ path: test.info().outputPath(`cow-${look}.png`) });
+        expect(errors).toEqual([]);
+      });
+    });
+  }
+}
+
 test('the touch tour shows once when play starts on a touch screen, and Show View Tips brings it back', async ({ page }) => {
   const errors = await open(page, ROOM);
   await expect(page.locator('#tour'), 'it shows by itself once the start card has gone').toBeVisible();

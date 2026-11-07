@@ -23,8 +23,8 @@ import { threadPath } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
 import type { Cell, Dir, HazardKind, ObjectKind } from './puzzle/tiles.ts';
 import { meetingsOf } from './dictionary.ts';
-import { boxedIn, boxedInLine, toolLines } from './tool-effects.ts';
-import type { Input } from './tool-effects.ts';
+import { boxedIn, boxedInLine, joinSaid, toolLines } from './tool-effects.ts';
+import type { Input, Said } from './tool-effects.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
@@ -41,7 +41,7 @@ export const AUTO_MS = SLIDE_MS * 3;
 
 export interface GameDeps {
   sfx(name: SfxName): void;
-  say(text: string, tone?: Tone): void;
+  say(text: Said, tone?: Tone): void;
   progress: Progress;
   /** The story pages found, kept in this browser. */
   pages: FoundPages;
@@ -287,8 +287,8 @@ export function createGame(deps: GameDeps): Game {
     caughtTurns.push(r.events.some(e => e.kind === 'caught'));
     // A turn that retraced the try back to an earlier state is an undo to there: the moves after it go.
     // The turn's lines, said together as one, so none hides another: the tools' first, then what befell Theseus.
-    const lines: { text: string; tone?: Tone }[] = [];
-    const say = (text: string, tone?: Tone): void => { lines.push(tone ? { text, tone } : { text }); };
+    const lines: { text: Said; tone?: Tone }[] = [];
+    const say = (text: Said, tone?: Tone): void => { lines.push(tone ? { text, tone } : { text }); };
     if (r.back !== undefined) {
       played = played.slice(0, r.back);
       caughtTurns = caughtTurns.slice(0, r.back);
@@ -301,7 +301,7 @@ export function createGame(deps: GameDeps): Game {
     if (!r.events.some(e => e.kind === 'caught') && boxedIn(run.now)) say(boxedInLine(input()), 'info');
     if (lines.length > 0) {
       const tone = lines.find(l => l.tone === 'bad')?.tone ?? lines.find(l => l.tone)?.tone;
-      deps.say(lines.map(l => l.text).join(' '), tone);
+      deps.say(joinSaid(lines.map(l => l.text)), tone);
     }
     took = r.events.flatMap(e => (e.kind === 'took' ? [e.what] : []));
     turn = {

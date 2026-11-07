@@ -47,7 +47,12 @@ export function Status(p: StatusProps) {
             <dd id="hud-effects">
               {p.view.effects.map(e => (
                 <span key={e.id} id={`fx-${e.id}`} class={`fx-chip fx-${e.id}`} title={e.note}>
-                  {e.label}<span class="sr">: {e.note}</span>
+                  {e.short === undefined ? e.label : (
+                    <>
+                      <span class="fx-long">{e.label}</span><span class="fx-short" aria-hidden="true">{e.short}</span>
+                    </>
+                  )}
+                  <span class="sr">: {e.note}</span>
                 </span>
               ))}
             </dd>

@@ -107,7 +107,7 @@ test('both effects at once show both chips, stone first, each with a note', () =
   assert.deepEqual(fx.map(e => e.id), ['stone', 'cow']);
   assert.match(fx[0]!.note, /stone for 3 more turns/);
   assert.match(fx[1]!.note, /goes for the cow, not you/);
-  assert.deepEqual(fx.map(e => e.short), [undefined, 'Cow'], 'the short words a narrow phone shows with two chips');
+  assert.deepEqual(fx.map(e => e.short), ['Stone: 3', 'Cow'], 'the short words a narrow phone shows with two chips');
 });
 
 test('a turn with no tool in it says nothing', () => {

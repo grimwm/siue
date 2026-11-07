@@ -120,6 +120,7 @@ export function activeEffects(s: State): Effect[] {
     out.push({
       id: 'stone',
       label: `Stone: ${s.stone} Turn${s.stone === 1 ? '' : 's'}`,
+      short: `Stone: ${s.stone}`,
       note: `The Minotaur is stone for ${turns(s.stone)}: he cannot move, and blocks everyone like a wall.`,
     });
   }

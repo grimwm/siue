@@ -707,7 +707,7 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .stat-trial { grid-row: 1; grid-column: 1 / -1; justify-self: start; }
   /* The effect chips share the level's row, at its right end, on one line no taller than the level's: a chip coming
      or going never changes the bar's height, so the board keeps its size. Two at once on a narrow phone take their
-     short words (the cow's chip says Cow), so both fit beside the longest level. */
+     short words (`Stone: 3`, `Cow`), so both fit beside the longest level. */
   .stat-effects { grid-row: 1; grid-column: 1 / -1; justify-self: end; align-self: center; flex-direction: row; }
   .stat-effects dd { flex-wrap: nowrap; justify-content: flex-end; }
   .fx-chip { line-height: 1.2; }

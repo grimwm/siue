@@ -204,6 +204,10 @@ test('a restore checks the backup against its manifest and posts only what the b
     manifest.grades.easy!.sha256 = createHash('sha256').update(notJson).digest('hex');
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
     assert.match(readBackup(read, ['easy']) as string, /easy\.json is not JSON/, 'a file that matches its hash but is not JSON');
+    writeFileSync(join(dir, 'easy.json'), 'null');
+    manifest.grades.easy!.sha256 = createHash('sha256').update('null').digest('hex');
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
+    assert.match(readBackup(read, ['easy']) as string, /is not easy's levels/, 'JSON that is not a grade');
     manifest.grades.easy!.file = '../../elsewhere.json';
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
     const asked: string[] = [];

@@ -43,7 +43,7 @@ export function readBackup(read: (name: string) => string, grades: readonly Grad
     if (createHash('sha256').update(raw).digest('hex') !== e.sha256) return `${e.file} does not match its SHA-256 in manifest.json`;
     let b: GradeBackup;
     try { b = JSON.parse(raw) as GradeBackup; } catch { return `${e.file} is not JSON`; }
-    if (b.grade !== g || !Array.isArray(b.served)) return `${e.file} is not ${g}'s levels`;
+    if (b?.grade !== g || !Array.isArray(b.served)) return `${e.file} is not ${g}'s levels`;
     out.set(g, b);
   }
   return out;

@@ -36,10 +36,13 @@ export function readBackup(read: (name: string) => string, grades: readonly Grad
   for (const g of grades) {
     const e = m.grades[g];
     if (!e) continue;
+    // Only the backup's own file for the grade: never a path the manifest names elsewhere.
+    if (e.file !== `${g}.json`) return `manifest.json names another file for ${g} than ${g}.json`;
     let raw: string;
     try { raw = read(e.file); } catch { return `${e.file} is missing`; }
     if (createHash('sha256').update(raw).digest('hex') !== e.sha256) return `${e.file} does not match its SHA-256 in manifest.json`;
-    const b = JSON.parse(raw) as GradeBackup;
+    let b: GradeBackup;
+    try { b = JSON.parse(raw) as GradeBackup; } catch { return `${e.file} is not JSON`; }
     if (b.grade !== g || !Array.isArray(b.served)) return `${e.file} is not ${g}'s levels`;
     out.set(g, b);
   }

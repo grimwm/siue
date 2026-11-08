@@ -198,6 +198,7 @@ crete-bank-backup: ## Copy every level of the shared bank here, read only (BACKU
 
 crete-bank-restore: ## Put a backup's levels the bank lost back (FROM=<dir>, DIFFICULTY, DRY_RUN=yes)
 	@test -n "$(FROM)" || { echo "usage: make crete-bank-restore FROM=<backup dir> [DIFFICULTY=easy,medium,hard] [DRY_RUN=yes]" >&2; exit 2; }; \
+	case "$(or $(DRY_RUN),no)" in yes|no) ;; *) echo "$@: DRY_RUN must be yes or no" >&2; exit 2;; esac; \
 	$(CRETE_TOKEN); \
 	node games/crete/tools/restore-bank.ts --from "$(FROM)" $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") $(if $(filter yes,$(DRY_RUN)),--dry-run)
 

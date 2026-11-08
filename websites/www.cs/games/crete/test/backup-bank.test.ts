@@ -198,6 +198,17 @@ test('a restore checks the backup against its manifest and posts only what the b
 
     writeFileSync(join(dir, 'easy.json'), read('easy.json').replace('"served"', '"served" '));
     assert.match(readBackup(read, ['easy']) as string, /SHA-256/);
+    const manifest = JSON.parse(read('manifest.json')) as Manifest;
+    const notJson = 'not json\n';
+    writeFileSync(join(dir, 'easy.json'), notJson);
+    manifest.grades.easy!.sha256 = createHash('sha256').update(notJson).digest('hex');
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
+    assert.match(readBackup(read, ['easy']) as string, /easy\.json is not JSON/, 'a file that matches its hash but is not JSON');
+    manifest.grades.easy!.file = '../../elsewhere.json';
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
+    const asked: string[] = [];
+    assert.match(readBackup(n => { asked.push(n); return read(n); }, ['easy']) as string, /another file for easy/);
+    assert.deepEqual(asked, ['manifest.json'], 'never a path the manifest names outside the backup');
     rmSync(join(dir, 'manifest.json'));
     assert.match(readBackup(read, ['easy']) as string, /not a finished backup/);
     assert.ok(existsSync(join(dir, 'hard.json')), 'a restore moves no backup file');

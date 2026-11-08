@@ -1029,6 +1029,146 @@ final class EndlessBankTest extends TestCase
         self::assertSame([], $this->stored('strikes.json'), 'the runner\'s refusals strike nobody');
     }
 
+    /** @return list<array<string, mixed>> every item of one grade's list, paged by trusted-export at $limit */
+    private function exportAll(Bank $bank, string $grade, string $list, int $limit, ?int &$pages = null): array
+    {
+        $items = [];
+        $after = null;
+        $pages = 0;
+        do {
+            $page = $this->trusted($bank, ['op' => 'trusted-export', 'grade' => $grade, 'list' => $list, 'after' => $after, 'limit' => $limit]);
+            self::assertSame([$grade, $list], [$page['grade'], $page['list']]);
+            self::assertLessThanOrEqual($limit, count($page['items']));
+            $items = [...$items, ...$page['items']];
+            $after = $page['next'];
+            $pages++;
+            self::assertLessThan(100, $pages, 'paging ends');
+        } while ($after !== null);
+        self::assertSame($page['total'], count($items), 'every page carries the list\'s total');
+        return $items;
+    }
+
+    /** @return array<string, string> every file in the bank's folder and its bytes */
+    private function snapshot(): array
+    {
+        $out = [];
+        foreach (glob("{$this->dir}/{,.}*", GLOB_BRACE) ?: [] as $file) {
+            if (is_file($file)) {
+                $out[basename($file)] = (string) file_get_contents($file);
+            }
+        }
+        ksort($out);
+        return $out;
+    }
+
+    public function testATrustedExportPagesEveryListInHashOrderWithEverythingToRestoreIt(): void
+    {
+        $bank = $this->bank();
+        $this->verifierFile();
+        $added = [];
+        for ($i = 0; $i < 5; $i++) {
+            $text = self::level(1400 + $i);
+            $this->add($bank, $text, ['seed' => "ci-$i"]);
+            $added[Bank::layoutHash($text)] = "ci-$i";
+        }
+        $this->admit($bank, self::level(1410), 'peer');
+        $bank->levels('easy', 1, 3);
+        $this->submit($bank, self::level(1420), 'waiting', self::A, ['seed' => 'wait-1']);
+        $this->submit($bank, self::level(1421), 'waiting2', self::B, ['seed' => 'wait-2']);
+        file_put_contents("{$this->dir}/retired-easy.json", json_encode(['ffff000011112222', '1234567890123456', 'aaaa000011112222']));
+
+        $served = $this->exportAll($bank, 'easy', 'served', 2, $pages);
+        self::assertSame(3, $pages, 'six levels two at a time');
+        $hashes = array_column($served, 'h');
+        $sorted = $hashes;
+        sort($sorted, SORT_STRING);
+        self::assertSame($sorted, $hashes, 'in hash order');
+        $stored = array_column($this->stored('served-easy.json'), null, 'h');
+        self::assertEqualsCanonicalizing(array_keys($stored), $hashes, 'every served level, once');
+        foreach ($served as $item) {
+            self::assertSame(['h', 'v', 'at', 'made', 'n', 'tuple'], array_keys($item));
+            self::assertSame($stored[$item['h']]['made'], $item['made']);
+            self::assertSame($stored[$item['h']]['n'], $item['n'], 'its served count');
+            self::assertSame($added[$item['h']] ?? null, $item['tuple']['seed'] ?? null, 'the tuple kept beside it, or none for a peer-verified level');
+        }
+        self::assertSame(3, array_sum(array_column($served, 'n')));
+
+        $pending = $this->exportAll($bank, 'easy', 'pending', 500);
+        self::assertEqualsCanonicalizing(['wait-1', 'wait-2'], array_column(array_column($pending, 'tuple'), 'seed'));
+        self::assertSame(['h', 'v', 'at', 'made', 'tuple'], array_keys($pending[0]));
+        self::assertStringNotContainsString(Bank::installHash(self::install('waiting')), (string) json_encode($pending), 'no install codes');
+
+        self::assertSame([['h' => '1234567890123456'], ['h' => 'aaaa000011112222'], ['h' => 'ffff000011112222']], $this->exportAll($bank, 'easy', 'retired', 1));
+        self::assertSame([], $this->exportAll($bank, 'hard', 'served', 500), 'an empty grade');
+    }
+
+    public function testATrustedExportIsReadOnlyEvenWhereAWriteWouldPrune(): void
+    {
+        $bank = $this->bank();
+        $this->verifierFile();
+        $this->add($bank, self::level(1430));
+        $this->add($bank, self::level(1431));
+        $bank->levels('easy', 1, 2);
+        $this->submit($bank, self::level(1432));
+        // Past pendingDays: any locked write would drop the pending level.
+        $this->now += 10 * 86400;
+        $before = $this->snapshot();
+        foreach (Bank::EXPORT_LISTS as $list) {
+            foreach (Bank::GRADES as $grade) {
+                $this->exportAll($bank, $grade, $list, 1);
+            }
+        }
+        self::assertSame($before, $this->snapshot(), 'no file written, made or removed');
+        self::assertCount(1, $this->exportAll($bank, 'easy', 'pending', 500), 'the store as it is, the expired level still in it');
+    }
+
+    public function testATrustedExportPageStopsPastAMebibyte(): void
+    {
+        $this->verifierFile();
+        $entries = [];
+        for ($i = 0; $i < 1500; $i++) {
+            $text = Bank::checkText(self::level(6000 + $i, 41, 'x'), 'made.text');
+            $made = self::made($text, ['line' => str_repeat('rdlu', 500)]);
+            $entries[] = Bank::servedEntry($made, Bank::layoutHash($text), 2, $this->now);
+        }
+        file_put_contents("{$this->dir}/served-hard.json", Bank::encode($entries));
+        $bank = $this->bank();
+        $page = $this->trusted($bank, ['op' => 'trusted-export', 'grade' => 'hard', 'list' => 'served', 'after' => null, 'limit' => 500]);
+        self::assertLessThan(500, count($page['items']), 'the byte cap ends the page first');
+        self::assertLessThan(Bank::EXPORT_BYTES + 8192, strlen(Bank::encode($page['items'])));
+        self::assertNotNull($page['next']);
+        self::assertCount(1500, $this->exportAll($bank, 'hard', 'served', 500));
+    }
+
+    public function testATrustedExportNeedsTheTokenAndRefusesWhatItCannotTake(): void
+    {
+        $bank = $this->bank();
+        $ask = ['op' => 'trusted-export', 'grade' => 'easy', 'list' => 'served', 'after' => null, 'limit' => 10];
+        $unauthorized = [401, ['error' => 'unauthorized']];
+        self::assertSame($unauthorized, self::refusal(fn() => $this->trusted($bank, $ask)), 'no verifier file trusts nobody');
+        $this->verifierFile();
+        foreach (['a wrong token' => 'tok_Wrong-verifier_0123456789abcdefXYZ', 'no token' => null, 'a short token' => 'tok', 'the hash itself' => hash('sha256', self::TOKEN)] as $what => $token) {
+            self::assertSame($unauthorized, self::refusal(fn() => $this->trusted($bank, $ask, $token)), $what);
+        }
+        self::assertSame(0, $this->trusted($bank, $ask)['total']);
+        $bad = [
+            'grade' => [['grade' => 'expert'], ['grade' => null], ['grade' => 'EASY']],
+            'list' => [['list' => 'quarantine'], ['list' => null]],
+            'after' => [['after' => 'ABCDEF0123456789'], ['after' => 'abc'], ['after' => 12]],
+            'limit' => [['limit' => 0], ['limit' => Bank::EXPORT_LIMIT + 1], ['limit' => '10']],
+        ];
+        foreach ($bad as $field => $edits) {
+            foreach ($edits as $edit) {
+                self::assertSame([400, ['error' => 'invalid', 'field' => $field]], self::refusal(fn() => $this->trusted($bank, $edit + $ask)), json_encode($edit));
+            }
+        }
+        $missing = $ask;
+        unset($missing['after']);
+        self::assertSame(400, self::refusal(fn() => $this->trusted($bank, $missing))[0], 'every field is named');
+        self::assertSame(400, self::refusal(fn() => $this->trusted($bank, ['extra' => 1] + $ask))[0], 'and no other');
+        self::assertSame(['verifier.json'], array_keys($this->snapshot()), 'no store or lock was made');
+    }
+
     public function testTrustedAddsStopAtTheCapAndNeverRollOutAPlayersLevel(): void
     {
         $bank = $this->bank(['servedCap' => 3]);

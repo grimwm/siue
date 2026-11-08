@@ -22,6 +22,10 @@
  *      or 409 { "error": "duplicate" | "retired" | "full" }, 403 { "error": "version" }; with replace, a full
  *      grade retires one served level (the server picks it, weighted) for the one it takes in; a duplicate or
  *      retired layout (one the bank served once and let go) takes no room and retires nothing
+ * POST { "op": "trusted-export", "grade", "list": "served" | "pending" | "retired", "after": <h> | null, "limit": 1..500 }
+ *      -> { "grade", "list", "total", "items", "next": <h> | null }: one page of the grade's list in hash order, read
+ *      only (no count or file changes); a served item is { "h", "v", "at", "made", "n", "tuple" | null }, a pending
+ *      one { "h", "v", "at", "made", "tuple" }, a retired one { "h" }; a page ends at limit items or once past 1 MiB
  * Its token is checked before a rate slot is taken (a stranger's guesses write
  * nothing), against the sha256 in bank/verifier.json, which deploy.sh writes
  * from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the path

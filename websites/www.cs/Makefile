@@ -130,13 +130,16 @@ stats-e2e: ## Visitor statistics browser check in a throwaway docker project
 # (games/crete/tools/generate-bank.ts) and adds them straight to the bank, or with SAVE_ONLY=<dir> saves them there for
 # crete-levels-upload (games/crete/tools/upload-bank.ts); served levels are replaced only with ROLLOVER=yes. Each
 # crete-levels run appends its numbers as one JSON line to STATS_FILE. crete-bank-status prints how full the bank is
-# and crete-verify-levels checks the levels waiting in quarantine (games/crete/tools/verify-bank.ts). The token is
+# and crete-verify-levels checks the levels waiting in quarantine (games/crete/tools/verify-bank.ts). crete-bank-backup
+# copies every level, read only, into BACKUP_DIR/<UTC time>/ (games/crete/tools/backup-bank.ts) and
+# crete-bank-restore puts a backup's served levels the bank no longer holds back (games/crete/tools/restore-bank.ts),
+# never retiring one it serves. The token is
 # CRETE_BANK_VERIFIER_TOKEN when it is set (the workflow loads it), otherwise the file CRETE_BANK_TOKEN_FILE (default
 # ~/.config/crete/bank-token) when it is readable, otherwise it is read with op from 1Password; it lives in the
 # recipe's environment only and is never printed. crete-levels caps the whole run at MEMORY_LIMIT with
 # systemd-run --user and sizes its workers by MEMORY_LIMIT; where systemd-run cannot cap it, it refuses to start unless
 # ALLOW_UNCAPPED=yes (as on GitHub's runner, a throwaway VM), which runs it uncapped with each worker's heap capped.
-.PHONY: crete-levels crete-levels-upload crete-bank-status crete-verify-levels
+.PHONY: crete-levels crete-levels-upload crete-bank-status crete-bank-backup crete-bank-restore crete-verify-levels
 MEMORY_LIMIT ?= 8G
 CRETE_TOKEN_REF = op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
 # The token from CRETE_BANK_TOKEN_FILE when the environment has none and the file is readable, its trailing newlines
@@ -187,6 +190,17 @@ crete-levels-upload: ## Upload levels saved by SAVE_ONLY (FROM=<dir>, DIFFICULTY
 crete-bank-status: ## Show each difficulty's served, waiting, cap and room in the shared bank
 	@$(CRETE_TOKEN); \
 	node games/crete/tools/generate-bank.ts --status
+
+crete-bank-backup: ## Copy every level of the shared bank here, read only (BACKUP_DIR DIFFICULTY)
+	@$(CRETE_TOKEN); \
+	into="$(BACKUP_DIR)"; test -n "$$into" || into="$${XDG_DATA_HOME:-$$HOME/.local/share}/crete/bank-backups"; \
+	node games/crete/tools/backup-bank.ts --into "$$into" $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)")
+
+crete-bank-restore: ## Put a backup's levels the bank lost back (FROM=<dir>, DIFFICULTY, DRY_RUN=yes)
+	@test -n "$(FROM)" || { echo "usage: make crete-bank-restore FROM=<backup dir> [DIFFICULTY=easy,medium,hard] [DRY_RUN=yes]" >&2; exit 2; }; \
+	case "$(or $(DRY_RUN),no)" in yes|no) ;; *) echo "$@: DRY_RUN must be yes or no" >&2; exit 2;; esac; \
+	$(CRETE_TOKEN); \
+	node games/crete/tools/restore-bank.ts --from "$(FROM)" $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") $(if $(filter yes,$(DRY_RUN)),--dry-run)
 
 crete-verify-levels: ## Check levels waiting in the shared bank (COUNT=25 MINUTES=12)
 	@$(CRETE_TOKEN); \

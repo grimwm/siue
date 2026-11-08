@@ -51,7 +51,16 @@ final class Bank
     public const RATE_KINDS = ['submit', 'claim', 'verify', 'report', 'levels', 'trusted'];
 
     /** The ops only the trusted runner may call, with the X-Crete-Verifier header. */
-    public const TRUSTED_OPS = ['trusted-list', 'trusted-verify', 'trusted-counts', 'trusted-add'];
+    public const TRUSTED_OPS = ['trusted-list', 'trusted-verify', 'trusted-counts', 'trusted-add', 'trusted-export'];
+
+    /** The lists of a grade trusted-export pages through. */
+    public const EXPORT_LISTS = ['served', 'pending', 'retired'];
+
+    /** At most this many levels in one trusted-export page. */
+    public const EXPORT_LIMIT = 500;
+
+    /** A trusted-export page also ends once its levels' JSON passes this many bytes (always at least one level). */
+    public const EXPORT_BYTES = 1048576;
 
     /** The form a trusted verifier token takes; deploy.sh refuses any other. */
     public const TOKEN = '/^[A-Za-z0-9_-]{32,128}\z/';
@@ -456,6 +465,7 @@ final class Bank
             'trusted-verify' => $this->trustedVerify($body),
             'trusted-counts' => $this->trustedCounts($body),
             'trusted-add' => $this->trustedAdd($body),
+            'trusted-export' => $this->trustedExport($body),
             default => throw Refusal::invalid('op'),
         };
     }
@@ -614,6 +624,72 @@ final class Bank
             return $retired;
         });
         return $retired === null ? ['ok' => true, 'h' => $h] : ['ok' => true, 'h' => $h, 'retired' => $retired];
+    }
+
+    /**
+     * One page of a grade's levels as its store holds them, for a backup:
+     * `list` names the served levels, the pending ones or the retired layout
+     * hashes. Items come in hash order after `after` (null for the first
+     * page), at most `limit`, and the page also ends once its items pass
+     * EXPORT_BYTES; `next` is the hash to pass as `after` for the next page,
+     * null after the last. A served level carries its tuple from
+     * prov-<grade>-<h>.json, or null when the bank keeps none (a level a peer
+     * verified); a pending one its own. Read-only: it takes the grade's lock
+     * to read a whole store, and changes no count, no file and no level.
+     * Never sends the install or network codes a store keeps.
+     * @param array<string, mixed> $body {op, grade, list, after, limit}
+     * @return array{grade: string, list: string, total: int, items: list<array<string, mixed>>, next: string|null}
+     */
+    private function trustedExport(array $body): array
+    {
+        self::fields($body, ['op', 'grade', 'list', 'after', 'limit'], '');
+        $grade = self::grade($body['grade'], 'grade');
+        $list = $body['list'];
+        if (!is_string($list) || !in_array($list, self::EXPORT_LISTS, true)) {
+            throw Refusal::invalid('list');
+        }
+        $after = $body['after'];
+        if ($after !== null && (!is_string($after) || !preg_match('/^[a-f0-9]{16}\z/', $after))) {
+            throw Refusal::invalid('after');
+        }
+        $limit = self::int($body['limit'], 1, self::EXPORT_LIMIT, 'limit');
+        $path = "{$this->dir}/$list-$grade.json";
+        if (!is_file($path)) {
+            // Nothing stored yet: answered without making the grade's lock file.
+            return ['grade' => $grade, 'list' => $list, 'total' => 0, 'items' => [], 'next' => null];
+        }
+        return $this->locked($grade, function () use ($grade, $list, $path, $after, $limit): array {
+            $raw = self::read($path);
+            if ($list === 'retired') {
+                $all = array_map(static fn(string $h): array => ['h' => $h], self::decodeHashes($raw, $path));
+            } else {
+                $all = array_map(static function (array $e) use ($list): array {
+                    $item = ['h' => $e['h'], 'v' => $e['v'], 'at' => $e['at'], 'made' => $e['made']];
+                    return $list === 'served' ? $item + ['n' => $e['n'], 'tuple' => null] : $item + ['tuple' => $e['tuple']];
+                }, self::decodeList($raw, $path));
+            }
+            usort($all, static fn(array $a, array $b): int => strcmp((string) $a['h'], (string) $b['h']));
+            $items = [];
+            $bytes = 0;
+            $next = null;
+            foreach ($all as $item) {
+                if ($after !== null && strcmp((string) $item['h'], $after) <= 0) {
+                    continue;
+                }
+                if (count($items) >= $limit || ($items !== [] && $bytes >= self::EXPORT_BYTES)) {
+                    $next = end($items)['h'];
+                    break;
+                }
+                if ($list === 'served') {
+                    $prov = "{$this->dir}/prov-$grade-{$item['h']}.json";
+                    $tuple = is_file($prov) ? json_decode((string) @file_get_contents($prov), true) : null;
+                    $item['tuple'] = is_array($tuple) ? $tuple : null;
+                }
+                $bytes += strlen(self::encode($item));
+                $items[] = $item;
+            }
+            return ['grade' => $grade, 'list' => $list, 'total' => count($all), 'items' => $items, 'next' => $next];
+        });
     }
 
     /** @return list<string> a checked text's grid rows */

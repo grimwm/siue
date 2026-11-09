@@ -64,7 +64,7 @@ function importRead(string $from, array $grades): array
         if (!is_string($raw)) {
             importFail("$from: $g.json is missing", 2);
         }
-        if (!hash_equals((string) ($e['sha256'] ?? ''), hash('sha256', $raw))) {
+        if (!is_string($e['sha256'] ?? null) || !hash_equals($e['sha256'], hash('sha256', $raw))) {
             importFail("$from: $g.json does not match its SHA-256 in manifest.json", 2);
         }
         $b = json_decode($raw, true);
@@ -86,7 +86,7 @@ for ($i = 0; $i < count($args); $i++) {
         $dryRun = true;
     } elseif ($a === '--difficulties') {
         $grades = explode(',', (string) ($args[++$i] ?? ''));
-        if ($grades === [] || array_diff($grades, Bank::GRADES) !== []) {
+        if (array_diff($grades, Bank::GRADES) !== []) {
             importFail('--difficulties takes easy, medium and hard, joined by commas', 2);
         }
     } elseif ($from === null && !str_starts_with($a, '--')) {

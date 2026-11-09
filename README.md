@@ -12,7 +12,7 @@ Open course materials may be placed here from time-to-time as well.
 ├── Makefile              # make up | down | ps | urls | test | parity | deploy, for all sites
 ├── scripts/              # deploy-hash (content hasher), its test and the deploy login test
 ├── docs/superpowers/     # design specs and implementation plans
-├── .github/              # workflows (ci.yml, deploy.yml) and the server's SSH host keys
+├── .github/              # workflows (ci.yml, deploy.yml, crete-verify.yml) and the servers' SSH host keys
 └── websites/
     └── www.cs/           # www.cs.siue.edu/~wgrim
         ├── compose.yaml  # www-cs-php and www-cs-nginx
@@ -135,6 +135,8 @@ Triggers: pull requests; pushes to `main` that change `websites/**`, `scripts/**
 ### deploy.yml
 
 Deploys www.cs when a `ci` run completes successfully for a push to `main` of this repository (not a pull request, not a fork), or when started by hand from the Actions tab (the `force` input sends every file). It runs in the `production` environment, deploys only if the run's commit is still the tip of `main`, runs `make -C websites/www.cs deploy PRUNE=1` (which logs in once and reads the server's stamp back on that same connection to confirm it holds this commit's content), then requests the home page, each game's `play/` page, Tankity's page, its `rooms.php?action=ping` and `scores.php`, and Cylon's `scores.php` on the live site and requires 200 from each, so a broken game endpoint fails the deploy. The login comes from a 1Password service account (the `OP_SERVICE_ACCOUNT_TOKEN` repository secret); SSH accepts only the host keys in `.github/ssh_known_hosts`.
+
+Its `bank` job, on the same gate and alongside, deploys Crete's shared Endless bank to happystl.com (DreamHost) with `websites/www.cs/games/crete/tools/deploy-bank.sh`: only the bank's files, into `~/happystl.com/crete-bank/`, never deleting anything, its levels kept outside the web root in `~/crete-bank-data/`; then it requires 200 from the live bank, its CORS answer for `https://www.cs.siue.edu`, and its report that it uses that folder. It logs in with the "Dreamhost Deploys" key from the same 1Password vault ([the Crete README](websites/www.cs/games/crete/README.md#making-levels-for-the-shared-bank)).
 
 ### Deploy mechanics
 

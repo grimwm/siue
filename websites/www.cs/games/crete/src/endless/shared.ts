@@ -1,10 +1,11 @@
-/* The Island of Crete: the shared Endless bank on the page's side (games/crete/endless-bank.php on the server). Every
- * level a device's search makes goes up with its provenance tuple (src/endless/provenance.ts), fire and forget. The
- * server serves a level only once two other devices have made it again from that tuple. The page keeps a small cache
- * of served levels per grade in local storage, tops it up now and then, and plays from it offline. Before a shared
- * level is played it is checked here, cheaply, since the bank is open to anyone: its line is replayed on the engine and
- * must win in exactly its fewest moves with no catch, and the gate's cheap rules must hold. A level that fails is
- * skipped and reported. The device's id is a random number kept in local storage, nothing more. DOM-free. */
+/* The Island of Crete: the shared Endless bank on the page's side (endless-bank.php on the server;
+ * src/endless/bank-url.ts says where). Every level a device's search makes goes up with its provenance tuple
+ * (src/endless/provenance.ts), fire and forget. The server serves a level only once two other devices have made it
+ * again from that tuple. The page keeps a small cache of served levels per grade in local storage, tops it up now and
+ * then, and plays from it offline. Before a shared level is played it is checked here, cheaply, since the bank is open
+ * to anyone: its line is replayed on the engine and must win in exactly its fewest moves with no catch, and the gate's
+ * cheap rules must hold. A level that fails is skipped and reported. The device's id is a random number kept in local
+ * storage, nothing more. DOM-free. */
 import { parse, serialize } from '../puzzle/level.ts';
 import type { Level } from '../puzzle/level.ts';
 import { initial } from '../puzzle/state.ts';
@@ -196,7 +197,7 @@ export function createSharedBank(deps: SharedDeps): SharedBank {
       body: JSON.stringify({ ...body, install: device() }),
     });
     let res = await send();
-    // A token the server no longer knows (its cookie expired): fetch a new one, once.
+    // A token the server no longer takes (it lapsed after a day): fetch a new one, once.
     if (res.status === 403) { csrf = null; await get('n=0'); res = await send(); }
     return res.json();
   };

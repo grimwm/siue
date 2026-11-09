@@ -20,13 +20,21 @@ name: deploy
 #   JSON (see websites/www.cs/admin/README.md). deploy.sh validates it and
 #   writes it to admin/config/studio.json on the host; without the item the
 #   site runs on the defaults.
-# Crete's trusted level verifier token is optional the same way:
-#   item "Crete Config" in the same vault, field bank-verifier (crete-verify.yml
-#   reads the same item). deploy.sh stages only its sha256, as
-#   games/crete/bank/verifier.json; without the item the trusted ops answer 401.
 #     username - the SIUE address (wgrim@siue.edu); the host account is the
 #                part before the @
 #     password - its password, fed to sftp/scp through sshpass
+#
+# The bank job deploys Crete's shared Endless bank to happystl.com (DreamHost)
+# alongside, through games/crete/tools/deploy-bank.sh: the bank's files into
+# ~/happystl.com/crete-bank/ (https://www.happystl.com/crete-bank/endless-bank.php),
+# its levels kept in ~/crete-bank-data/, outside the web root, which no deploy
+# uploads to or deletes. It sends only the bank's files and deletes nothing.
+# Same gate, same environment, same 1Password service account, two items:
+#   item "Dreamhost Deploys" in the same vault, its private key (an ssh key
+#     whose public half is in the account's authorized_keys with `restrict`)
+#   item "Crete Config", field bank-verifier: the trusted runner's token
+#     (crete-verify.yml reads the same item); deploy-bank.sh stages only its
+#     sha256, as bank/verifier.json
 # ssh only accepts the host keys in .github/ssh_known_hosts.
 
 on:
@@ -125,16 +133,6 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           STUDIO_CONFIG: op://khvwk3iogv3mhhjui4se7xqyni/SIUE music studio config/studio-config
 
-      - name: Load the Crete bank verifier token (optional)
-        if: steps.tip.outputs.skip != '1'
-        continue-on-error: true
-        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
-        with:
-          export-env: true
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          CRETE_BANK_VERIFIER_TOKEN: op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
-
       - name: Deploy
         if: steps.tip.outputs.skip != '1'
         env:
@@ -157,9 +155,102 @@ jobs:
           # Each game's page and each server endpoint a player depends on: a
           # broken endpoint fails the deploy instead of failing players.
           for path in "" play/tankity/ play/crete/ play/cylon/ games/tankity/ \
-              games/tankity/rooms.php?action=ping games/tankity/scores.php games/cylon/scores.php \
-              games/crete/endless-bank.php; do
+              games/tankity/rooms.php?action=ping games/tankity/scores.php games/cylon/scores.php; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.cs.siue.edu/~wgrim/$path")
             echo "$code /~wgrim/$path"
             [ "$code" = 200 ]
           done
+
+  bank:
+    # The same gate as the site's deploy: a green ci run from a push to main, or by hand.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    concurrency:
+      group: deploy-crete-bank
+      cancel-in-progress: false
+    env:
+      BANK_HOST: happystl@iad1-shared-b7-41.dreamhost.com
+      BANK_URL: https://www.happystl.com/crete-bank/endless-bank.php
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check this is main's tip
+        id: tip
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          tip=$(git rev-parse HEAD)
+          if [ -n "$RUN_SHA" ] && [ "$RUN_SHA" != "$tip" ]; then
+            echo "ci passed for $RUN_SHA, but main is now $tip; its own run deploys it"
+            echo "skip=1" >>"$GITHUB_OUTPUT"
+          else
+            echo "deploying the bank from $tip"
+          fi
+
+      # deploy-bank.sh checks every PHP file parses and writes bank/place.json with PHP.
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        if: steps.tip.outputs.skip != '1'
+        with:
+          php-version: "8.4"
+          coverage: none
+
+      - name: Install the host keys
+        if: steps.tip.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          grep -v '^#' .github/ssh_known_hosts >~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Load the deploy key and the bank's token
+        if: steps.tip.outputs.skip != '1'
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          DREAMHOST_KEY: op://khvwk3iogv3mhhjui4se7xqyni/Dreamhost Deploys/private key?ssh-format=openssh
+          CRETE_BANK_VERIFIER_TOKEN: op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
+
+      - name: Deploy the bank
+        if: steps.tip.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/dreamhost.key"
+          printf '%s\n' "$DREAMHOST_KEY" >"$key"
+          trap 'rm -f "$key"' EXIT
+          HOST="$BANK_HOST" SSH_KEY="$key" websites/www.cs/games/crete/tools/deploy-bank.sh
+
+      - name: Check the live bank
+        if: steps.tip.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          # It answers, signs a CSRF token, lets Endless's pages on www.cs.siue.edu call it, and keeps its levels in
+          # the folder the deploy named (trusted-where, read only).
+          body="$RUNNER_TEMP/bank.json"
+          code=$(curl -s -o "$body" -w '%{http_code}' --max-time 20 "$BANK_URL")
+          echo "$code $BANK_URL"
+          [ "$code" = 200 ]
+          jq -e '.csrf | test("^[a-f0-9]{32}$")' "$body" >/dev/null
+          allow=$(curl -s -o /dev/null -D - --max-time 20 -X OPTIONS -H 'Origin: https://www.cs.siue.edu' \
+            -H 'Access-Control-Request-Method: POST' "$BANK_URL" | tr -d '\r' | awk -F': ' 'tolower($1) == "access-control-allow-origin" { print $2 }')
+          echo "Access-Control-Allow-Origin: $allow"
+          [ "$allow" = https://www.cs.siue.edu ]
+          headers="$RUNNER_TEMP/bank.headers"
+          printf 'Content-Type: application/json\nX-Crete-Verifier: %s\n' "$CRETE_BANK_VERIFIER_TOKEN" >"$headers"
+          trap 'rm -f "$headers"' EXIT
+          curl -s -o "$body" --max-time 20 -X POST -H @"$headers" -d '{"op":"trusted-where"}' "$BANK_URL"
+          jq -r '"the bank'"'"'s folder: \(.kind) \(.dir)" + (if .refused then "; refused: \(.refused)" else "" end)' "$body"
+          jq -e '.kind == "host"' "$body" >/dev/null

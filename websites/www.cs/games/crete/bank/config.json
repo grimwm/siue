@@ -15,5 +15,6 @@
   "scoresPerHour": 1,
   "csrfCookie": "crete_bank_csrf",
   "storageKey": "crete-bank",
-  "allowedHosts": ["www.cs.siue.edu", "cs.siue.edu"]
+  "allowedHosts": ["www.cs.siue.edu"],
+  "allowedOrigins": ["https://www.cs.siue.edu"]
 }

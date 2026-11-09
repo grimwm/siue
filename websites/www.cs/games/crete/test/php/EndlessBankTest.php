@@ -848,6 +848,8 @@ final class EndlessBankTest extends TestCase
         self::assertSame(1500, $config['servedCap']);
         self::assertSame(['submit' => 30, 'claim' => 20, 'verify' => 20, 'report' => 20, 'levels' => 120, 'trusted' => 600], $config['perHour']);
         self::assertSame('crete_bank_csrf', $config['guard']['csrfCookie']);
+        self::assertSame(['https://www.cs.siue.edu'], $config['allowedOrigins']);
+        self::assertSame(['www.cs.siue.edu'], $config['guard']['allowedHosts']);
     }
 
     /** @return array<string, array{array<string, mixed>}> */
@@ -861,6 +863,11 @@ final class EndlessBankTest extends TestCase
             'a rate kind missing' => [['perHour' => ['submit' => 1, 'claim' => 1, 'verify' => 1, 'report' => 1]]],
             'an unknown rate kind' => [['perHour' => ['submit' => 1, 'claim' => 1, 'verify' => 1, 'report' => 1, 'levels' => 1, 'more' => 1]]],
             'a bad cookie name' => [['csrfCookie' => 'no spaces']],
+            'origins not a list' => [['allowedOrigins' => 'https://www.cs.siue.edu']],
+            'an http origin' => [['allowedOrigins' => ['http://www.cs.siue.edu']]],
+            'an origin with a path' => [['allowedOrigins' => ['https://www.cs.siue.edu/']]],
+            'an uppercase origin' => [['allowedOrigins' => ['https://WWW.cs.siue.edu']]],
+            'any origin' => [['allowedOrigins' => ['*']]],
         ];
     }
 
@@ -869,6 +876,46 @@ final class EndlessBankTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
         self::config($over);
+    }
+
+    // ---- CSRF --------------------------------------------------------------------------
+
+    public function testTheCsrfTokenIsSignedLapsesAfterADayAndOutlivesAKeyChange(): void
+    {
+        $bank = $this->bank();
+        $token = $bank->csrfToken();
+        self::assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $token);
+        self::assertSame($this->now + Bank::CSRF_SEC, hexdec(substr($token, 0, 8)));
+        self::assertTrue($bank->csrfOk($token));
+        foreach ([null, 7, '', strtoupper($token), substr($token, 0, 31), $token . '0'] as $bad) {
+            self::assertFalse($bank->csrfOk($bad), var_export($bad, true));
+        }
+        $forged = substr($token, 0, 8) . str_repeat('0', 24);
+        self::assertFalse($bank->csrfOk($forged), 'a made-up signature');
+        $later = sprintf('%08x', $this->now + 2 * Bank::CSRF_SEC) . substr($token, 8);
+        self::assertFalse($bank->csrfOk($later), 'a stretched lifetime breaks the signature');
+        $otherDir = self::makeTempDir('crete-bank-other');
+        try {
+            $other = new Bank(self::config(), $otherDir, fn(): int => $this->now);
+            self::assertFalse($other->csrfOk($token), 'another bank\'s keys sign other tokens');
+            self::assertFalse($bank->csrfOk($other->csrfToken()));
+        } finally {
+            self::removeTree($otherDir);
+        }
+
+        // Signed a minute before the network key changes: still good after, under the key the bank keeps three more days.
+        $this->now += 3 * 86400 - 60;
+        $before = $bank->csrfToken();
+        self::assertFalse($bank->csrfOk($token), 'lapsed after a day');
+        $this->now += 120;
+        $after = $bank->csrfToken();
+        self::assertCount(2, json_decode((string) file_get_contents("{$this->dir}/keys.json"), true), 'a new network key signs');
+        self::assertTrue($bank->csrfOk($before), 'outlives the key change');
+        self::assertTrue($bank->csrfOk($after));
+        $this->now += Bank::CSRF_SEC - 120;
+        self::assertTrue($bank->csrfOk($before), 'good to its last second');
+        $this->now += 1;
+        self::assertFalse($bank->csrfOk($before));
     }
 
     // ---- The trusted verifier ---------------------------------------------------------
@@ -1539,6 +1586,163 @@ final class EndlessBankTest extends TestCase
             self::assertSame(404, self::http('GET', "http://127.0.0.1:$port/bank/Bank.php")[0], 'the library is never an endpoint');
             self::assertFileExists($this->dir . '/guard.json', 'rate stamps live with the bank');
             self::assertStringNotContainsString('127.0.0.1', (string) file_get_contents($this->dir . '/guard.json'));
+        } finally {
+            proc_terminate($server);
+            proc_close($server);
+        }
+    }
+
+    public function testEndlessPagesOnTheGamesSiteMayCallItAndNoOtherSiteMay(): void
+    {
+        [$server, $base] = $this->serve();
+        try {
+            $game = 'Origin: https://www.cs.siue.edu';
+            $header = static fn(array $headers, string $name): ?string => array_values(array_filter(
+                array_map(static fn(string $h): ?string => stripos($h, "$name:") === 0 ? trim(substr($h, strlen($name) + 1)) : null, $headers),
+                'is_string',
+            ))[0] ?? null;
+            $preflight = ['Access-Control-Request-Method: POST', 'Access-Control-Request-Headers: content-type,x-crete-csrf'];
+            [$status, , $headers] = self::http('OPTIONS', $base, null, [$game, ...$preflight]);
+            self::assertSame(204, $status);
+            self::assertSame('https://www.cs.siue.edu', $header($headers, 'Access-Control-Allow-Origin'));
+            self::assertSame('GET, POST', $header($headers, 'Access-Control-Allow-Methods'));
+            self::assertSame('Content-Type, X-Crete-CSRF', $header($headers, 'Access-Control-Allow-Headers'));
+            self::assertSame('Origin', $header($headers, 'Vary'));
+            self::assertNull($header($headers, 'Access-Control-Allow-Credentials'), 'no cookies cross sites');
+
+            foreach (['Origin: https://evil.example', 'Origin: http://www.cs.siue.edu', 'Origin: https://cs.siue.edu', 'Origin: null'] as $stranger) {
+                [$status, $body, $headers] = self::http('OPTIONS', $base, null, [$stranger, ...$preflight]);
+                self::assertSame([403, ['error' => 'forbidden']], [$status, $body], $stranger);
+                self::assertNull($header($headers, 'Access-Control-Allow-Origin'), $stranger);
+            }
+            self::assertSame(403, self::http('OPTIONS', $base)[0], 'a preflight names its origin');
+
+            [$status, $body, $headers] = self::http('GET', $base, null, [$game]);
+            self::assertSame(200, $status);
+            self::assertSame('https://www.cs.siue.edu', $header($headers, 'Access-Control-Allow-Origin'));
+            self::assertSame('Origin', $header($headers, 'Vary'));
+            self::assertNull($header($headers, 'Set-Cookie'), 'the CSRF token is signed, never a cookie');
+            $csrf = $body['csrf'];
+            [, , $headers] = self::http('GET', $base, null, ['Origin: https://evil.example']);
+            self::assertNull($header($headers, 'Access-Control-Allow-Origin'));
+            self::assertSame('Origin', $header($headers, 'Vary'));
+
+            $submit = json_encode(['op' => 'submit', 'install' => self::install('far'), 'tuple' => self::tuple(), 'made' => self::made(self::level(95))]);
+            [$status, $body, $headers] = self::http('POST', $base, $submit, ['Content-Type: application/json', "X-Crete-CSRF: $csrf", $game]);
+            self::assertSame([200, ['ok' => true]], [$status, $body], 'no cookie needed');
+            self::assertSame('https://www.cs.siue.edu', $header($headers, 'Access-Control-Allow-Origin'));
+            $claim = json_encode(['op' => 'claim', 'install' => self::install('far2'), 'v' => 2]);
+            self::assertSame(403, self::http('POST', $base, $claim, ['Content-Type: application/json', "X-Crete-CSRF: $csrf", 'Origin: https://evil.example'])[0]);
+            self::assertSame(403, self::http('POST', $base, $claim, ['Content-Type: application/json', 'X-Crete-CSRF: ' . str_repeat('a', 32), $game])[0], 'a token the bank never signed');
+            self::assertSame(403, self::http('POST', $base, $claim, ['Content-Type: application/json', $game])[0], 'no token');
+        } finally {
+            proc_terminate($server);
+            proc_close($server);
+        }
+    }
+
+    public function testTheBankLivesOnlyInTheFolderTheHostNames(): void
+    {
+        $file = $this->verifierFile();
+        $host = $this->dir . '/host-data';
+        $place = $this->dir . '/place.json';
+        file_put_contents($place, json_encode(['dir' => $host]));
+        $env = ['CRETE_BANK_VERIFIER_FILE' => $file, 'CRETE_BANK_PLACE_FILE' => $place, 'CRETE_BANK_DIR' => ''];
+        $trusted = ['Content-Type: application/json', 'X-Crete-Verifier: ' . self::TOKEN];
+        $where = json_encode(['op' => 'trusted-where']);
+        $data = dirname(__DIR__, 2) . '/data';
+        $hadData = file_exists($data);
+        [$server, $base] = $this->serve($env);
+        try {
+            [$status, $body] = self::http('POST', $base, $where, $trusted);
+            self::assertSame(200, $status);
+            self::assertNull($body['kind']);
+            self::assertStringContainsString("$host, the folder bank/place.json names, is not a directory", $body['refused']);
+            self::assertSame(['host'], array_keys($body['folders']), 'data/ and /var/tmp are never the host\'s');
+            self::assertSame(500, self::http('GET', $base)[0], 'a missing folder is never made');
+            self::assertDirectoryDoesNotExist($host);
+            self::assertSame($hadData, file_exists($data), 'nor data/');
+
+            mkdir($host, 0700);
+            self::assertSame(200, self::http('GET', $base)[0]);
+            [$status, $body] = self::http('POST', $base, $where, $trusted);
+            self::assertSame([200, 'host', $host, null], [$status, $body['kind'], $body['dir'], $body['refused']]);
+            self::assertSame('host', $body['folders']['host']['born']['kind']);
+            self::assertFileExists("$host/keys.json", 'the bank keeps its stores there');
+        } finally {
+            proc_terminate($server);
+            proc_close($server);
+        }
+        file_put_contents($place, json_encode(['dir' => 'relative/path']));
+        [$server, $base] = $this->serve($env);
+        try {
+            self::assertSame([500, ['error' => 'server error']], array_slice(self::http('GET', $base), 0, 2), 'only an absolute path');
+        } finally {
+            proc_terminate($server);
+            proc_close($server);
+        }
+    }
+
+    public function testABackupLoadsOnTheHostFromTheCommandLineOnly(): void
+    {
+        $backup = $this->dir . '/backup';
+        mkdir($backup);
+        $bank = $this->bank();
+        $retired = self::level(402);
+        $grades = [];
+        foreach (['easy' => [400, 401, 402, 403], 'hard' => [410]] as $grade => $seeds) {
+            $served = [];
+            foreach ($seeds as $seed) {
+                $text = self::level($seed);
+                $served[] = ['h' => Bank::layoutHash($text), 'v' => 2, 'at' => $this->now, 'made' => self::made($text), 'n' => 3,
+                    'tuple' => $seed === 403 ? null : self::tuple(['grade' => $grade])];
+            }
+            $raw = json_encode(['grade' => $grade, 'served' => $served, 'pending' => [['h' => 'x']], 'retired' => []]);
+            file_put_contents("$backup/$grade.json", $raw);
+            $grades[$grade] = ['file' => "$grade.json", 'sha256' => hash('sha256', $raw)];
+        }
+        file_put_contents("$backup/manifest.json", json_encode(['format' => 1, 'grades' => $grades]));
+        // One the bank holds already, and one it served once and let go.
+        $bank->addVerified(self::tuple(), self::made(self::level(400)));
+        $bank->addVerified(self::tuple(), self::made($retired));
+        file_put_contents("{$this->dir}/retired-easy.json", json_encode([Bank::layoutHash($retired)]));
+        $served = json_decode((string) file_get_contents("{$this->dir}/served-easy.json"), true);
+        file_put_contents("{$this->dir}/served-easy.json", json_encode(array_values(array_filter($served, static fn(array $e): bool => $e['h'] !== Bank::layoutHash($retired)))));
+
+        $script = dirname(__DIR__, 2) . '/bank/import-backup.php';
+        $run = function (array $args) use ($script): array {
+            $p = proc_open([PHP_BINARY, $script, ...$args], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['CRETE_BANK_DIR' => $this->dir] + getenv());
+            $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+            return [proc_close($p), $out];
+        };
+        $before = (string) file_get_contents("{$this->dir}/served-easy.json");
+        [$code, $out] = $run([$backup, '--dry-run']);
+        self::assertSame(0, $code, $out);
+        self::assertStringContainsString('easy: 4 served in the backup, 3 with a tuple', $out);
+        self::assertSame($before, (string) file_get_contents("{$this->dir}/served-easy.json"), 'a dry run loads nothing');
+
+        [$code, $out] = $run([$backup]);
+        self::assertSame(0, $code, $out);
+        self::assertStringContainsString('easy: 1 loaded; 1 the bank holds, 1 it has retired, 0 left out (the difficulty is full), 1 without a tuple, 0 refused', $out);
+        self::assertStringContainsString('hard: 1 loaded;', $out);
+        self::assertEqualsCanonicalizing(
+            [Bank::layoutHash(self::level(400)), Bank::layoutHash(self::level(401))],
+            array_column($this->stored('served-easy.json'), 'h'),
+        );
+        self::assertSame([], $this->stored('pending-easy.json'), 'waiting levels are never loaded');
+        self::assertFileExists("{$this->dir}/prov-easy-" . Bank::layoutHash(self::level(401)) . '.json');
+
+        [$code, $out] = $run([$backup, '--difficulties', 'hard']);
+        self::assertSame([0, true], [$code, str_contains($out, 'hard: 0 loaded; 1 the bank holds')], $out);
+        self::assertSame(2, $run([$backup, '--difficulties', 'easy,extreme'])[0]);
+        self::assertSame(2, $run([])[0]);
+        file_put_contents("$backup/hard.json", ' ', FILE_APPEND);
+        [$code, $out] = $run([$backup]);
+        self::assertSame([2, true], [$code, str_contains($out, 'hard.json does not match its SHA-256')], $out);
+
+        [$server, $base] = $this->serve();
+        try {
+            self::assertSame(404, self::http('GET', dirname($base) . '/bank/import-backup.php')[0], 'never from the web');
         } finally {
             proc_terminate($server);
             proc_close($server);

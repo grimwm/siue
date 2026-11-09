@@ -4,8 +4,15 @@
  * Copyright (C) 2026 William Grim
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
+ * It runs on happystl.com (https://www.happystl.com/crete-bank/endless-bank.php, deployed there by
+ * .github/workflows/deploy.yml with tools/deploy-bank.sh) and is called by Endless's pages on
+ * https://www.cs.siue.edu, another site: each origin in bank/config.json's allowedOrigins gets
+ * Access-Control-Allow-Origin, and its OPTIONS preflight 204 with the methods and the two headers a
+ * browser sends (Content-Type, X-Crete-CSRF); any other origin's preflight is 403. Every answer
+ * says Vary: Origin. No cookie is set or read. Locally the page and the bank share one origin.
+ *
  * GET  ?grade=<easy|medium|hard>&tier=<1..10>&n=<0..16> -> { "csrf", "levels" }
- *      (n=0, the default, only fetches the CSRF token)
+ *      (n=0, the default, only fetches the CSRF token: Bank::csrfToken's signed token, good for a day)
  * POST { "op": "submit", "install", "tuple", "made" } -> { "ok": true }
  * POST { "op": "claim", "install", "v" } -> { "ticket", "tuple" } or { "none": true }
  * POST { "op": "verify", "install", "ticket", "found" } -> { "ok": true, "verdict": "match" | "mismatch" }
@@ -27,28 +34,32 @@
  *      only (no count or file changes); a served item is { "h", "v", "at", "made", "n", "tuple" | null }, a pending
  *      one { "h", "v", "at", "made", "tuple" }, a retired one { "h" }; a page ends at limit items or once past 1 MiB
  * POST { "op": "trusted-where" } -> where the bank keeps its stores, read only (bank/Place.php's report): { "kind":
- *      "override" | "data" | "vartmp" | null, "dir", "refused": <why the bank will not start> | null, "ctime", "mtime",
+ *      "override" | "host" | "data" | "vartmp" | null, "dir", "refused": <why the bank will not start> | null, "ctime", "mtime",
  *      "grades": { <grade>: { "served" | "pending" | "retired": { "bytes", "mtime", "count", ... } | null } },
- *      "dataWritable", "folders": { "override"?, "data", "vartmp" }, "php", "bootTime", "server", "tmpMounts", "now" };
+ *      "dataWritable", "folders": { "override"?, "host" } or { "override"?, "data", "vartmp" }, "php", "bootTime", "server", "tmpMounts", "now" };
  *      it never makes a folder or file: it takes a rate slot only from a folder that already holds a bank, and
  *      answers even while the bank refuses its folder
  * Its token is checked before a rate slot is taken (a stranger's guesses write
- * nothing), against the sha256 in bank/verifier.json, which deploy.sh writes
- * from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the path
- * (tests). Without the file every trusted call is 401 { "error": "unauthorized" }.
+ * nothing), against the sha256 in bank/verifier.json, which tools/deploy-bank.sh
+ * writes from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the
+ * path (tests). Without the file every trusted call is 401 { "error": "unauthorized" }.
  *
  * Refusals: 400 { "error": "invalid", "field" }, 400 { "error": "ticket" }, 401 { "error": "unauthorized" },
  *   403 { "error": "forbidden" }, 403 { "error": "version" }, 409 { "error": "duplicate" | "retired" | "full" },
  *   429 { "error": "rate" | "throttled" }, 405 { "error": "method not allowed" }, 500 { "error": "server error" }.
  *
  * Every rule and store is bank/Bank.php's; settings are bank/config.json
- * (validated on load). The bank lives in data/, or /var/tmp/<account>-crete-bank
- * when PHP cannot write there; CRETE_BANK_DIR overrides both (tests). It never
- * moves on its own and never starts empty in /var/tmp while data/ exists
- * (bank/Place.php): such a refusal answers 500 and is logged. Origin,
- * CSRF and the per-network rate limits are the kit's score guard
+ * (validated on load). The bank lives in the folder bank/place.json names
+ * ({ "dir": <absolute path> }, written by the deploy: on happystl.com
+ * ~/crete-bank-data, outside the web root), and only there; without that file
+ * (a local checkout) in data/, or /var/tmp/<account>-crete-bank when PHP cannot
+ * write there. CRETE_BANK_DIR overrides them all and CRETE_BANK_PLACE_FILE
+ * names another place.json (tests). It never moves on its own, never starts in
+ * a host folder that is missing, and never starts empty in /var/tmp while
+ * data/ exists (bank/Place.php): such a refusal answers 500 and is logged. The
+ * Origin check and the per-network rate limits are the kit's score guard
  * (server/score-guard.php), its rate stamps in the bank's guard.json, keyed
- * under the bank's current network key.
+ * under the bank's current network key; the CSRF token is the bank's own.
  */
 declare(strict_types=1);
 
@@ -68,7 +79,25 @@ function bankConfig(): array {
     return $config ??= Bank::loadConfig(__DIR__ . '/bank/config.json');
 }
 
-/** The bank's place: CRETE_BANK_DIR, else data/ or a private folder in /var/tmp, by bank/Place.php's rule. */
+/**
+ * The folder the host names for the bank in bank/place.json, or null when there is no such file.
+ * @throws RuntimeException when the file is there but names no absolute path
+ */
+function bankHostDir(): ?string {
+    $override = getenv('CRETE_BANK_PLACE_FILE');
+    $file = is_string($override) && $override !== '' ? $override : __DIR__ . '/bank/place.json';
+    if (!file_exists($file)) {
+        return null;
+    }
+    $data = json_decode((string) @file_get_contents($file), true);
+    $dir = is_array($data) ? ($data['dir'] ?? null) : null;
+    if (!is_string($dir) || !preg_match('{^(/[A-Za-z0-9._-]+)+/?\z}', $dir) || preg_match('{/\.\.?(/|\z)}', $dir)) {
+        throw new RuntimeException("crete bank storage: $file must be { \"dir\": <an absolute path> }");
+    }
+    return rtrim($dir, '/');
+}
+
+/** The bank's place: CRETE_BANK_DIR, else the host's folder, else data/ or a private folder in /var/tmp, by bank/Place.php's rule. */
 function bankPlace(): Place {
     static $place = null;
     $override = getenv('CRETE_BANK_DIR');
@@ -77,6 +106,7 @@ function bankPlace(): Place {
         '/var/tmp/' . StoreDir::username() . '-crete-bank',
         is_string($override) && $override !== '' ? rtrim($override, '/') : null,
         new StoreDir('crete bank storage:'),
+        host: bankHostDir(),
     );
 }
 
@@ -109,6 +139,31 @@ function bankRespond(array $payload, int $status = 200): never {
     exit;
 }
 
+/**
+ * CORS for Endless's pages on another site: Vary: Origin always, and
+ * Access-Control-Allow-Origin for an origin bank/config.json allows. An
+ * OPTIONS preflight is answered here: 204 for an allowed origin, else 403.
+ */
+function bankCors(): void {
+    header('Vary: Origin');
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? null;
+    $allowed = is_string($origin) && in_array($origin, bankConfig()['allowedOrigins'], true);
+    if ($allowed) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+    }
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'OPTIONS') {
+        return;
+    }
+    if (!$allowed) {
+        bankRespond(['error' => 'forbidden'], 403);
+    }
+    header('Access-Control-Allow-Methods: GET, POST');
+    header('Access-Control-Allow-Headers: Content-Type, X-Crete-CSRF');
+    header('Access-Control-Max-Age: 600');
+    http_response_code(204);
+    exit;
+}
+
 /** Takes one of this network's slots for $kind, or answers 429. */
 function bankTakeRate(string $kind): void {
     if (!bankGuard()->rateTake($kind, bank()->perHour()[$kind])) {
@@ -134,11 +189,12 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 try {
+    bankCors();
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $addr = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 
     if ($method === 'GET') {
-        $csrf = bankGuard()->csrfToken();
+        $csrf = bank()->csrfToken();
         $n = bankQueryInt('n', 0);
         if ($n === 0) {
             bankRespond(['csrf' => $csrf, 'levels' => []]);
@@ -197,7 +253,7 @@ try {
             bankTakeRate('trusted');
             bankRespond(bank()->handleTrusted($body, $token, bankVerifierFile()));
         }
-        if (!bankGuard()->originAllowed() || !bankGuard()->csrfOk()) {
+        if (!bankGuard()->originAllowed() || !bank()->csrfOk($_SERVER['HTTP_X_CRETE_CSRF'] ?? null)) {
             bankRespond(['error' => 'forbidden'], 403);
         }
         if (!is_string($op) || !in_array($op, ['submit', 'claim', 'verify', 'report'], true)) {

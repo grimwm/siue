@@ -1,6 +1,6 @@
 /* The Island of Crete: where the shared bank keeps its levels (`make crete-bank-where`), read only. One
- * `trusted-where` post (endless-bank.php, bank/Place.php) answers which folder the bank uses (`override`, `data` or
- * `vartmp`) or why it refuses one; each candidate folder's owner, mode and times, its born.json (when a new, empty bank
+ * `trusted-where` post (endless-bank.php, bank/Place.php) answers which folder the bank uses (`override`, `host`, the
+ * folder bank/place.json names, or without one `data` or `vartmp`) or why it refuses one; each candidate folder's owner, mode and times, its born.json (when a new, empty bank
  * began there) and each grade's stores; PHP's user and groups; when the host booted; when PHP's server (php-fpm's
  * master) started; and what is mounted on /tmp and /var/tmp as PHP sees them. This prints it, with a few lines on
  * what it means, or the whole answer as JSON with --json.
@@ -15,7 +15,7 @@ import { BANK_URL } from './verify-bank.ts';
 import { answeredLine, trustedPoster } from './bank-post.ts';
 import type { Answer } from './bank-post.ts';
 
-export const KINDS = ['override', 'data', 'vartmp'] as const;
+export const KINDS = ['override', 'host', 'data', 'vartmp'] as const;
 export type Kind = typeof KINDS[number];
 export const LISTS = ['served', 'pending', 'retired'] as const;
 
@@ -86,6 +86,7 @@ export function readings(w: Where): string[] {
       ? 'The bank lives in php-fpm\'s private /var/tmp (systemd PrivateTmp): every php-fpm restart or reboot empties it.'
       : 'The bank lives in /var/tmp, which the host may clear (a reboot or systemd-tmpfiles).');
   }
+  if (w.kind === 'host') out.push('The bank lives in the folder the host names (bank/place.json), outside the web root, which deploys never touch: it survives restarts and reboots.');
   if (w.kind === 'data') out.push('The bank lives in data/, which deploys never touch: it survives restarts and reboots.');
   if (data?.exists && !w.dataWritable) {
     const groups = w.php.groups ?? [w.php.gid];
@@ -106,7 +107,7 @@ export function whereLines(w: Where): string[] {
   const lines = [w.kind ? `The bank's folder: ${w.kind} ${w.dir}` : 'The bank has no folder: it refuses to start'];
   for (const kind of KINDS) {
     const f = w.folders[kind];
-    if (f) lines.push(...folderLines(kind === 'data' ? 'data/' : kind === 'vartmp' ? '/var/tmp folder' : 'override', f));
+    if (f) lines.push(...folderLines(kind === 'data' ? 'data/' : kind === 'vartmp' ? '/var/tmp folder' : kind === 'host' ? 'host folder' : 'override', f));
   }
   const mounts = w.tmpMounts === null ? 'unknown' : w.tmpMounts.length ? w.tmpMounts.map(m => `${m.mount} from ${m.root}`).join('; ') : 'the host\'s own';
   lines.push(

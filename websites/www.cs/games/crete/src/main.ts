@@ -61,6 +61,7 @@ import { createEndlessClient, workersFor, workersNow } from './endless/client.ts
 import type { WorkerLike as EndlessWorker } from './endless/client.ts';
 import { createEndlessMode } from './endless/mode.ts';
 import { createSharedBank } from './endless/shared.ts';
+import { bankUrlFor } from './endless/bank-url.ts';
 import { createVerifier, mayCheck } from './endless/verifier.ts';
 import { tierOf } from './endless/tier.ts';
 import { newSeed } from './endless/random.ts';
@@ -202,7 +203,7 @@ const sharedBank = createSharedBank({
   storage: browserStorage(),
   now: () => Date.now(),
   random: () => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32,
-  url: new URL('endless-bank.php', window.location.href).toString(),
+  url: bankUrlFor(window.location.href),
   quiet: () => sendsNothing || !helpsBuild(),
 });
 const verifier = createVerifier({

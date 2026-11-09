@@ -168,49 +168,74 @@ final class AdminDeployTest extends TestCase
         self::assertStringNotContainsString('chmod 2755 admin', $src);
     }
 
-    /** Crete's trusted verifier token: only its hash is staged, only when set and valid, and the token is never printed */
-    public function testTheVerifierTokenIsStagedAsAHashOnlyWhenSet(): void
+    /** Crete's shared bank runs on happystl.com: this site's deploy never ships its endpoint, library, settings or data */
+    public function testTheSiteNeverShipsCretesBank(): void
     {
         $site = escapeshellarg(self::site());
-        $token = 'tok_' . bin2hex(random_bytes(20));
-        $with = [];
-        exec("cd $site && LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token ./deploy.sh 2>&1", $with, $code);
-        self::assertSame(0, $code, implode(' | ', array_slice($with, -3)));
-        self::assertContains('games/crete/bank/verifier.json', $with);
-        self::assertStringNotContainsString($token, implode("\n", $with));
-        $without = [];
-        exec("cd $site && env -u CRETE_BANK_VERIFIER_TOKEN LIST=1 ./deploy.sh 2>&1", $without, $code);
-        self::assertSame(0, $code);
-        self::assertNotContains('games/crete/bank/verifier.json', $without);
-        $bad = [];
-        exec("cd $site && LIST=1 CRETE_BANK_VERIFIER_TOKEN='short;rm' ./deploy.sh 2>&1", $bad, $code);
-        self::assertNotSame(0, $code, 'an invalid token stops the deploy');
-        self::assertContains('deploy: CRETE_BANK_VERIFIER_TOKEN is not valid', $bad);
-        self::assertStringNotContainsString('short;rm', implode("\n", $bad));
+        $out = [];
+        exec("cd $site && LIST=1 CRETE_BANK_VERIFIER_TOKEN=tok_" . bin2hex(random_bytes(20)) . ' ./deploy.sh 2>&1', $out, $code);
+        self::assertSame(0, $code, implode(' | ', array_slice($out, -3)));
+        self::assertContains('games/crete/index.html', $out);
+        foreach ($out as $f) {
+            self::assertDoesNotMatchRegularExpression('{^games/crete/(endless-bank\.php|bank/|server/|data/)}', $f);
+        }
         $src = (string) file_get_contents(self::site() . '/deploy.sh');
+        self::assertStringNotContainsString('CRETE_BANK_VERIFIER_TOKEN', $src);
+        self::assertStringNotContainsString('games/crete/data\'', $src, 'no folder made for it');
+    }
+
+    /** The bank's own deploy: only its files and a hash of the token, its levels outside the web root, nothing deleted */
+    public function testTheBankDeployStagesOnlyTheBankAndAHashOfTheToken(): void
+    {
+        $script = escapeshellarg(self::site() . '/games/crete/tools/deploy-bank.sh');
+        $token = 'tok_' . bin2hex(random_bytes(20));
+        $out = [];
+        exec("env -u HOST LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token $script 2>&1", $out, $code);
+        self::assertSame(0, $code, implode(' | ', $out));
+        self::assertSame([
+            '.htaccess', 'bank/.htaccess', 'bank/Bank.php', 'bank/Place.php', 'bank/config.json', 'bank/import-backup.php',
+            'bank/place.json', 'bank/verifier.json', 'endless-bank.php', 'server/.htaccess', 'server/blocked-initials.json',
+            'server/score-guard.php', 'server/store-dir.php',
+        ], $out);
+        $stage = sys_get_temp_dir() . '/crete-bank-stage-' . bin2hex(random_bytes(6));
+        try {
+            exec("STAGE_DIR=$stage CRETE_BANK_VERIFIER_TOKEN=$token DATA_DIR=/home/acct/levels $script 2>&1", $out, $code);
+            self::assertSame(0, $code);
+            self::assertSame(['dir' => '/home/acct/levels'], json_decode((string) file_get_contents("$stage/bank/place.json"), true));
+            self::assertSame(['tokenSha256' => hash('sha256', $token)], json_decode((string) file_get_contents("$stage/bank/verifier.json"), true));
+            self::assertStringContainsString('Require all denied', (string) file_get_contents("$stage/bank/.htaccess"));
+            self::assertStringContainsString('Require all denied', (string) file_get_contents("$stage/server/.htaccess"));
+            self::assertSame(0644, fileperms("$stage/endless-bank.php") & 0777);
+        } finally {
+            exec('rm -rf ' . escapeshellarg($stage));
+        }
+        self::assertStringNotContainsString($token, implode("\n", $out));
+
+        $refused = [
+            'no token' => "env -u CRETE_BANK_VERIFIER_TOKEN LIST=1 $script",
+            'a bad token' => "LIST=1 CRETE_BANK_VERIFIER_TOKEN='short;rm' $script",
+            'levels in the web root' => "LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token DATA_DIR=/home/happystl/happystl.com/levels $script",
+            'the bank as the web root' => "LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token BANK_DIR=/home/happystl/happystl.com $script",
+            'the bank deeper down' => "LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token BANK_DIR=/home/happystl/happystl.com/a/b $script",
+            'a relative folder' => "LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token DATA_DIR=levels $script",
+            'a climb out' => "LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token DATA_DIR=/home/happystl/happystl.com/../x $script",
+        ];
+        foreach ($refused as $why => $cmd) {
+            $bad = [];
+            exec("$cmd 2>&1", $bad, $code);
+            self::assertNotSame(0, $code, $why);
+            self::assertStringStartsWith('deploy-bank: ', $bad[0] ?? '', $why);
+            self::assertStringNotContainsString('short;rm', implode("\n", $bad));
+        }
+
+        $src = (string) file_get_contents(self::site() . '/games/crete/tools/deploy-bank.sh');
+        self::assertDoesNotMatchRegularExpression('/--delete|\brm -[a-z]*r|\bunlink\b/', preg_replace('/^\s*#.*$/m', '', str_replace("trap 'rm -rf \"\$stage\"' EXIT", '', $src)), 'it never deletes on the host');
+        self::assertStringContainsString("printf '%s' \"\$CRETE_BANK_VERIFIER_TOKEN\" | sha256sum", $src);
         foreach (explode("\n", $src) as $line) {
             if (preg_match('/\$\{?CRETE_BANK_VERIFIER_TOKEN\b/', $line) && preg_match('/\b(echo|printf|cat|tee)\b/', $line)) {
                 self::assertStringContainsString('| sha256sum', $line, 'the token is only ever hashed: ' . $line);
             }
         }
-        self::assertStringContainsString("printf '%s' \"\$CRETE_BANK_VERIFIER_TOKEN\" | sha256sum", $src);
-        self::assertStringContainsString('    games/crete/bank/verifier.json) continue ;;', $src);
-    }
-
-    /** Crete's bank folder is made after the upload batch, every line failure-tolerant, 770 before the setgid try, and never staged */
-    public function testTheGameDataBatchFollowsTheUploadAndIsFailureTolerant(): void
-    {
-        $out = [];
-        exec('cd ' . escapeshellarg(self::site()) . ' && GAME_DATA_BATCH=1 ./deploy.sh 2>&1', $out, $code);
-        self::assertSame(0, $code);
-        self::assertSame(['-mkdir games/crete/data', '-chmod 770 games/crete/data', '-chmod 2770 games/crete/data'], $out);
-        $src = (string) file_get_contents(self::site() . '/deploy.sh');
-        $upload = strpos($src, "# 3. Upload the changed files.");
-        $batch = strpos($src, 'game_data_batch >"$work/game-data"');
-        self::assertNotFalse($batch);
-        self::assertGreaterThan(strpos($src, 'sftp_batch "$work/batch"', $upload), $batch, 'after the upload batch makes games/crete/');
-        self::assertLessThan(strpos($src, '# 4. Stamp last.'), $batch, 'before the stamp');
-        self::assertStringContainsString('    games/crete/data/*) continue ;;', $src);
     }
 
 }

@@ -106,3 +106,17 @@ test('utc prints seconds or unknown', () => {
   assert.equal(utc(START), '2026-11-08T17:00:00Z');
   assert.equal(utc(null), 'unknown');
 });
+
+test('it reads a bank in the folder the host names, and prints that folder alone', () => {
+  const host = folder({ path: '/home/acct/crete-bank-data', uid: 6696571, gid: 1000, born: { at: START, kind: 'host' } });
+  const w = report({
+    kind: 'host', dir: host.path, dataWritable: false, folders: { host }, tmpMounts: [],
+    php: { uid: 6696571, gid: 1000, groups: [1000], sapi: 'cgi-fcgi' }, server: null,
+  });
+  assert.ok(whereOf(w), 'a host folder is a report');
+  assert.deepEqual(readings(w), ['The bank lives in the folder the host names (bank/place.json), outside the web root, which deploys never touch: it survives restarts and reboots.']);
+  const lines = whereLines(w);
+  assert.equal(lines[0], 'The bank\'s folder: host /home/acct/crete-bank-data');
+  assert.ok(lines.some(l => l.startsWith('host folder /home/acct/crete-bank-data: mode 0700')), lines.join('\n'));
+  assert.ok(!lines.some(l => l.startsWith('data/') || l.startsWith('/var/tmp')), lines.join('\n'));
+});

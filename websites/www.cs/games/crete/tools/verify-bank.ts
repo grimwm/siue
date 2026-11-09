@@ -1,6 +1,6 @@
 /* The Island of Crete: the shared Endless bank's trusted verifier, run by .github/workflows/crete-verify.yml every
  * six hours and by hand from the Actions tab, before tools/generate-bank.ts spends the rest of the run making new
- * levels. Over HTTPS only, it asks the bank (games/crete/endless-bank.php) for the
+ * levels. Over HTTPS only, it asks the bank (endless-bank.php on happystl.com, src/endless/bank-url.ts) for the
  * levels waiting in quarantine, makes each again from its tuple with this checkout's generator, and posts whether it
  * made the same level. The bank admits a level on one trusted match, and rejects it on a mismatch. Its token is the
  * CRETE_BANK_VERIFIER_TOKEN secret, sent in the X-Crete-Verifier header; it is never printed. A level of another
@@ -15,7 +15,9 @@ import { knownOf } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
 import { pathToFileURL } from 'node:url';
 
-export const BANK_URL = 'https://www.cs.siue.edu/~wgrim/games/crete/endless-bank.php';
+import { SHARED_BANK_URL } from '../src/endless/bank-url.ts';
+
+export const BANK_URL = SHARED_BANK_URL;
 export const TOKEN_HEADER = 'X-Crete-Verifier';
 
 type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;

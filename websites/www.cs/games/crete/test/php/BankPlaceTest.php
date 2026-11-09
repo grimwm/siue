@@ -42,10 +42,10 @@ final class BankPlaceTest extends TestCase
     }
 
     /** A Place whose data/ PHP can write when $dataWritable says so; /proc is this test's own. */
-    private function place(bool $dataWritable, ?string $override = null): Place
+    private function place(bool $dataWritable, ?string $override = null, ?string $host = null): Place
     {
         $writable = fn(string $p): bool => $dataWritable ? is_writable($p) : !str_starts_with($p, $this->root . '/site') && is_writable($p);
-        return new Place($this->data, $this->varTmp, $override, new StoreDir('crete bank storage:'), $writable, static fn(): int => self::NOW, $this->root . '/proc');
+        return new Place($this->data, $this->varTmp, $override, new StoreDir('crete bank storage:'), $writable, static fn(): int => self::NOW, $this->root . '/proc', $host);
     }
 
     /** A grade's served store with levels that came in at each of $at. */
@@ -156,6 +156,41 @@ final class BankPlaceTest extends TestCase
         self::assertSame(['kind' => 'data', 'dir' => $this->data], $this->choose($this->place(true)));
         self::assertFileDoesNotExist("{$this->data}/born.json", 'an existing bank gets no birth record');
         self::assertSame('', $this->logged());
+    }
+
+    public function testTheHostsFolderIsTheOnlyOneAndIsNeverMade(): void
+    {
+        $host = $this->root . '/home/crete-bank-data';
+        mkdir($this->root . '/home', 0700);
+        mkdir($this->data, 0770);
+        $before = $this->snapshot();
+        try {
+            $this->choose($this->place(true, null, $host));
+            self::fail('a missing host folder must refuse');
+        } catch (\RuntimeException $e) {
+            self::assertStringContainsString("$host, the folder bank/place.json names, is not a directory", $e->getMessage());
+        }
+        self::assertSame($before, $this->snapshot(), 'nothing made: no host folder, no data/ deny file, nothing in /var/tmp');
+        $r = $this->place(true, null, $host)->report();
+        self::assertSame([null, ['host'], false], [$r['kind'], array_keys($r['folders']), $r['dataWritable']]);
+
+        mkdir($host, 0755);
+        try {
+            $this->choose($this->place(true, null, $host));
+            self::fail('a folder others may enter must refuse');
+        } catch (\RuntimeException $e) {
+            self::assertStringContainsString('has mode 0755, not 0700', $e->getMessage());
+        }
+        chmod($host, 0700);
+        self::served($this->data, 'easy', [1000]);
+        self::assertSame(['kind' => 'host', 'dir' => $host], $this->choose($this->place(true, null, $host)), 'a bank in data/ never pulls it back');
+        self::assertSame(['at' => self::NOW, 'kind' => 'host'], json_decode((string) file_get_contents("$host/born.json"), true));
+        self::assertStringContainsString("a new, empty bank begins in $host (host)", $this->logged());
+        self::assertFileDoesNotExist("{$this->data}/.htaccess", 'data/ is never set up');
+        $r = $this->place(true, null, $host)->report();
+        self::assertSame(['host', $host, null], [$r['kind'], $r['dir'], $r['refused']]);
+        self::assertSame(['host'], array_keys($r['folders']));
+        self::assertSame(['override', $this->root . '/o'], [$this->place(true, $this->root . '/o', $host)->decide(true)['kind'], $this->place(true, $this->root . '/o', $host)->decide(true)['dir']], 'the tests\' override still wins');
     }
 
     public function testTheOverrideWins(): void

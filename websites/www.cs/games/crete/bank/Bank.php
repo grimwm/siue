@@ -65,6 +65,9 @@ final class Bank
     /** The form a trusted verifier token takes; deploy.sh refuses any other. */
     public const TOKEN = '/^[A-Za-z0-9_-]{32,128}\z/';
 
+    /** How long a CSRF token the bank signs stays good. */
+    public const CSRF_SEC = 86400;
+
     private const DAY = 86400;
     private const KEY_DAYS = 3;
     private const MAX_TEXT = 4000;
@@ -135,7 +138,7 @@ final class Bank
      */
     public static function validateConfig(array $data): array
     {
-        $own = array_merge(['accept', 'perHour'], array_keys(self::INTS));
+        $own = array_merge(['accept', 'perHour', 'allowedOrigins'], array_keys(self::INTS));
         $known = array_merge($own, ScoreGuard::CONFIG_KEYS);
         $unknown = array_diff(array_keys($data), $known);
         if ($unknown) {
@@ -178,7 +181,62 @@ final class Bank
             }
         }
         $out['perHour'] = $rates;
+        if (!is_array($data['allowedOrigins']) || !array_is_list($data['allowedOrigins'])) {
+            throw new \RuntimeException('config allowedOrigins must be a list of origins');
+        }
+        foreach ($data['allowedOrigins'] as $origin) {
+            // An origin exactly as a browser sends it: https, a lowercase host, an optional port, nothing after.
+            if (!is_string($origin) || !preg_match('{^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?\z}', $origin)) {
+                throw new \RuntimeException('config allowedOrigins holds https origins only, such as https://www.example.edu');
+            }
+        }
+        $out['allowedOrigins'] = array_values(array_unique($data['allowedOrigins']));
         return $out;
+    }
+
+    /** @return list<string> the pages' origins that may call the bank from another site (CORS) */
+    public function allowedOrigins(): array
+    {
+        return $this->config['allowedOrigins'];
+    }
+
+    // ---- CSRF ----------------------------------------------------------------
+
+    /**
+     * A CSRF token for a browser's posts, signed, with no cookie: Endless's
+     * pages call the bank from another site, where a browser may refuse the
+     * bank's cookies. 32 hex digits: when it lapses (8, seconds since the epoch)
+     * and the first 24 of an HMAC of that under the current network key. A
+     * browser posts it back in the CSRF header; csrfOk() checks it.
+     */
+    public function csrfToken(): string
+    {
+        $until = sprintf('%08x', ($this->clock)() + self::CSRF_SEC);
+        return $until . self::csrfMac($until, $this->networkKey());
+    }
+
+    /** True for a token csrfToken() signed under a network key the bank still keeps, and not yet lapsed. */
+    public function csrfOk(mixed $token): bool
+    {
+        if (!is_string($token) || !preg_match('/^[a-f0-9]{32}\z/', $token)) {
+            return false;
+        }
+        $until = substr($token, 0, 8);
+        $left = (int) hexdec($until) - ($this->clock)();
+        if ($left < 0 || $left > self::CSRF_SEC) {
+            return false;
+        }
+        foreach ($this->keys() as $k) {
+            if (hash_equals(self::csrfMac($until, $k['key']), substr($token, 8))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function csrfMac(string $until, string $key): string
+    {
+        return substr(hash_hmac('sha256', "crete-bank-csrf|$until", $key), 0, 24);
     }
 
     /** @return array<string, mixed> the score guard's part of the config */
@@ -593,8 +651,20 @@ final class Bank
         if (!is_bool($replace)) {
             throw Refusal::invalid('replace');
         }
-        $tuple = $this->tuple($body['tuple']);
-        $made = self::made($body['made'], 'made');
+        return $this->addVerified($body['tuple'], $body['made'], $replace);
+    }
+
+    /**
+     * trusted-add's work, also bank/import-backup.php's on the host: one
+     * level the trusted generator made (or a backup kept), with its tuple,
+     * through every check trusted-add makes, served at once. Refusals as
+     * trusted-add's.
+     * @return array{ok: true, h: string, retired?: string}
+     */
+    public function addVerified(mixed $tupleIn, mixed $madeIn, bool $replace = false): array
+    {
+        $tuple = $this->tuple($tupleIn);
+        $made = self::made($madeIn, 'made');
         if (!in_array($tuple['v'], $this->config['accept'], true)) {
             throw new Refusal(403, ['error' => 'version']);
         }

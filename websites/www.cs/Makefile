@@ -125,7 +125,8 @@ music-e2e: ## Music workroom and studio browser checks (E2E_ARGS: one spec)
 stats-e2e: ## Visitor statistics browser check in a throwaway docker project
 	@$(MAKE) --no-print-directory music-e2e E2E_ARGS=stats.local.ts
 
-# Crete's shared Endless bank, worked from this machine or by .github/workflows/crete-verify.yml (every variable is in
+# Crete's shared Endless bank on happystl.com (https://www.happystl.com/crete-bank/endless-bank.php, every tool's default
+# address), worked from this machine or by .github/workflows/crete-verify.yml (every variable is in
 # games/crete/README.md, "Making levels for the shared bank"). crete-levels makes new levels with the trusted generator
 # (games/crete/tools/generate-bank.ts) and adds them straight to the bank, or with SAVE_ONLY=<dir> saves them there for
 # crete-levels-upload (games/crete/tools/upload-bank.ts); served levels are replaced only with ROLLOVER=yes. Each

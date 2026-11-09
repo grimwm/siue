@@ -1,4 +1,6 @@
 node_modules/
 **/.tmp-*/
-# Crete's trusted verifier token hash: deploy.sh stages it from CRETE_BANK_VERIFIER_TOKEN.
+# Crete's bank on its host: the trusted verifier token's hash and the folder its levels live in, which
+# crete/tools/deploy-bank.sh stages.
 crete/bank/verifier.json
+crete/bank/place.json

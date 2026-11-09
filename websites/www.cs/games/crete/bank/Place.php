@@ -1,11 +1,14 @@
 <?php
 // Where the shared Endless bank keeps its stores, and the rule that keeps it
-// there: CRETE_BANK_DIR when it is set; otherwise data/ when PHP can write it,
-// else /var/tmp/<account>-crete-bank. The bank never moves on its own: a
-// folder that holds a bank wins over one that does not, and a new, empty bank
-// is never started in /var/tmp while data/ exists (php-fpm keeps /var/tmp
-// private to itself and empties it on every restart). trusted-where reports
-// all of it, read only.
+// there: CRETE_BANK_DIR when it is set; otherwise the folder the host names in
+// bank/place.json (the deploy writes it and makes the folder, 0700, outside
+// the web root), and only that folder; with neither, data/ when PHP can write
+// it, else /var/tmp/<account>-crete-bank. The bank never moves on its own: the
+// host's folder must exist (the bank never makes it, so a wrong name never
+// starts an empty bank somewhere else), a folder that holds a bank wins over
+// one that does not, and a new, empty bank is never started in /var/tmp while
+// data/ exists (php-fpm keeps /var/tmp private to itself and empties it on
+// every restart). trusted-where reports all of it, read only.
 declare(strict_types=1);
 
 namespace Crete;
@@ -23,7 +26,7 @@ use Kit\StoreModes;
 
 final class Place
 {
-    public const KINDS = ['override', 'data', 'vartmp'];
+    public const KINDS = ['override', 'host', 'data', 'vartmp'];
 
     /** Written once into a folder when a new, empty bank starts there: { "at", "kind" }. */
     public const BORN = 'born.json';
@@ -35,6 +38,7 @@ final class Place
      * @param (\Closure(string): bool)|null $writable the tests' seam for is_writable
      * @param (\Closure(): int)|null $clock seconds since the epoch
      * @param string $proc where /proc is (the tests' seam)
+     * @param string|null $host the folder bank/place.json names, or null when the host names none
      */
     public function __construct(
         private readonly string $data,
@@ -44,6 +48,7 @@ final class Place
         private readonly ?\Closure $writable = null,
         private readonly ?\Closure $clock = null,
         private readonly string $proc = '/proc',
+        private readonly ?string $host = null,
     ) {
     }
 
@@ -68,6 +73,13 @@ final class Place
     {
         if ($this->override !== null) {
             return ['kind' => 'override', 'dir' => $this->override, 'fresh' => !self::holdsBank($this->override), 'refused' => null];
+        }
+        if ($this->host !== null) {
+            $st = @lstat($this->host);
+            if ($st === false || ($st['mode'] & 0170000) !== 0040000) {
+                return ['kind' => null, 'dir' => null, 'fresh' => false, 'refused' => "{$this->host}, the folder bank/place.json names, is not a directory; the deploy makes it (mode 0700), and the bank never starts anywhere else"];
+            }
+            return ['kind' => 'host', 'dir' => $this->host, 'fresh' => !self::holdsBank($this->host), 'refused' => null];
         }
         $inData = self::holdsBank($this->data);
         // /var/tmp is shared and the name is predictable: only a real directory PHP owns can hold the bank.
@@ -102,14 +114,15 @@ final class Place
      */
     public function choose(): array
     {
-        $dataUsable = $this->override === null && $this->store->usable($this->data, $this->writable);
+        $dataUsable = $this->override === null && $this->host === null && $this->store->usable($this->data, $this->writable);
         $d = $this->decide($dataUsable);
         if ($d['refused'] !== null) {
             throw new \RuntimeException('crete bank storage: ' . $d['refused']);
         }
         $dir = match ($d['kind']) {
             'override' => $this->store->claim(rtrim($d['dir'], '/'), false),
-            'vartmp' => $this->store->claim($d['dir'], true),
+            // Only PHP's own user may own or enter the host's folder, as in /var/tmp.
+            'host', 'vartmp' => $this->store->claim($d['dir'], true),
             default => $d['dir'],
         };
         if ($d['fresh'] && !file_exists("$dir/" . self::BORN)) {
@@ -145,9 +158,12 @@ final class Place
     public function report(): array
     {
         $writable = $this->writable ?? static fn(string $p): bool => is_writable($p);
-        $dataWritable = is_dir($this->data) && !is_link($this->data) && $writable($this->data);
+        $dataWritable = $this->host === null && is_dir($this->data) && !is_link($this->data) && $writable($this->data);
         $d = $this->decide($this->override === null && $dataWritable);
-        $folders = ['data' => self::folder($this->data, $writable), 'vartmp' => self::folder($this->varTmp, $writable)];
+        // The host's folder is the only one it may use: data/ and /var/tmp are not reported beside it.
+        $folders = $this->host !== null
+            ? ['host' => self::folder($this->host, $writable)]
+            : ['data' => self::folder($this->data, $writable), 'vartmp' => self::folder($this->varTmp, $writable)];
         if ($this->override !== null) {
             $folders = ['override' => self::folder($this->override, $writable)] + $folders;
         }

@@ -1,9 +1,9 @@
 name: crete-verify
 
-# The shared Endless bank's trusted runner. Every six hours, and by hand from the Actions tab, it talks to www.cs's
-# bank endpoint (websites/www.cs/games/crete/endless-bank.php) over HTTPS only, never ssh or sftp (the host's fail2ban
-# bans repeated logins), in two steps within one fixed budget of 47 minutes, each through the site's make target
-# (websites/www.cs/Makefile), the same one a person runs on their own machine:
+# The shared Endless bank's trusted runner. Every six hours, and by hand from the Actions tab, it talks to the bank
+# endpoint on happystl.com (https://www.happystl.com/crete-bank/endless-bank.php, websites/www.cs/games/crete/
+# endless-bank.php) over HTTPS only, never ssh or sftp, in two steps within one fixed budget of 47 minutes, each
+# through the site's make target (websites/www.cs/Makefile), the same one a person runs on their own machine:
 #
 # 1. make crete-verify-levels (tools/verify-bank.ts) checks the levels waiting in quarantine: it makes each again from
 #    its tuple with main's generator and posts a match or a mismatch; one trusted match admits a level. At most 25
@@ -15,9 +15,10 @@ name: crete-verify
 #    grade's cap per run, each new level replacing one served level the server picks, one out for each one in.
 #
 # The token, CRETE_BANK_VERIFIER_TOKEN, is the bank-verifier field of the item "Crete Config" in the SIUE 1Password
-# vault, the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). It is read through the
-# production environment's OP_SERVICE_ACCOUNT_TOKEN secret, as the deploy reads its login, and the action masks it, so it is never
-# printed. Without the item the run skips both steps and says so. A failed step only leaves the bank as it was.
+# vault, the same one the deploy turns into the bank's hash (bank/verifier.json, written by tools/deploy-bank.sh). It
+# is read through the production environment's OP_SERVICE_ACCOUNT_TOKEN secret, as the deploy reads its login, and
+# the action masks it, so it is never printed. Without the item the run skips both steps and says so. A failed step
+# only leaves the bank as it was.
 
 on:
   schedule:

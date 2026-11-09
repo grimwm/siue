@@ -70,7 +70,9 @@ final class Place
             return ['kind' => 'override', 'dir' => $this->override, 'fresh' => !self::holdsBank($this->override), 'refused' => null];
         }
         $inData = self::holdsBank($this->data);
-        $inVarTmp = is_dir($this->varTmp) && !is_link($this->varTmp) && self::holdsBank($this->varTmp);
+        // /var/tmp is shared and the name is predictable: only a real directory PHP owns can hold the bank.
+        $st = @lstat($this->varTmp);
+        $inVarTmp = $st !== false && ($st['mode'] & 0170000) === 0040000 && $st['uid'] === StoreDir::euid() && self::holdsBank($this->varTmp);
         $refuse = fn(string $why): array => ['kind' => null, 'dir' => null, 'fresh' => false, 'refused' => $why];
         if ($dataUsable) {
             // data/ became writable after the bank started in /var/tmp: it stays where it is.

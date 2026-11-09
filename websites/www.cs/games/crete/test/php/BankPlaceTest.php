@@ -130,6 +130,16 @@ final class BankPlaceTest extends TestCase
         self::assertSame(['kind' => 'vartmp', 'dir' => $this->varTmp], $this->choose($this->place(false)), 'and while data/ is not writable');
     }
 
+    public function testALinkInVarTmpNeverHoldsTheBank(): void
+    {
+        self::served($this->root . '/planted', 'easy', [1]);
+        symlink($this->root . '/planted', $this->varTmp);
+        self::assertSame('data', $this->place(true)->decide(true)['kind'], 'a planted link does not keep the bank from data/');
+        self::assertTrue($this->place(false)->decide(false)['fresh'], 'nor counts as a bank that exists');
+        $this->expectException(RuntimeException::class);
+        $this->choose($this->place(false));
+    }
+
     public function testDataIsUsedWhenWritableAndANewBankThereIsRecorded(): void
     {
         self::assertSame(['kind' => 'data', 'dir' => $this->data], $this->choose($this->place(true)));

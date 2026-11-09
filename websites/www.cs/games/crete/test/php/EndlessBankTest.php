@@ -1461,6 +1461,21 @@ final class EndlessBankTest extends TestCase
         }
     }
 
+    public function testTrustedWhereNeverSetsUpAnEmptyFolder(): void
+    {
+        $file = $this->verifierFile();
+        $empty = $this->dir . '/empty-bank';
+        [$server, $base] = $this->serve(['CRETE_BANK_VERIFIER_FILE' => $file, 'CRETE_BANK_DIR' => $empty]);
+        try {
+            [$status, $body] = self::http('POST', $base, json_encode(['op' => 'trusted-where']), ['Content-Type: application/json', 'X-Crete-Verifier: ' . self::TOKEN]);
+            self::assertSame([200, 'override', false], [$status, $body['kind'], $body['folders']['override']['exists']]);
+        } finally {
+            proc_terminate($server);
+            proc_close($server);
+        }
+        self::assertDirectoryDoesNotExist($empty, 'no folder, rate stamp or born.json made');
+    }
+
     /**
      * A php -S server on games/crete with the bank in this test's folder.
      * @param array<string, string> $env

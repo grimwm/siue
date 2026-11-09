@@ -303,7 +303,7 @@ Seven targets in `websites/www.cs/Makefile`, run from `websites/www.cs`, work on
 
 A refusal answers 500 to every call except `trusted-where`, and logs one line per request that names the folder and the fix: give PHP's group write access to `data/`. When a new, empty bank begins in a folder, the bank writes `born.json` there (`{"at", "kind"}`) and logs one line.
 
-`crete-bank-where` asks the bank with the trusted op `trusted-where`. Like `trusted-export`, it checks the token and then takes a rate slot; it skips the rate slot only while the bank refuses its folder. It reads and never writes. It prints:
+`crete-bank-where` asks the bank with the trusted op `trusted-where`. Like `trusted-export`, it checks the token and then takes a rate slot; but only from a folder that already holds a bank, so it never makes a folder, a deny file or `born.json`, and it still answers while the bank refuses its folder. It prints:
 
 - the folder the bank uses (`override`, `data` or `vartmp`) and its path, or why the bank refuses to start;
 - for each candidate folder: its mode, owner, group and its parent's group, whether PHP can write it, its change and modify times, its `born.json`, and each difficulty's three stores (bytes, when each was written, how many levels it holds, and the oldest and newest time a level came in);

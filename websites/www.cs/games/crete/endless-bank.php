@@ -30,7 +30,8 @@
  *      "override" | "data" | "vartmp" | null, "dir", "refused": <why the bank will not start> | null, "ctime", "mtime",
  *      "grades": { <grade>: { "served" | "pending" | "retired": { "bytes", "mtime", "count", ... } | null } },
  *      "dataWritable", "folders": { "override"?, "data", "vartmp" }, "php", "bootTime", "server", "tmpMounts", "now" };
- *      it answers even while the bank refuses its folder (then without taking a rate slot)
+ *      it never makes a folder or file: it takes a rate slot only from a folder that already holds a bank, and
+ *      answers even while the bank refuses its folder
  * Its token is checked before a rate slot is taken (a stranger's guesses write
  * nothing), against the sha256 in bank/verifier.json, which deploy.sh writes
  * from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the path
@@ -175,12 +176,18 @@ try {
             if (array_keys($body) !== ['op']) {
                 bankRespond(['error' => 'invalid', 'field' => 'body'], 400);
             }
-            try {
-                bankTakeRate('trusted');
-            } catch (Throwable) {
-                // The bank refuses its folder, so there is nowhere to keep rate stamps: the token holder still learns why.
+            $where = bankPlace()->report();
+            // A rate slot only from a folder that already holds a bank: taking one sets the folder up, and this op
+            // must never make a folder, a deny file or born.json. While the bank refuses, or has no levels yet, the
+            // token holder still gets the report.
+            if ($where['kind'] !== null && ($where['folders'][$where['kind']]['holdsBank'] ?? false)) {
+                try {
+                    bankTakeRate('trusted');
+                } catch (RuntimeException) {
+                    // The folder went away between the report and the slot: the report stands.
+                }
             }
-            bankRespond(bankPlace()->report());
+            bankRespond($where);
         }
         if (is_string($op) && in_array($op, Bank::TRUSTED_OPS, true)) {
             $token = $_SERVER['HTTP_X_CRETE_VERIFIER'] ?? null;

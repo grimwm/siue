@@ -26,6 +26,11 @@
  *      -> { "grade", "list", "total", "items", "next": <h> | null }: one page of the grade's list in hash order, read
  *      only (no count or file changes); a served item is { "h", "v", "at", "made", "n", "tuple" | null }, a pending
  *      one { "h", "v", "at", "made", "tuple" }, a retired one { "h" }; a page ends at limit items or once past 1 MiB
+ * POST { "op": "trusted-where" } -> where the bank keeps its stores, read only (bank/Place.php's report): { "kind":
+ *      "override" | "data" | "vartmp" | null, "dir", "refused": <why the bank will not start> | null, "ctime", "mtime",
+ *      "grades": { <grade>: { "served" | "pending" | "retired": { "bytes", "mtime", "count", ... } | null } },
+ *      "dataWritable", "folders": { "override"?, "data", "vartmp" }, "php", "bootTime", "server", "tmpMounts", "now" };
+ *      it answers even while the bank refuses its folder (then without taking a rate slot)
  * Its token is checked before a rate slot is taken (a stranger's guesses write
  * nothing), against the sha256 in bank/verifier.json, which deploy.sh writes
  * from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the path
@@ -37,7 +42,9 @@
  *
  * Every rule and store is bank/Bank.php's; settings are bank/config.json
  * (validated on load). The bank lives in data/, or /var/tmp/<account>-crete-bank
- * when PHP cannot write there; CRETE_BANK_DIR overrides both (tests). Origin,
+ * when PHP cannot write there; CRETE_BANK_DIR overrides both (tests). It never
+ * moves on its own and never starts empty in /var/tmp while data/ exists
+ * (bank/Place.php): such a refusal answers 500 and is logged. Origin,
  * CSRF and the per-network rate limits are the kit's score guard
  * (server/score-guard.php), its rate stamps in the bank's guard.json, keyed
  * under the bank's current network key.
@@ -45,8 +52,10 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/bank/Bank.php';
+require_once __DIR__ . '/bank/Place.php';
 
 use Crete\Bank;
+use Crete\Place;
 use Crete\Refusal;
 use Kit\ScoreGuard;
 use Kit\StoreDir;
@@ -58,18 +67,22 @@ function bankConfig(): array {
     return $config ??= Bank::loadConfig(__DIR__ . '/bank/config.json');
 }
 
-/** The bank's folder: CRETE_BANK_DIR, else data/ when PHP can write it, else a private folder in /var/tmp. */
+/** The bank's place: CRETE_BANK_DIR, else data/ or a private folder in /var/tmp, by bank/Place.php's rule. */
+function bankPlace(): Place {
+    static $place = null;
+    $override = getenv('CRETE_BANK_DIR');
+    return $place ??= new Place(
+        __DIR__ . '/data',
+        '/var/tmp/' . StoreDir::username() . '-crete-bank',
+        is_string($override) && $override !== '' ? rtrim($override, '/') : null,
+        new StoreDir('crete bank storage:'),
+    );
+}
+
+/** The bank's folder, checked (Place::choose); a refusal answers 500 and is logged. */
 function bankDir(): string {
     static $dir = null;
-    if ($dir !== null) {
-        return $dir;
-    }
-    $store = new StoreDir('crete bank storage:');
-    $override = getenv('CRETE_BANK_DIR');
-    if (is_string($override) && $override !== '') {
-        return $dir = $store->claim(rtrim($override, '/'), false);
-    }
-    return $dir = $store->pick(__DIR__ . '/data', '/var/tmp/' . StoreDir::username() . '-crete-bank');
+    return $dir ??= bankPlace()->choose()['dir'];
 }
 
 /** Where the trusted verifier's token hash is kept. */
@@ -154,6 +167,21 @@ try {
             bankRespond(['error' => 'invalid', 'field' => 'body'], 400);
         }
         $op = $body['op'] ?? null;
+        if ($op === 'trusted-where') {
+            $token = $_SERVER['HTTP_X_CRETE_VERIFIER'] ?? null;
+            if (!Bank::trusted($token, bankVerifierFile())) {
+                bankRespond(['error' => 'unauthorized'], 401);
+            }
+            if (array_keys($body) !== ['op']) {
+                bankRespond(['error' => 'invalid', 'field' => 'body'], 400);
+            }
+            try {
+                bankTakeRate('trusted');
+            } catch (Throwable) {
+                // The bank refuses its folder, so there is nowhere to keep rate stamps: the token holder still learns why.
+            }
+            bankRespond(bankPlace()->report());
+        }
         if (is_string($op) && in_array($op, Bank::TRUSTED_OPS, true)) {
             $token = $_SERVER['HTTP_X_CRETE_VERIFIER'] ?? null;
             if (!Bank::trusted($token, bankVerifierFile())) {

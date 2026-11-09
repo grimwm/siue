@@ -1428,6 +1428,39 @@ final class EndlessBankTest extends TestCase
         }
     }
 
+    public function testTrustedWhereNeedsTheTokenAndNamesTheFolderReadOnly(): void
+    {
+        $file = $this->verifierFile();
+        $bank = $this->bank();
+        $this->add($bank, self::level(330));
+        $this->add($bank, self::level(331));
+        [$server, $base] = $this->serve(['CRETE_BANK_VERIFIER_FILE' => $file]);
+        try {
+            $json = ['Content-Type: application/json'];
+            $where = json_encode(['op' => 'trusted-where']);
+            self::assertSame([401, ['error' => 'unauthorized']], array_slice(self::http('POST', $base, $where, $json), 0, 2), 'no header');
+            self::assertSame([401, ['error' => 'unauthorized']], array_slice(self::http('POST', $base, $where, [...$json, 'X-Crete-Verifier: tok_Wrong-verifier_0123456789abcdefXYZ']), 0, 2));
+            $trusted = [...$json, 'X-Crete-Verifier: ' . self::TOKEN];
+            self::assertSame([400, ['error' => 'invalid', 'field' => 'body']], array_slice(self::http('POST', $base, json_encode(['op' => 'trusted-where', 'grade' => 'easy']), $trusted), 0, 2));
+            $stores = fn(): array => array_map(fn(string $f): string => (string) file_get_contents($f), array_combine(glob("{$this->dir}/*-*.json"), glob("{$this->dir}/*-*.json")));
+            $before = $stores();
+            [$status, $body, $headers] = self::http('POST', $base, $where, $trusted);
+            self::assertSame(200, $status);
+            self::assertSame($before, $stores(), 'no store changed');
+            self::assertSame(['override', $this->dir, null], [$body['kind'], $body['dir'], $body['refused']]);
+            self::assertSame(2, $body['grades']['easy']['served']['count']);
+            self::assertNull($body['grades']['hard']['served']);
+            self::assertSame(['override', 'data', 'vartmp'], array_keys($body['folders']));
+            self::assertIsBool($body['dataWritable']);
+            self::assertArrayHasKey('bootTime', $body);
+            self::assertStringNotContainsString(self::TOKEN, json_encode($body));
+            self::assertContains('Cache-Control: no-store', $headers);
+        } finally {
+            proc_terminate($server);
+            proc_close($server);
+        }
+    }
+
     /**
      * A php -S server on games/crete with the bank in this test's folder.
      * @param array<string, string> $env

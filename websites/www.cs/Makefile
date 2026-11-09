@@ -203,7 +203,7 @@ crete-bank-restore: ## Put a backup's levels the bank lost back (FROM=<dir>, DIF
 	$(CRETE_TOKEN); \
 	node games/crete/tools/restore-bank.ts --from "$(FROM)" $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") $(if $(filter yes,$(DRY_RUN)),--dry-run)
 
-crete-bank-where: ## Show where the shared bank keeps its levels and why, read only (JSON=yes prints the raw answer)
+crete-bank-where: ## Show where the shared bank keeps its levels, read only (JSON=yes)
 	@case "$(or $(JSON),no)" in yes|no) ;; *) echo "$@: JSON must be yes or no" >&2; exit 2;; esac; \
 	$(CRETE_TOKEN); \
 	node games/crete/tools/where-bank.ts $(if $(filter yes,$(JSON)),--json)

@@ -133,13 +133,14 @@ stats-e2e: ## Visitor statistics browser check in a throwaway docker project
 # and crete-verify-levels checks the levels waiting in quarantine (games/crete/tools/verify-bank.ts). crete-bank-backup
 # copies every level, read only, into BACKUP_DIR/<UTC time>/ (games/crete/tools/backup-bank.ts) and
 # crete-bank-restore puts a backup's served levels the bank no longer holds back (games/crete/tools/restore-bank.ts),
-# never retiring one it serves. The token is
+# never retiring one it serves. crete-bank-where shows which folder the bank keeps its levels in and why
+# (games/crete/tools/where-bank.ts). The token is
 # CRETE_BANK_VERIFIER_TOKEN when it is set (the workflow loads it), otherwise the file CRETE_BANK_TOKEN_FILE (default
 # ~/.config/crete/bank-token) when it is readable, otherwise it is read with op from 1Password; it lives in the
 # recipe's environment only and is never printed. crete-levels caps the whole run at MEMORY_LIMIT with
 # systemd-run --user and sizes its workers by MEMORY_LIMIT; where systemd-run cannot cap it, it refuses to start unless
 # ALLOW_UNCAPPED=yes (as on GitHub's runner, a throwaway VM), which runs it uncapped with each worker's heap capped.
-.PHONY: crete-levels crete-levels-upload crete-bank-status crete-bank-backup crete-bank-restore crete-verify-levels
+.PHONY: crete-levels crete-levels-upload crete-bank-status crete-bank-backup crete-bank-restore crete-bank-where crete-verify-levels
 MEMORY_LIMIT ?= 8G
 CRETE_TOKEN_REF = op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
 # The token from CRETE_BANK_TOKEN_FILE when the environment has none and the file is readable, its trailing newlines
@@ -201,6 +202,11 @@ crete-bank-restore: ## Put a backup's levels the bank lost back (FROM=<dir>, DIF
 	case "$(or $(DRY_RUN),no)" in yes|no) ;; *) echo "$@: DRY_RUN must be yes or no" >&2; exit 2;; esac; \
 	$(CRETE_TOKEN); \
 	node games/crete/tools/restore-bank.ts --from "$(FROM)" $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") $(if $(filter yes,$(DRY_RUN)),--dry-run)
+
+crete-bank-where: ## Show where the shared bank keeps its levels, read only (JSON=yes)
+	@case "$(or $(JSON),no)" in yes|no) ;; *) echo "$@: JSON must be yes or no" >&2; exit 2;; esac; \
+	$(CRETE_TOKEN); \
+	node games/crete/tools/where-bank.ts $(if $(filter yes,$(JSON)),--json)
 
 crete-verify-levels: ## Check levels waiting in the shared bank (COUNT=25 MINUTES=12)
 	@$(CRETE_TOKEN); \

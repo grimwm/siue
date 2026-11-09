@@ -692,6 +692,46 @@ final class Bank
         });
     }
 
+    /**
+     * Each grade's three stores in $dir as they stand, read only and without a
+     * lock (a store is only ever replaced whole, by rename): for each, null
+     * when it is missing, else its bytes, mtime and count of levels (null with
+     * an error when it will not parse); the served and pending ones also the
+     * oldest and newest time a level came in.
+     * @return array<string, array<string, array<string, mixed>|null>>
+     */
+    public static function storeSummary(string $dir): array
+    {
+        $out = [];
+        foreach (self::GRADES as $grade) {
+            foreach (self::EXPORT_LISTS as $list) {
+                $path = "$dir/$list-$grade.json";
+                clearstatcache(true, $path);
+                $st = @stat($path);
+                if ($st === false || !is_file($path)) {
+                    $out[$grade][$list] = null;
+                    continue;
+                }
+                $entry = ['bytes' => (int) $st['size'], 'mtime' => (int) $st['mtime'], 'count' => null];
+                try {
+                    $raw = is_readable($path) ? self::read($path) : throw new \RuntimeException('cannot read ' . $path);
+                    if ($list === 'retired') {
+                        $entry['count'] = count(self::decodeHashes($raw, $path));
+                    } else {
+                        $items = self::decodeList($raw, $path);
+                        $at = array_values(array_filter(array_column($items, 'at'), 'is_int'));
+                        $entry += ['oldest' => $at ? min($at) : null, 'newest' => $at ? max($at) : null];
+                        $entry['count'] = count($items);
+                    }
+                } catch (\RuntimeException $e) {
+                    $entry['error'] = 'unreadable';
+                }
+                $out[$grade][$list] = $entry;
+            }
+        }
+        return $out;
+    }
+
     /** @return list<string> a checked text's grid rows */
     private static function rows(string $text): array
     {

@@ -237,10 +237,20 @@ final class StoreDir
     }
 
     /**
-     * $preferred when PHP can write it (or create it there) and its deny file
-     * is in place; otherwise the private $fallback. $writable is the tests' seam.
+     * $preferred when it is usable(); otherwise the private $fallback.
+     * $writable is the tests' seam.
      */
     public function pick(string $preferred, string $fallback, ?\Closure $writable = null): string
+    {
+        return $this->usable($preferred, $writable) ? $preferred : $this->claim($fallback, true);
+    }
+
+    /**
+     * True when PHP can keep its files in $preferred: a real directory PHP can
+     * write (made here, private, when it is missing and PHP can write its
+     * parent) with its deny file in place. $writable is the tests' seam.
+     */
+    public function usable(string $preferred, ?\Closure $writable = null): bool
     {
         $writable ??= fn(string $p): bool => is_writable($p);
         if (is_dir($preferred) && !is_link($preferred)) {
@@ -257,9 +267,6 @@ final class StoreDir
                 @chmod($preferred, StoreModes::modes()['dir']);
             }
         }
-        if ($usable && $this->denyHttp($preferred)) {
-            return $preferred;
-        }
-        return $this->claim($fallback, true);
+        return $usable && $this->denyHttp($preferred);
     }
 }

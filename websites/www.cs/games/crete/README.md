@@ -35,7 +35,7 @@ It is a `play` game: the folder is a complete page (`index.html`) with its own P
 - `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`, `src/tsconfig.worker.json`: the build and its type programs.
 - `tools/endless-bank.ts`: makes Endless's bank with the generator and writes `src/endless/bank.ts` (Endless, below).
 - `test/`: the unit and static suites, TypeScript on `node:test`, with `reference-solver.ts` (the breadth-first reference every faster search must agree with; only the tests use it); `tsconfig.test.json` type-checks them, so `build.mjs crete --check` fails on a type error in a test. `../units.sh` runs them with every other game's; `test.sh` runs the build checks.
-- `endless-bank.php`, `bank/Bank.php` and `bank/config.json`: the shared Endless bank's endpoint, its library and its settings (Endless, below); `server/` holds the kit's copies of `score-guard.php`, `store-dir.php` and `blocked-initials.json` that `tools/install-files.php` keeps current. The bank's files live in `data/`, which the deploy makes and never uploads into.
+- `endless-bank.php`, `bank/Bank.php`, `bank/Place.php` and `bank/config.json`: the shared Endless bank's endpoint, its library, the rule for where it keeps its files, and its settings (Endless, below). `server/` holds the kit's copies of `score-guard.php`, `store-dir.php` and `blocked-initials.json`, which `tools/install-files.php` keeps current. The bank's files belong in `data/`, which the deploy makes and never uploads into; [Where the bank lives](#making-levels-for-the-shared-bank) has the whole rule.
 - `tools/install-files.php`: Crete's config for `../_kit/php/install-core.php` (manifest, service worker, install block, `?v=` versions).
 - `metadata.yaml`: the Games-page card and install colours.
 
@@ -283,7 +283,7 @@ A link opens the card on its seed and difficulty; one that names no difficulty, 
 
 ### Making levels for the shared bank
 
-Six targets in `websites/www.cs/Makefile`, run from `websites/www.cs`, work on the shared bank (`endless-bank.php`) with the trusted runner's token. `.github/workflows/crete-verify.yml` runs the same targets.
+Seven targets in `websites/www.cs/Makefile`, run from `websites/www.cs`, work on the shared bank (`endless-bank.php`) with the trusted runner's token. `.github/workflows/crete-verify.yml` runs the same targets.
 
 | Target | What it does |
 |---|---|
@@ -293,6 +293,26 @@ Six targets in `websites/www.cs/Makefile`, run from `websites/www.cs`, work on t
 | `make crete-verify-levels` | Checks the levels waiting in quarantine (`tools/verify-bank.ts`) |
 | `make crete-bank-backup` | Copies every level of the bank to this machine, read only, and prints how much space it takes (`tools/backup-bank.ts`) |
 | `make crete-bank-restore FROM=<dir>` | Puts the served levels of a backup that the bank no longer holds back in it (`tools/restore-bank.ts`) |
+| `make crete-bank-where` | Prints which folder the bank keeps its levels in, why, and what the host says about restarts, read only (`tools/where-bank.ts`; `JSON=yes` prints the raw answer) |
+
+**Where the bank lives.** `bank/Place.php` picks the folder on every request. `CRETE_BANK_DIR`, when it is set, wins (the tests use it). Otherwise the bank uses `data/` when PHP can write it, or else its own private folder in /var/tmp, `/var/tmp/<account>-crete-bank`. On the host, php-fpm runs with systemd's PrivateTmp, so that /var/tmp belongs to php-fpm alone and is emptied whenever php-fpm restarts or the host reboots. `data/` survives both, and deploys never touch it. The bank never moves by itself:
+
+- A folder that holds a bank (any difficulty's `served-`, `pending-` or `retired-` file) wins over one that does not. A bank in /var/tmp stays there even after `data/` becomes writable.
+- If `data/` holds the bank but PHP cannot write it, the bank refuses to start rather than move to /var/tmp.
+- If no folder holds a bank and `data/` exists but PHP cannot write it, the bank refuses to start rather than begin empty in /var/tmp.
+
+A refusal answers 500 to every call except `trusted-where`, and logs one line per request that names the folder and the fix: give PHP's group write access to `data/`. When a new, empty bank begins in a folder, the bank writes `born.json` there (`{"at", "kind"}`) and logs one line.
+
+`crete-bank-where` asks the bank with the trusted op `trusted-where`. Like `trusted-export`, it checks the token and then takes a rate slot; but only from a folder that already holds a bank, so it never makes a folder, a deny file or `born.json`, and it still answers while the bank refuses its folder. It prints:
+
+- the folder the bank uses (`override`, `data` or `vartmp`) and its path, or why the bank refuses to start;
+- for each candidate folder: its mode, owner, group and its parent's group, whether PHP can write it, its change and modify times, its `born.json`, and each difficulty's three stores (bytes, when each was written, how many levels it holds, and the oldest and newest time a level came in);
+- PHP's user and groups;
+- when the host booted (`/proc/stat`'s `btime`);
+- when the process that started this PHP worker (php-fpm's master) started;
+- what is mounted on /tmp and /var/tmp as PHP sees them. A `systemd-private-…` root there is PrivateTmp.
+
+Last, it prints a few lines on what that means. Examples: the bank lives in php-fpm's private /var/tmp; PHP is not in `data/`'s group; the bank began so many minutes after php-fpm started.
 
 **The token.** `CRETE_BANK_VERIFIER_TOKEN` when it is set (the workflow loads it from 1Password through its service account). Otherwise the file `CRETE_BANK_TOKEN_FILE` (default `~/.config/crete/bank-token`) when it exists and is readable: the token alone, a trailing newline dropped. Keep it `chmod 600`; a file whose mode is anything but 600 or 400 still works, with a one-line warning naming the file and its mode, never the token. Otherwise the targets read it with `op read 'op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier'`, so sign in to the 1Password CLI first (`eval $(op signin)`). If `op` is missing or not signed in, the target stops with one line saying so. The token stays in the run's environment, never on a command line, and is never printed. `SAVE_ONLY` runs without one.
 

@@ -58,8 +58,8 @@ export interface SharedDeps {
   random(): number;
   /** The endpoint's address. */
   url: string;
-  /** Nothing that carries the device's id is sent (no uploads, reports or checks), asked each time: the player has
-   *  not turned Help Build Endless Levels on, or Do Not Track or Global Privacy Control is set. Shared levels still
+  /** Nothing that carries the device's id is sent (no uploads, reports or checks), asked each time: the device does
+   *  not help build Endless levels (src/settings.ts helpsBuild), or Do Not Track or Global Privacy Control is set. Shared levels still
    *  come in. */
   quiet?(): boolean;
 }

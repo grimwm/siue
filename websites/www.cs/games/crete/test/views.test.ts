@@ -317,6 +317,14 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   assert.equal(walk(byId(root, 'menu-veil')).some(n => n.className === 'menu-empty'), true, 'an empty log says so');
 });
 
+test('the menu shows Help Build Endless Levels only when given its switch', () => {
+  const root = mount();
+  renderMenu(root, menuProps());
+  assert.match(byId(root, 'help-build').textContent ?? '', /^Help Build Endless Levels/);
+  renderMenu(root, menuProps({ onHelpBuild: undefined }));
+  assert.equal(maybeById(root, 'help-build'), undefined);
+});
+
 test('the menu\'s kicker names the level\'s place, and its name stands under the title; with neither it names the game', () => {
   const root = mount();
   const kicker = () => walk(byId(root, 'menu-veil')).find(n => n.className === 'kicker')?.textContent;

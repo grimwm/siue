@@ -125,9 +125,10 @@ export interface Controls {
   setPad?(side: PadSide): void;
   /** The Mini map switch, shown while the look is modern. */
   toggleMinimap?(): void;
-  /** The Help Build Endless Levels switch in the menu. */
+  /** The Help Build Endless Levels switch in the menu: without it the menu has no such switch. */
   toggleHelpBuild?(): void;
-  /** The player answered the card that asks once whether to help build Endless levels. */
+  /** The player answered the card that asks once whether to help build Endless levels: without it the card never
+   *  asks. */
   setHelpBuild?(on: boolean): void;
   /** Show View Tips: the modern board's tips by the compass again (the menu, the ? key). */
   showViewTips?(): void;
@@ -840,7 +841,7 @@ export function createUi(deps: UiDeps): Ui {
       onWalls: (w) => controls?.setWalls?.(w),
       onPad: (side) => controls?.setPad?.(side),
       onMinimap: () => controls?.toggleMinimap?.(),
-      onHelpBuild: () => controls?.toggleHelpBuild?.(),
+      onHelpBuild: controls?.toggleHelpBuild ? () => controls?.toggleHelpBuild?.() : undefined,
       viewTips: look === "modern" || touchScreen(),
       onViewTips: () => {
         layers.close("menu");

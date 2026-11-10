@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
-import { createSettings, FULLSCREEN_KEY, HELP_BUILD_KEY, HELP_CHECK_KEY, LOOK_KEY, MINIMAP_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, PAD_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
+import { createSettings, FULLSCREEN_KEY, HELP_BUILD, HELP_BUILD_KEY, HELP_CHECK_KEY, helpsBuild, LOOK_KEY, MINIMAP_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, PAD_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
 
 test('defaults: sound on, music on, music in the background on, fullscreen off', () => {
   const s = createSettings(memoryStorage());
@@ -107,4 +107,18 @@ test('the old Help Check switch: its default "on" is no answer, an "off" the pla
   const both = memoryStorage({ [HELP_CHECK_KEY]: 'off', [HELP_BUILD_KEY]: 'on' });
   assert.equal(createSettings(both).helpBuild.get(), 'on');
   assert.equal(createSettings(throwingStorage()).helpBuild.get(), 'unset');
+});
+
+test('players are not asked to help build Endless levels: with HELP_BUILD off no answer helps, and the answer is kept', () => {
+  assert.equal(HELP_BUILD, false);
+  for (const answer of ['on', 'off', 'unset'] as const) assert.equal(helpsBuild(answer), false, answer);
+  const storage = memoryStorage({ [HELP_BUILD_KEY]: 'on' });
+  assert.equal(helpsBuild(createSettings(storage).helpBuild.get()), false);
+  assert.equal(storage.data.get(HELP_BUILD_KEY), 'on', 'the stored answer stays for when asking is on again');
+});
+
+test('with asking on, only a yes helps build Endless levels', () => {
+  assert.equal(helpsBuild('on', true), true);
+  assert.equal(helpsBuild('off', true), false);
+  assert.equal(helpsBuild('unset', true), false);
 });

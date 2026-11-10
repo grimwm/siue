@@ -334,38 +334,32 @@ test('F toggles full screen anywhere: on the title card, in play and on a card',
   await expect(page.locator('#levels-veil')).toBeVisible();
 });
 
-test.describe('Help Build Endless Levels, never answered', () => {
+// Asking players to help build Endless levels is off (src/settings.ts HELP_BUILD): the unit tests in test/ui.test.ts
+// and test/shared.test.ts keep the asking itself, the card and the switch, tested for when it is on again.
+test.describe('Help Build Endless Levels, not asked', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('the first New Game asks once; No Thanks goes on and is kept, and nothing is asked again', async ({ page }) => {
-    await page.goto(PAGE);
-    await page.locator('#title-play').click();
-    await expect(page.locator('#help-veil')).toBeVisible();
-    await expect(page.locator('#help-title')).toHaveText('Help Build Endless Levels');
-    await expect(page.locator('#help-yes')).toBeFocused();
-    await page.locator('#help-no').click();
-    await expect(page.locator('#look-veil')).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('crete-help-build'))).toBe('off');
-    await page.reload();
-    await page.locator('#title-play').click();
-    await expect(page.locator('#look-veil')).toBeVisible();
-    await page.keyboard.press('q');
-    await page.keyboard.press('o');
-    await expect(page.locator('#endless-veil')).toBeVisible();
-    await expect(page.locator('#help-veil')).toBeHidden();
-  });
-
-  test('Endless asks first too; Enter on Help Build Levels turns it on and opens the Endless card', async ({ page }) => {
-    await page.goto(PAGE);
-    await page.keyboard.press('o');
-    await expect(page.locator('#help-veil')).toBeVisible();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#endless-veil')).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('crete-help-build'))).toBe('on');
-    await page.keyboard.press('q');
-    await page.keyboard.press('q');
-    await expect(page.locator('#help-build')).toHaveAttribute('aria-checked', 'true');
-  });
+  for (const stored of [null, 'on'] as const) {
+    test(`stored answer ${stored ?? 'unset'}: New Game and Endless go straight on, the menu has no switch, nothing goes up to the bank, and the answer is kept`, async ({ page }) => {
+      const posts: string[] = [];
+      page.on('request', r => { if (r.method() === 'POST' && r.url().includes('endless-bank.php')) posts.push(r.url()); });
+      if (stored) await page.addInitScript(v => { if (localStorage.getItem('crete-help-build') === null) localStorage.setItem('crete-help-build', v); }, stored);
+      await page.goto(PAGE);
+      await page.locator('#title-play').click();
+      await expect(page.locator('#look-veil')).toBeVisible();
+      await expect(page.locator('#help-veil')).toBeHidden();
+      await page.keyboard.press('q');
+      await page.keyboard.press('o');
+      await expect(page.locator('#endless-veil')).toBeVisible();
+      await expect(page.locator('#help-veil')).toBeHidden();
+      await page.keyboard.press('q');
+      await page.keyboard.press('q');
+      await expect(page.locator('#menu-veil')).toBeVisible();
+      await expect(page.locator('#help-build')).toHaveCount(0);
+      expect(await page.evaluate(() => localStorage.getItem('crete-help-build'))).toBe(stored);
+      expect(posts, 'nothing carrying the device\'s id is sent').toEqual([]);
+    });
+  }
 });
 
 test('the board paints: the canvas holds drawn pixels', async ({ page }) => {

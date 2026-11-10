@@ -15,7 +15,7 @@ export const WAIT_MS = 60_000;
 export const IDLE_MS = 10 * 60_000;
 
 /** Where the page stands for checking others' levels: Endless's background terms, whether Endless's own levels are
- *  all made, the Help Build Endless Levels setting (on, not off or unset), Do Not Track, and a browser spec's budget. */
+ *  all made, whether the device helps build Endless levels (src/settings.ts helpsBuild), Do Not Track, and a browser spec's budget. */
 export interface CheckStanding extends Standing { endlessIdle: boolean; on: boolean; sendsNothing: boolean; specBudget: boolean }
 
 /** A check may run: the setting is on, the page sends, outside an Endless run, on the background worker's terms (one

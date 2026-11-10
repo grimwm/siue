@@ -84,6 +84,8 @@ export interface Tally {
   cap: number; room: number; replace: boolean; total: number; plateau: number; large: number; asked: number;
   /** Part time this run spent on the grade (ms), its parts finished, and its parts still running. */
   spent: number; done: number; running: number;
+  /** Its levels made and still being posted: one the bank does not count gives its room back. */
+  posting: number;
 }
 /** A level to make: its grade, on the plateau or on the climb, and whether a large board is wanted. */
 export interface Want { grade: Grade; plateau: boolean; large: boolean }
@@ -106,7 +108,7 @@ export function tallyOf(counts: Counts): Record<Grade, Tally> {
     }
     const room = Math.max(0, s.cap - s.served - s.pending);
     const replace = room === 0 && s.served > 0;
-    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.floor(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0, spent: 0, done: 0, running: 0 };
+    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.floor(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0, spent: 0, done: 0, running: 0, posting: 0 };
   }
   return out;
 }
@@ -118,11 +120,12 @@ const timeOf = (s: Tally) => s.spent + s.running * (s.done ? s.spent / s.done : 
  *  the one furthest behind its TIME_SHARE of the run's part time, among the grades with empty room, and once none has,
  *  among the full grades turning over (Hard first on a tie); on the plateau until PLATEAU_SHARE of the grade is, and a
  *  large board until LARGE_SHARE of its plateau is, on every LARGE_EVERY-th part the grade is asked for. Turnover
- *  starts only once every grade is full: while a grade that is filling still has room or a part running (one that
- *  comes back empty gives its room back), nothing turns over, and generateAll waits for a running part to finish. */
+ *  starts only once every grade is full: while a grade that is filling still has room, a part running or a level
+ *  being posted (one that comes back empty, or that the bank does not count, gives its room back), nothing turns
+ *  over, and generateAll waits for a running part to finish. */
 export function nextWant(t: Readonly<Record<Grade, Tally>>): Want | null {
   let grade: Grade | null = null, best = Infinity;
-  const filling = GRADES.some(g => !t[g].replace && (t[g].room > 0 || t[g].running > 0));
+  const filling = GRADES.some(g => !t[g].replace && (t[g].room > 0 || t[g].running > 0 || t[g].posting > 0));
   for (const replace of [false, true]) {
     if (replace && filling) break;
     for (const g of GRADES) {
@@ -333,7 +336,12 @@ export async function generateAll(deps: GenerateDeps, limits: Limits): Promise<M
     const s = tally[want.grade];
     const again = seen.has(made.text);
     seen.add(made.text);
-    const sent = again ? 'duplicate' : await post(t, made, s.replace);
+    let sent: Upload = 'duplicate';
+    if (!again) {
+      // Posting holds a filling grade's room until the bank's answer says whether the level counted.
+      s.posting++;
+      try { sent = await post(t, made, s.replace); } finally { s.posting--; }
+    }
     if (sent === 'duplicate' || sent === 'retired') {
       // Held already, or served once and let go: it counts toward nothing (not the count, the room or the cap), so
       // the grade makes another.

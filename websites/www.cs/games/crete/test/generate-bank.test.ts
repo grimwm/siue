@@ -163,6 +163,31 @@ test('with more workers than room, a filling part that comes back empty is made 
   assert.deepEqual(made.added, { easy: 22, medium: 22, hard: 1 });
 });
 
+test('turnover also waits on a filling grade\'s level being posted: one the bank does not count is made again first', async () => {
+  // Hard has room for two, made side by side; the bank already holds the first, and says so late, after the second
+  // part has finished: Hard's room is not filled yet, so nothing turns over.
+  let hardPosts = 0;
+  const f = fake({
+    workers: 4, counts: async () => counts(shelf(1500), shelf(1500), shelf(1498)),
+    upload: async (tuple, made, replace) => {
+      if (!replace && hardPosts++ === 0) {
+        for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r));
+        f.posted.push({ tuple, made, replace, sent: 'duplicate' });
+        return 'duplicate';
+      }
+      f.posted.push({ tuple, made, replace });
+      return 'ok';
+    },
+  });
+  const made = await generateAll(f.deps, { ms: 60_000 });
+  const posted = f.posted as { tuple: { grade: string }; replace: boolean; sent?: string }[];
+  const firstReplace = posted.findIndex(p => p.replace);
+  const counted = posted.flatMap((p, i) => (!p.replace && !p.sent ? [i] : []));
+  assert.equal(counted.length, 2);
+  assert.ok(firstReplace > counted[1]!, `Hard's room is filled (posts ${counted}) before any turnover (post ${firstReplace})`);
+  assert.deepEqual(made.added, { easy: 22, medium: 22, hard: 2 });
+});
+
 test('a full grade is replaced only with what the run made: a slow run retires fewer', async () => {
   const turnover = 22;
   const full = () => counts(shelf(1500), shelf(1500), shelf(1500, {}, 1125, 563));

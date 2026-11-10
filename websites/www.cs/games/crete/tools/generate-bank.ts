@@ -8,8 +8,8 @@
  * scarcest: the plateau, large boards especially, which a run's own search seldom finds in time. It never makes more
  * than fits under a grade's cap, counting the levels waiting in quarantine.
  *
- * A full grade still turns over: each run makes up to TURNOVER_SHARE of its cap and posts each with `replace`, so the
- * server retires one served level (its own weighted pick, old and often-served first) for each one it takes in. Only
+ * A full grade still turns over, but only once every grade is full (no grade filling has room or a part running): each
+ * run makes up to TURNOVER_SHARE of its cap and posts each with `replace`, so the server retires one served level (its own weighted pick, old and often-served first) for each one it takes in. Only
  * what this run actually made goes in, so a slow run retires fewer and the grade never drops below its cap.
  *
  * Each level is one part of a search (generate.ts's makePart, PART_BUDGET situations), from a tuple of its own: a
@@ -114,13 +114,17 @@ export function tallyOf(counts: Counts): Record<Grade, Tally> {
 /** A grade's part time so far, its running parts reckoned at its average finished part (or PART_GUESS_MS). */
 const timeOf = (s: Tally) => s.spent + s.running * (s.done ? s.spent / s.done : PART_GUESS_MS);
 
-/** The level to make next, or null when no grade has room or turnover left. The grade is the one furthest behind its
- *  TIME_SHARE of the run's part time, among the grades with empty room, and once none has, among the full grades
- *  turning over (Hard first on a tie); on the plateau until PLATEAU_SHARE of the grade is, and a large board until
- *  LARGE_SHARE of its plateau is, on every LARGE_EVERY-th part the grade is asked for. */
+/** The level to make next, or null when no grade has room or turnover left, or when turnover must wait. The grade is
+ *  the one furthest behind its TIME_SHARE of the run's part time, among the grades with empty room, and once none has,
+ *  among the full grades turning over (Hard first on a tie); on the plateau until PLATEAU_SHARE of the grade is, and a
+ *  large board until LARGE_SHARE of its plateau is, on every LARGE_EVERY-th part the grade is asked for. Turnover
+ *  starts only once every grade is full: while a grade that is filling still has room or a part running (one that
+ *  comes back empty gives its room back), nothing turns over, and generateAll waits for a running part to finish. */
 export function nextWant(t: Readonly<Record<Grade, Tally>>): Want | null {
   let grade: Grade | null = null, best = Infinity;
+  const filling = GRADES.some(g => !t[g].replace && (t[g].room > 0 || t[g].running > 0));
   for (const replace of [false, true]) {
+    if (replace && filling) break;
     for (const g of GRADES) {
       const p = timeOf(t[g]) / TIME_SHARE[g];
       if (t[g].replace === replace && t[g].room > 0 && p < best) { grade = g; best = p; }

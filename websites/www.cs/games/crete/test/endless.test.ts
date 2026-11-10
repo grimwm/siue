@@ -174,14 +174,9 @@ test('the worker holds every released level\'s text for the new-layout check', (
   assert.deepEqual(CAMPAIGN_TEXTS.map(t => t.id), [...LEVEL_IDS]);
 });
 
-test('the tier: Chapter 1 always, each chapter whose teaching levels are all cleared in order, all once everything is', () => {
-  const none = new Set<string>();
-  assert.equal(tierOf(CHAPTERS, id => none.has(id)), 1);
-  const ch = (n: number, k: number) => CHAPTERS[n - 1]!.levelIds.slice(0, k);
-  const some = new Set([...ch(2, 3), ...ch(3, 3), ...ch(5, 3)]);
-  assert.equal(tierOf(CHAPTERS, id => some.has(id)), 3, 'Chapter 4 not taught yet, so 5 waits too');
-  assert.equal(tierOf(CHAPTERS, id => new Set(ch(2, 2)).has(id)), 1, 'a chapter half taught does not count');
-  assert.equal(tierOf(CHAPTERS, () => true), 10);
+test('the tier: every released chapter\'s pieces, whatever the campaign says', () => {
+  assert.equal(tierOf(CHAPTERS), CHAPTERS.filter(c => c.released).length);
+  assert.equal(tierOf(CHAPTERS), 10);
 });
 
 test('names and words: the same seed and depth name the same hall; the cards\' kickers', () => {

@@ -220,7 +220,7 @@ const endless = createEndlessMode({
   grade: () => endlessGrade.get(),
   setGrade: grade => endlessGrade.set(grade),
   client: endlessClient,
-  tier: () => tierOf(CHAPTERS, id => progress.get(id).cleared),
+  tier: () => tierOf(CHAPTERS),
   newSeed: () => newSeed(Math.random),
   play: (level, about, line) => outside.play(level, about, line),
   changed: () => { ui.refresh(); followEndless(); },
@@ -261,7 +261,7 @@ function followEndless(): void {
     run: inEndlessRun(), warm: endlessWarm, shown: pageShown, solving: solverBusy(), battery: endlessBattery,
     endlessIdle: endless.idle(), on: helpsBuild(), sendsNothing, specBudget: endlessBudget !== undefined,
   }));
-  if (!demo.active() && (endlessWarm || ui.top() === 'endless')) void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS, id => progress.get(id).cleared));
+  if (!demo.active() && (endlessWarm || ui.top() === 'endless')) void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS));
 }
 watchSolver(() => followEndless());
 /** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */

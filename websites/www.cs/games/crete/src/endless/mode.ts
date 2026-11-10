@@ -47,7 +47,7 @@ export interface EndlessDeps {
   /** The search made `made` as part `part` of `req`'s search: it goes up to the shared bank. */
   made?(req: Request, part: number, made: MadeAt): void;
   /** Every level, not only a run's first, comes from the shared bank when one fits, and the search runs only when
-   *  none does: the player has not turned Help Build Endless Levels on. Asked each time. */
+   *  none does: the device does not help build Endless levels (src/settings.ts helpsBuild). Asked each time. */
   bankFirst?(): boolean;
 }
 

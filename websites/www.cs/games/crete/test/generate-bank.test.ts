@@ -58,6 +58,18 @@ test('Hard\'s plateau comes first, large boards especially, and each grade with 
   assert.equal(nextWant(full), null);
 });
 
+test('turnover waits until every grade is full: a filling grade\'s running part holds it back', () => {
+  const t = tallyOf(counts(shelf(1500), shelf(1499), shelf(1500)));
+  assert.equal(t.medium.replace, false);
+  // Medium's last room is taken by a part still running: nothing turns over yet, as that part may come back empty.
+  t.medium.room = 0; t.medium.running = 1;
+  assert.equal(nextWant(t), null);
+  // It finished and filled the grade: turnover begins, Hard first.
+  t.medium.running = 0; t.medium.done = 1;
+  assert.equal(nextWant(t)!.grade, 'hard');
+  for (const g of ['easy', 'hard'] as const) assert.equal(t[g].replace, true);
+});
+
 test('a tuple is a real request the generator takes, at the place wanted, and a large want leans to large drafts', () => {
   let s = 1;
   const random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
@@ -137,6 +149,43 @@ test('it never makes more than fits, and stops for a full grade or a spent hourl
   assert.ok(r.tried <= 6 && r.refused === r.tried, 'at most one round of two parts per grade');
   const rate = fake({ upload: async () => 'rate' });
   assert.ok((await generateAll(rate.deps, { ms: 60_000 })).tried <= 2, 'a spent share stops the run');
+});
+
+test('with more workers than room, a filling part that comes back empty is made again before any turnover', async () => {
+  // Hard has room for one; Easy and Medium are full. Hard's first part makes nothing.
+  const f = fake({ workers: 4, counts: async () => counts(shelf(1500), shelf(1500), shelf(1499)), empty: i => i === 0 });
+  const made = await generateAll(f.deps, { ms: 60_000 });
+  const posted = f.posted as { tuple: { grade: string }; replace: boolean }[];
+  const firstReplace = posted.findIndex(p => p.replace);
+  const filled = posted.findIndex(p => !p.replace && p.tuple.grade === 'hard');
+  assert.ok(filled >= 0 && firstReplace > filled, `Hard's room is filled (post ${filled}) before any turnover (post ${firstReplace})`);
+  assert.equal(posted.filter(p => !p.replace).length, 1);
+  assert.deepEqual(made.added, { easy: 22, medium: 22, hard: 1 });
+});
+
+test('turnover also waits on a filling grade\'s level being posted: one the bank does not count is made again first', async () => {
+  // Hard has room for two, made side by side; the bank already holds the first, and says so late, after the second
+  // part has finished: Hard's room is not filled yet, so nothing turns over.
+  let hardPosts = 0;
+  const f = fake({
+    workers: 4, counts: async () => counts(shelf(1500), shelf(1500), shelf(1498)),
+    upload: async (tuple, made, replace) => {
+      if (!replace && hardPosts++ === 0) {
+        for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r));
+        f.posted.push({ tuple, made, replace, sent: 'duplicate' });
+        return 'duplicate';
+      }
+      f.posted.push({ tuple, made, replace });
+      return 'ok';
+    },
+  });
+  const made = await generateAll(f.deps, { ms: 60_000 });
+  const posted = f.posted as { tuple: { grade: string }; replace: boolean; sent?: string }[];
+  const firstReplace = posted.findIndex(p => p.replace);
+  const counted = posted.flatMap((p, i) => (!p.replace && !p.sent ? [i] : []));
+  assert.equal(counted.length, 2);
+  assert.ok(firstReplace > counted[1]!, `Hard's room is filled (posts ${counted}) before any turnover (post ${firstReplace})`);
+  assert.deepEqual(made.added, { easy: 22, medium: 22, hard: 2 });
 });
 
 test('a full grade is replaced only with what the run made: a slow run retires fewer', async () => {

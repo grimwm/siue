@@ -46,7 +46,7 @@ import { createEditor } from './editor/editor.ts';
 import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
 import { createVisit, fragmentKind } from './share/visit.ts';
-import { createSettings } from './settings.ts';
+import { createSettings, HELP_BUILD, helpsBuild as helpsBuildFor } from './settings.ts';
 import type { Look, PadSide, WallMode } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
@@ -187,17 +187,18 @@ const endlessSaves = Object.fromEntries(GRADES.map(g => [g, createEndlessSaved(b
 const endlessGrade = gradePref(browserStorage());
 const endlessWorker = () => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker;
 const endlessClient = createEndlessClient(endlessWorker, () => endlessWorkers(), partStore(browserStorage(), ENDLESS_WORKER_V));
-/* The shared bank (src/endless/shared.ts). A player who turned Help Build Endless Levels on sends every level the
-   search makes up to it and checks others' levels in the background (the verifier); runs take a level from it when
-   one fits for their first level, the rest coming from the search. Until then (unset is off) nothing goes up, nothing
-   is checked, and every level comes from the bank when one fits, the search making one only when none does. Do Not
-   Track or Global Privacy Control keeps the sending off whatever the switch says; shared levels still come in. */
+/* The shared bank (src/endless/shared.ts). While HELP_BUILD (src/settings.ts) is false, no player helps: nothing goes
+   up, nothing is checked, and every level comes from the bank when one fits, the search making one only when none
+   does. While it is true, a player who turned Help Build Endless Levels on sends every level the search makes up to
+   it and checks others' levels in the background (the verifier); their runs take a level from it when one fits for
+   their first level, the rest coming from the search. Do Not Track or Global Privacy Control keeps the sending off
+   whatever the switch says; shared levels still come in. */
 const sendsNothing = (() => {
   const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
   return nav.doNotTrack === '1' || (window as unknown as { doNotTrack?: string }).doNotTrack === '1' || nav.globalPrivacyControl === true;
 })();
-/** The player turned Help Build Endless Levels on (src/settings.ts). */
-const helpsBuild = (): boolean => settings.helpBuild.get() === 'on';
+/** This device helps build Endless levels: asking is on and the player turned the switch on (src/settings.ts). */
+const helpsBuild = (): boolean => helpsBuildFor(settings.helpBuild.get());
 const sharedBank = createSharedBank({
   fetch: (url, init) => fetch(url, init),
   storage: browserStorage(),
@@ -450,6 +451,13 @@ function toggleMinimap(): void {
   ui.setMinimap(on);
   modern?.minimap(on);
   ui.say(on ? 'Mini Map on.' : 'Mini Map off.', 'info');
+}
+
+/** The menu's switch and the card that asks once, only while players are asked (HELP_BUILD): without them the page
+ *  shows neither. */
+function helpBuildControls(): { toggleHelpBuild?: () => void; setHelpBuild?: (on: boolean) => void } {
+  if (!HELP_BUILD) return {};
+  return { toggleHelpBuild: () => setHelpBuild(!helpsBuild()), setHelpBuild: on => setHelpBuild(on, false) };
 }
 
 /* Help Build Endless Levels: the player's answer, from the menu's switch or the card that asks once. */
@@ -921,7 +929,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, toggleHelpBuild: () => setHelpBuild(!helpsBuild()), setHelpBuild: on => setHelpBuild(on, false), showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, ...helpBuildControls(), showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
     endless: { mode: endless, link: endlessLink, copy: link => { void copyLink(link); } },
     demo: { start: startDemo },

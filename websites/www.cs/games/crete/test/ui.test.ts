@@ -315,10 +315,13 @@ const editor = {
   key: (ev: KeyboardEvent) => { editorKeys.push(ev.key); return false; },
 };
 const looks: string[] = [];
-flow.bindControls({
+/** The page's controls: the Help Build ones stand while asking is on (src/settings.ts HELP_BUILD), and a test takes
+ *  them away to see the page with asking off. */
+const controls: Parameters<typeof flow.bindControls>[0] = {
   game, toggleMute() {}, toggleMusic() { musics++; }, toggleHelpBuild() { helpBuilds++; }, setHelpBuild(on) { answers.push(on); }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: (at?: number) => (at === undefined ? flow.showChapter(1, false) : flow.showChapter(chapterOf(at).chapter.n, false, at)), backToEditor: () => { backs++; },
   editor, leftEditor: () => { edits.push('left'); },
-});
+};
+flow.bindControls(controls);
 // Answered already: New Game and Endless go straight on (the card that asks once has its own test).
 flow.setHelpBuild('off');
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
@@ -598,6 +601,33 @@ test('the Help Build card: down and up move between its buttons and Enter presse
   assert.equal(flow.top(), 'look');
   flow.setHelpBuild('off');
   flow.closeLayers();
+});
+
+test('with asking off (no Help Build controls), New Game never asks (nor Endless, through the same askFirst), whatever was stored, and the menu has no switch', () => {
+  const { toggleHelpBuild, setHelpBuild } = controls;
+  delete controls.toggleHelpBuild;
+  delete controls.setHelpBuild;
+  try {
+    for (const stored of ['unset', 'on', 'off'] as const) {
+      reset();
+      answers.length = 0;
+      flow.setHelpBuild(stored);
+      flow.showTitle(false);
+      key('n');
+      assert.equal(flow.top(), 'look', `${stored}: New Game goes straight on`);
+      assert.deepEqual(answers, []);
+      flow.closeLayers();
+      key('q');
+      assert.equal(flow.top(), 'menu');
+      assert.equal(maybeById(rootOf('menu'), 'help-build'), undefined, `${stored}: no switch in the menu`);
+      flow.closeLayers();
+    }
+  } finally {
+    controls.toggleHelpBuild = toggleHelpBuild;
+    controls.setHelpBuild = setHelpBuild;
+    flow.setHelpBuild('off');
+    flow.closeLayers();
+  }
 });
 
 test('Music sits beside Sound in the menu, says whether it is on, and asks for its switch', () => {

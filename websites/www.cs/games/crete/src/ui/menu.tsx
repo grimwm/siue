@@ -47,7 +47,8 @@ export interface MenuProps {
   onWalls: (walls: WallMode) => void;
   onPad: (side: PadSide) => void;
   onMinimap: () => void;
-  onHelpBuild: () => void;
+  /** The Help Build Endless Levels switch: without it the menu shows no such switch. */
+  onHelpBuild?: () => void;
   /** Whether Show View Tips shows: in the modern look, and on a touch screen in either look (the touch tour). */
   viewTips: boolean;
   onViewTips: () => void;
@@ -114,10 +115,12 @@ export function Menu(p: MenuProps) {
               <Button id="fullscreen" class="menu-row" checked={p.fullscreen} keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>
                 <span class="menu-row-name">Full Screen</span><span class="switch" aria-hidden="true" />
               </Button>
-              <Button id="help-build" class="menu-row" checked={p.helpBuild} onClick={p.onHelpBuild}>
-                <span class="menu-row-name">Help Build Endless Levels<small>Uses this device's idle time to make and check new levels</small></span>
-                <span class="switch" aria-hidden="true" />
-              </Button>
+              {p.onHelpBuild && (
+                <Button id="help-build" class="menu-row" checked={p.helpBuild} onClick={p.onHelpBuild}>
+                  <span class="menu-row-name">Help Build Endless Levels<small>Uses this device's idle time to make and check new levels</small></span>
+                  <span class="switch" aria-hidden="true" />
+                </Button>
+              )}
             </div>
           </section>
           <section class="menu-sec" data-section="look" aria-labelledby="menu-board-h">

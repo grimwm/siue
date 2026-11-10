@@ -20,6 +20,19 @@ export const HELP_CHECK_KEY = "crete-help-check";
 /** Help Build Endless Levels: on or off as the player answered, unset (off) until they do. */
 export type HelpBuild = "on" | "off" | "unset";
 
+/** Whether players are asked to help build Endless levels. Internal, never shown to players. While false, the card
+ *  that asks is never shown, the menu has no Help Build Endless Levels switch, and no device makes, checks or uploads
+ *  levels for the shared bank, whatever it answered before: every Endless level comes from the shared bank when one
+ *  fits (the levels there are built by the repository's GitHub Actions jobs), the search making one only when none
+ *  does. The stored answer is left as it is, so setting this to true brings back the switch, the card for players who
+ *  never answered, and the helping for players who said yes. */
+export const HELP_BUILD = false;
+
+/** This device helps build Endless levels: asking is on (`HELP_BUILD`) and the player said yes. */
+export function helpsBuild(answer: HelpBuild, asking: boolean = HELP_BUILD): boolean {
+  return asking && answer === "on";
+}
+
 /** How the board is drawn: the painted 3D look, or the flat tiles. */
 export type Look = "modern" | "classic";
 /** How the modern look draws the walls that stand in front of the player. */

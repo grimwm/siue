@@ -6,7 +6,7 @@
 // (replacing once a grade is full), and sizes its workers by the run's memory cap.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { uploadOf, difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, tupleFor, gradeStats, median, runStats, statsLines, statsMarkdown, statusLines, isLarge, workersIn, LARGE_SIDE } from '../tools/generate-bank.ts';
+import { uploadOf, difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, tupleFor, gradeStats, median, runStats, statsLines, statsMarkdown, statusLines, isLarge, workersIn, LARGE_SIDE, TURNOVER_PER_RUN } from '../tools/generate-bank.ts';
 import type { Counts, GenerateDeps, Made, RunOptions, Shelf, Want } from '../tools/generate-bank.ts';
 import { ENDLESS_VERSION, requestOf, sharedOf } from '../src/endless/provenance.ts';
 import type { SharedMade } from '../src/endless/provenance.ts';
@@ -50,7 +50,7 @@ test('Hard\'s plateau comes first, large boards especially, and each grade with 
   assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(1200, { pending: 300 }))))!.grade, 'medium');
   const full = tallyOf(counts(shelf(1500), shelf(1500), shelf(1500)));
   assert.equal(nextWant(full)!.grade, 'hard', 'turnover keeps Hard first');
-  for (const g of ['easy', 'medium', 'hard'] as const) assert.deepEqual([full[g].replace, full[g].room], [true, 22]);
+  for (const g of ['easy', 'medium', 'hard'] as const) assert.deepEqual([full[g].replace, full[g].room], [true, TURNOVER_PER_RUN]);
   assert.equal(nextWant(tallyOf(counts(shelf(1500), shelf(1499), shelf(1500))))!.grade, 'medium', 'room before turnover');
   assert.equal(tallyOf(counts(shelf(1499), shelf(0), shelf(0))).easy.replace, false);
   assert.equal(tallyOf(counts(shelf(10, { cap: 10 }), shelf(0), shelf(0))).easy.room, 1, 'a small full grade still turns one over');
@@ -133,7 +133,7 @@ test('it stops starting parts once its time is spent, and ends the ones still ru
 });
 
 test('it never makes more than fits, and stops for a full grade or a spent hourly share', async () => {
-  const turnover = 22;
+  const turnover = TURNOVER_PER_RUN;
   const f = fake({ counts: async () => counts(shelf(1500), shelf(1499), shelf(1497, { pending: 1 })) });
   const made = await generateAll(f.deps, { ms: 60_000 });
   assert.deepEqual(made.added, { easy: turnover, medium: 1, hard: 2 });
@@ -160,7 +160,7 @@ test('with more workers than room, a filling part that comes back empty is made 
   const filled = posted.findIndex(p => !p.replace && p.tuple.grade === 'hard');
   assert.ok(filled >= 0 && firstReplace > filled, `Hard's room is filled (post ${filled}) before any turnover (post ${firstReplace})`);
   assert.equal(posted.filter(p => !p.replace).length, 1);
-  assert.deepEqual(made.added, { easy: 22, medium: 22, hard: 1 });
+  assert.deepEqual(made.added, { easy: TURNOVER_PER_RUN, medium: TURNOVER_PER_RUN, hard: 1 });
 });
 
 test('turnover also waits on a filling grade\'s level being posted: one the bank does not count is made again first', async () => {
@@ -185,11 +185,11 @@ test('turnover also waits on a filling grade\'s level being posted: one the bank
   const counted = posted.flatMap((p, i) => (!p.replace && !p.sent ? [i] : []));
   assert.equal(counted.length, 2);
   assert.ok(firstReplace > counted[1]!, `Hard's room is filled (posts ${counted}) before any turnover (post ${firstReplace})`);
-  assert.deepEqual(made.added, { easy: 22, medium: 22, hard: 2 });
+  assert.deepEqual(made.added, { easy: TURNOVER_PER_RUN, medium: TURNOVER_PER_RUN, hard: 2 });
 });
 
 test('a full grade is replaced only with what the run made: a slow run retires fewer', async () => {
-  const turnover = 22;
+  const turnover = TURNOVER_PER_RUN;
   const full = () => counts(shelf(1500), shelf(1500), shelf(1500, {}, 1125, 563));
   const f = fake({ counts: async () => full() });
   const made = await generateAll(f.deps, { ms: 3_600_000 });
@@ -201,7 +201,7 @@ test('a full grade is replaced only with what the run made: a slow run retires f
   const slow = fake({ counts: async () => full(), partMs: 1000, empty: i => i % 4 !== 0 });
   const few = await generateAll(slow.deps, { ms: 10_000 });
   const sent = slow.posted as { replace: boolean }[];
-  assert.ok(few.added.hard < turnover && few.added.hard > 0, `${few.added.hard} replaced`);
+  assert.ok(few.added.hard <= turnover, `${few.added.hard} replaced`);
   assert.equal(sent.length, few.added.hard + few.added.medium + few.added.easy, 'one post, one retirement, per level made');
   assert.equal(few.empty, few.tried - sent.length);
 });

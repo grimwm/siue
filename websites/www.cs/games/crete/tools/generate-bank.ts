@@ -9,8 +9,9 @@
  * than fits under a grade's cap, counting the levels waiting in quarantine.
  *
  * A full grade still turns over, but only once every grade is full (no grade filling has room or a part running): each
- * run makes up to TURNOVER_SHARE of its cap and posts each with `replace`, so the server retires one served level (its own weighted pick, old and often-served first) for each one it takes in. Only
- * what this run actually made goes in, so a slow run retires fewer and the grade never drops below its cap.
+ * run makes TURNOVER_PER_RUN (one) level for each full grade and posts it with `replace`, so the server retires one
+ * served level (its own weighted pick, old and often-served first) for it. Only what this run actually made goes in,
+ * so a run that makes none retires none and the grade never drops below its cap.
  *
  * Each level is one part of a search (generate.ts's makePart, PART_BUDGET situations), from a tuple of its own: a
  * fresh seed, a tier, the grade, a depth and a part, and a run memory of one level from the grade's bundled bank
@@ -68,8 +69,8 @@ export const LARGE_SHARE: Readonly<Record<Grade, number>> = { hard: 0.5, medium:
 export const LARGE_EVERY = 3;
 /** A board is large when its long side reaches the top of its grade's plateau sides (Hard 21, Medium 19, Easy 17). */
 export const LARGE_SIDE: Readonly<Record<Grade, number>> = { hard: SIDES.hard.plateau[1], medium: SIDES.medium.plateau[1], easy: SIDES.easy.plateau[1] };
-/** The share of a full grade's cap each run replaces with fresh levels: 1.5%, 22 levels at a cap of 1,500. */
-export const TURNOVER_SHARE = 0.015;
+/** The levels each run makes for a full grade, each replacing one served level: one per grade per run. */
+export const TURNOVER_PER_RUN = 1;
 /** Memory a worker may use: its heap limit, and what the planner keeps free for the rest of the runner. */
 export const WORKER_HEAP_MB = 1536;
 export const WORKER_MB = 2048;
@@ -108,7 +109,7 @@ export function tallyOf(counts: Counts): Record<Grade, Tally> {
     }
     const room = Math.max(0, s.cap - s.served - s.pending);
     const replace = room === 0 && s.served > 0;
-    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.floor(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0, spent: 0, done: 0, running: 0, posting: 0 };
+    out[g] = { cap: s.cap, room: replace ? TURNOVER_PER_RUN : room, replace, total: s.served, plateau, large, asked: 0, spent: 0, done: 0, running: 0, posting: 0 };
   }
   return out;
 }

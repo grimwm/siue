@@ -703,8 +703,8 @@ final class Bank
      * page), at most `limit`, and the page also ends once its items pass
      * EXPORT_BYTES; `next` is the hash to pass as `after` for the next page,
      * null after the last. A served level carries its tuple from
-     * prov-<grade>-<h>.json, or null when the bank keeps none (a level a peer
-     * verified); a pending one its own. Read-only: it takes the grade's lock
+     * prov-<grade>-<h>.json (kept by addVerified, and by admit for a level
+     * peers verified), or null when the bank keeps none; a pending one its own. Read-only: it takes the grade's lock
      * to read a whole store, and changes no count, no file and no level.
      * Never sends the install or network codes a store keeps.
      * @param array<string, mixed> $body {op, grade, list, after, limit}
@@ -1092,7 +1092,10 @@ final class Bank
 
     /**
      * Moves pending item $i into the served pool (unless its layout is already
-     * there) and rolls out what the cap no longer holds.
+     * there) and rolls out what the cap no longer holds. The tuple that made
+     * it goes beside it as prov-<grade>-<h>.json, as addVerified keeps one,
+     * so a backup can make it again; trustedCounts forgets it once the level
+     * leaves the pool.
      * @param list<array<string, mixed>> $served
      * @param list<array<string, mixed>> $pending
      */
@@ -1102,6 +1105,10 @@ final class Bank
         array_splice($pending, $i, 1);
         if (in_array($entry['h'], array_column($served, 'h'), true)) {
             return;
+        }
+        $tuple = $entry['tuple'] ?? null;
+        if (is_array($tuple) && is_string($tuple['grade'] ?? null) && in_array($tuple['grade'], self::GRADES, true)) {
+            $this->writeIfChanged("{$this->dir}/prov-{$tuple['grade']}-{$entry['h']}.json", '', $tuple);
         }
         $served[] = self::servedEntry($entry['made'], $entry['h'], $entry['v'], ($this->clock)());
         $this->admitted[] = $entry['h'];

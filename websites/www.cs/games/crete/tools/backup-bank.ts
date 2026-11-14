@@ -5,8 +5,9 @@
  *
  * A served level carries what it takes to put it back or make it again: its layout hash `h`, the level (`made`), the
  * times it was served (`n`), its generator version and when it came in, and the provenance `tuple` the bank keeps
- * beside it (null for a level players' devices verified, whose tuple the bank does not keep). The manifest holds each
- * file's counts, bytes, gzipped bytes and SHA-256, the time, the bank's host and this machine's name.
+ * beside it, whether the trusted runner added the level or players' devices verified it (null when the bank has none).
+ * The manifest holds each file's counts, bytes, gzipped bytes and SHA-256, the time, the bank's host and this
+ * machine's name.
  *
  * Over HTTPS only; the CRETE_BANK_VERIFIER_TOKEN secret goes in the X-Crete-Verifier header and is never printed. A
  * post the bank fails is tried again, and only failures that persist stop it (tools/bank-post.ts). Exits 0 with every

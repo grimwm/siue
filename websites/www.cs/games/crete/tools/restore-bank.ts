@@ -4,7 +4,7 @@
  * backup's served levels it has none of with `trusted-add`, through tools/upload-bank.ts's upload, never with
  * `replace`: a restore never retires a level the bank serves, so a full grade keeps what it has and says how many it
  * left out. A layout the bank has retired since stays out (the bank never takes one back), and so does a level the
- * backup holds without a tuple (one players' devices verified: trusted-add needs one). Levels that were waiting are
+ * backup holds without a tuple (trusted-add needs one). Levels that were waiting are
  * never posted: they were not verified. `--dry-run` says what it would post and posts nothing.
  *
  * Over HTTPS only; the CRETE_BANK_VERIFIER_TOKEN secret goes in the X-Crete-Verifier header and is never printed.

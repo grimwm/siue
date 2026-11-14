@@ -624,30 +624,33 @@ test('the first key of any colour shows one Keys card naming all four colours; a
 test('on a phone, a banner stands under a toast that wraps to three lines, never over it', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, storageState: helpAnswered() });
   await ctx.addInitScript(allMet);
-  const page = await ctx.newPage();
-  const errors = await openMirrors(page);
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('ArrowRight');
-  await expect(page.locator('#banner .banner-row[data-entry="mirror"]'), 'a banner for the mirror').toBeVisible();
-  // The longest kind of line the toast says, long enough to wrap to three lines at this width.
-  await page.evaluate(() => {
-    const toast = document.getElementById('toast')!;
-    toast.textContent = 'The Minotaur is two steps away: a mirror held up now turns him to stone for three turns, and the way past him is clear.';
-    toast.className = 'toast show info';
-  });
-  const lines = await page.evaluate(() => {
-    const t = document.getElementById('toast')!;
-    return Math.round((t.clientHeight - parseFloat(getComputedStyle(t).paddingTop) - parseFloat(getComputedStyle(t).paddingBottom)) / parseFloat(getComputedStyle(t).lineHeight));
-  });
-  expect(lines, 'the toast wraps to three lines').toBeGreaterThanOrEqual(3);
-  await expect.poll(() => page.evaluate(() => {
-    const t = document.getElementById('toast')!.getBoundingClientRect();
-    const b = document.querySelector('#banner .banner-box')!.getBoundingClientRect();
-    return b.top - t.bottom;
-  }), 'the banner starts below the toast\'s last line').toBeGreaterThanOrEqual(4);
-  await page.screenshot({ path: test.info().outputPath('toast-banner-phone.png') });
-  expect(errors).toEqual([]);
-  await ctx.close();
+  try {
+    const page = await ctx.newPage();
+    const errors = await openMirrors(page);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('#banner .banner-row[data-entry="mirror"]'), 'a banner for the mirror').toBeVisible();
+    // The longest kind of line the toast says, long enough to wrap to three lines at this width.
+    await page.evaluate(() => {
+      const toast = document.getElementById('toast')!;
+      toast.textContent = 'The Minotaur is two steps away: a mirror held up now turns him to stone for three turns, and the way past him is clear.';
+      toast.className = 'toast show info';
+    });
+    const lines = await page.evaluate(() => {
+      const t = document.getElementById('toast')!;
+      return Math.round((t.clientHeight - parseFloat(getComputedStyle(t).paddingTop) - parseFloat(getComputedStyle(t).paddingBottom)) / parseFloat(getComputedStyle(t).lineHeight));
+    });
+    expect(lines, 'the toast wraps to three lines').toBeGreaterThanOrEqual(3);
+    await expect.poll(() => page.evaluate(() => {
+      const t = document.getElementById('toast')!.getBoundingClientRect();
+      const b = document.querySelector('#banner .banner-box')!.getBoundingClientRect();
+      return b.top - t.bottom;
+    }), 'the banner starts below the toast\'s last line').toBeGreaterThanOrEqual(4);
+    await page.screenshot({ path: test.info().outputPath('toast-banner-phone.png') });
+    expect(errors).toEqual([]);
+  } finally {
+    await ctx.close();
+  }
 });
 
 /* ---- the false walls: a fake wall is walked through on one move, an invisible wall's bump costs a turn ---- */

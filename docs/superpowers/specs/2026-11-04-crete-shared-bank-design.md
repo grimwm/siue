@@ -191,7 +191,9 @@ copy). `StoreDir` (`games/_kit/php/store-dir.php`) checks the folder and writes 
 grade: `served-<grade>.json` and `pending-<grade>.json`; plus `keys.json` (the network key) and the guard's rate
 store, and one small `prov-<grade>-<hash>.json` per served level (one the trusted runner added or one peers verified
 and admitted), holding its tuple, deleted once
-the level has left the served pool (when the runner next reads the counts). Every change to a grade takes an
+the level has left the served pool (when the runner next reads the counts). A served level without one (peers
+admitted it before admit kept a tuple, and nothing writes one afterwards) is exported with `"tuple": null`, and a
+restore leaves it out. Every change to a grade takes an
 exclusive `flock` on `<grade>.lock` and writes each file whole to a new
 temporary file in the same folder, then renames it over the old one, so a reader never sees half a file.
 

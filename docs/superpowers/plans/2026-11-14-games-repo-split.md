@@ -55,8 +55,9 @@ The consumers it serves from the start:
 2. Make the new repository from a `git filter-repo` copy of `siue`, keeping the games' history.
 3. Give it its own CI: the unit, PHPUnit and browser suites, and the trusted runner.
 4. Build the chosen distribution (release artifacts, submodule or package) and document how a consumer pins it.
-5. Switch `siue` to consume the games that way; delete its copy; keep its deploy of www.cs working unchanged for
+5. Move the bank's deploy (`deploy.yml`'s `bank` job and `games/crete/tools/deploy-bank.sh`, with what it needs) to
+   its new home and retire it from `siue`'s `deploy.yml`, so nothing in `siue` still needs the games' tools.
+6. Switch `siue` to consume the games that way; delete its copy; keep its deploy of www.cs working unchanged for
    players.
-6. Switch `happystl` to serve the games from its own host, then its `/play/` pages to point there.
-7. Move the bank's deploy to its new home and retire it from `siue`'s `deploy.yml`.
+7. Switch `happystl` to serve the games from its own host, then its `/play/` pages to point there.
 8. Update the READMEs, `AGENTS.md` and the roadmap of every repository involved.

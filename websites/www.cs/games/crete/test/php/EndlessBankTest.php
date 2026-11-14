@@ -1119,6 +1119,7 @@ final class EndlessBankTest extends TestCase
             $added[Bank::layoutHash($text)] = "ci-$i";
         }
         $this->admit($bank, self::level(1410), 'peer');
+        $added[Bank::layoutHash(self::level(1410))] = self::tuple()['seed'];
         $bank->levels('easy', 1, 3);
         $this->submit($bank, self::level(1420), 'waiting', self::A, ['seed' => 'wait-1']);
         $this->submit($bank, self::level(1421), 'waiting2', self::B, ['seed' => 'wait-2']);
@@ -1136,7 +1137,7 @@ final class EndlessBankTest extends TestCase
             self::assertSame(['h', 'v', 'at', 'made', 'n', 'tuple'], array_keys($item));
             self::assertSame($stored[$item['h']]['made'], $item['made']);
             self::assertSame($stored[$item['h']]['n'], $item['n'], 'its served count');
-            self::assertSame($added[$item['h']] ?? null, $item['tuple']['seed'] ?? null, 'the tuple kept beside it, or none for a peer-verified level');
+            self::assertSame($added[$item['h']] ?? null, $item['tuple']['seed'] ?? null, 'the tuple kept beside it, a peer-verified level\'s too');
         }
         self::assertSame(3, array_sum(array_column($served, 'n')));
 
@@ -1147,6 +1148,37 @@ final class EndlessBankTest extends TestCase
 
         self::assertSame([['h' => '1234567890123456'], ['h' => 'aaaa000011112222'], ['h' => 'ffff000011112222']], $this->exportAll($bank, 'easy', 'retired', 1));
         self::assertSame([], $this->exportAll($bank, 'hard', 'served', 500), 'an empty grade');
+    }
+
+    public function testALevelPeersVerifyKeepsItsTupleUntilItLeaves(): void
+    {
+        $bank = $this->bank();
+        $this->verifierFile();
+        $text = self::level(1440, 15, 'Made on a phone');
+        $h = Bank::layoutHash($text);
+        $tuple = self::tuple(['seed' => 'phone-7', 'depth' => 4]);
+        $this->submit($bank, $text, 'up', self::A, ['seed' => 'phone-7', 'depth' => 4]);
+        $this->claimAndVerify($bank, 'v1', self::A, self::made($text));
+        self::assertFileDoesNotExist("{$this->dir}/prov-easy-$h.json", 'nothing kept while it waits');
+        $this->claimAndVerify($bank, 'v2', self::B, self::made($text));
+        self::assertSame([], $this->stored('pending-easy.json'));
+        self::assertSame([$h], array_column($this->stored('served-easy.json'), 'h'), 'served after two peers');
+
+        $served = $this->exportAll($bank, 'easy', 'served', 500);
+        self::assertCount(1, $served);
+        $want = $tuple;
+        $want['run'][0]['text'] = Bank::blank($want['run'][0]['text']);
+        self::assertSame($want, $served[0]['tuple'], 'the tuple it came in with, as checked, for a backup to make it again');
+        self::assertSame($want, $this->stored("prov-easy-$h.json"), 'kept the way trusted-add keeps one');
+
+        $this->trusted($bank, ['op' => 'trusted-counts']);
+        self::assertFileExists("{$this->dir}/prov-easy-$h.json", 'kept while it is served');
+        foreach ([['a', self::B], ['c', self::C]] as [$who, $addr]) {
+            $bank->report(['op' => 'report', 'install' => self::install($who), 'grade' => 'easy', 'h' => $h], $addr);
+        }
+        self::assertSame([], $this->stored('served-easy.json'), 'two reports retire it');
+        $this->trusted($bank, ['op' => 'trusted-counts']);
+        self::assertFileDoesNotExist("{$this->dir}/prov-easy-$h.json", 'forgotten once it leaves');
     }
 
     public function testATrustedExportIsReadOnlyEvenWhereAWriteWouldPrune(): void

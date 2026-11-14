@@ -527,13 +527,15 @@ button:disabled { opacity: 0.45; cursor: default; }
 .dict-tally, .dict-empty { margin: 0; color: var(--dim); font-size: 0.85rem; }
 
 /* The banner on a later pickup: in the board's row under the toast, over the board and under every card. It takes no
-   pointer, so play goes on beneath it. It slides in, holds and fades in BANNER_MS (src/notices.ts). */
+   pointer, so play goes on beneath it. It slides in, holds and fades in BANNER_MS (src/notices.ts). It stands 6px
+   under the shown toast however many lines that wraps to (--toast-h, src/ui/toast-room.ts; the toast's top is 10px),
+   and never higher than 48px. */
 .banner {
   position: absolute;
   grid-row: 2;
   grid-column: 1;
   left: 50%;
-  top: 48px;
+  top: max(48px, calc(16px + var(--toast-h, 0px)));
   z-index: 5;
   width: max-content;
   max-width: min(92%, 26rem);

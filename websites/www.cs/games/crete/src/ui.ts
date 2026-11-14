@@ -41,6 +41,7 @@ import { statusView } from "./status.ts";
 import { activeEffects, pickupWatch, saidText } from "./tool-effects.ts";
 import type { Said } from "./tool-effects.ts";
 import { renderToast } from "./ui/toast.tsx";
+import { watchToastRoom } from "./ui/toast-room.ts";
 import { centredOn, createSheetView, eye, holdTarget, keepInView, panned, project, sheetCell, unproject, wholeFrame } from "./sheet.ts";
 import type { Frame } from "./sheet.ts";
 import { createCompassButton } from "./modern/controls.ts";
@@ -2040,6 +2041,8 @@ export function createUi(deps: UiDeps): Ui {
     bindPad();
     // A tap on the toast puts it away.
     $("toast").addEventListener("click", () => $("toast").classList.remove("show"));
+    // The banner stands under the toast however many lines it wraps to.
+    watchToastRoom($("toast"), $("frame"));
 
     // A tap anywhere but on the Thread panel or its button shuts the panel.
     document.addEventListener("pointerdown", (e) => {

@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes next for Crete, the music workroom and the site's visitor statistics, in order, with the document
+What comes next for Crete, the music workroom, the site's visitor statistics and the games' own repository, in order, with the document
 each step starts from. A step with a design but no plan gets its plan written
 (`docs/superpowers/plans/`) when work on it begins.
 
@@ -78,3 +78,8 @@ dashboard on the admin hub, and the privacy note (`privacy.html`).
 
 1. **New games** count on their own once their `build.json` builds `stats-page.ts` and their page loads
    `dist/stats.js`; a game's new events join `Collector::EVENTS`.
+
+## The games' own repository
+
+1. **Splitting the games out** into a repository that `siue` and happystl.com both pull in and deploy — later plan
+   `plans/2026-11-14-games-repo-split.md`. Not started: do when the owner asks; brainstorm first.

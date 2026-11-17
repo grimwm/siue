@@ -1,0 +1,20 @@
+import { chromium } from '/Users/wgrim/Documents/Repositories/siue/websites/www.cs/tests/e2e/node_modules/playwright/index.mjs';
+const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1100, height: 900 } });
+await p.goto(process.argv[2]); await p.waitForTimeout(1200);
+const res = await p.$$eval('.dev', devs => devs.map(d => {
+  const name = d.dataset.dev, probs = [];
+  const over = (el, what) => { if (el.scrollWidth > el.clientWidth + 0.5) probs.push(`${what} overflows by ${el.scrollWidth - el.clientWidth}px`); };
+  const st = d.querySelector('.status'); over(st, 'status bar');
+  const rows = st.classList.contains('two') ? [...st.querySelectorAll('.row')] : [st];
+  rows.forEach((r, i) => { over(r, `status row ${i+1}`);
+    const kids = [...r.children].filter(k => k.offsetWidth > 0 && !k.classList.contains('grow'));
+    const tops = new Set(kids.map(k => Math.round(k.getBoundingClientRect().top + k.getBoundingClientRect().height / 2)));
+    if (tops.size > 1) probs.push(`status row ${i+1} wraps`); });
+  d.querySelectorAll('.pill, .seg, .menu, .stat, .btn, .fire').forEach(el => { if (el.getClientRects().length > 1 || el.scrollWidth > el.clientWidth + 0.5) probs.push(`${el.className} clipped`); });
+  const deck = d.querySelector('.deck'); if (deck) over(deck, 'deck');
+  const sc = d.querySelector('.screen'); if (sc.scrollHeight > sc.clientHeight + 0.5) probs.push(`screen taller than device by ${sc.scrollHeight - sc.clientHeight}px`);
+  const scene = d.querySelector('.scene'); const sh = scene.getBoundingClientRect().height / (sc.getBoundingClientRect().height / sc.offsetHeight);
+  return [name, Math.round(sh), probs];
+}));
+for (const [n, sh, pr] of res) console.log(n.padEnd(36), 'battlefield', String(sh).padStart(4) + 'px', pr.length ? pr.join('; ') : 'OK');
+await b.close();

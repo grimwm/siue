@@ -1,0 +1,168 @@
+<style>
+  .tk { --bg:#05060f; --panel:#0c0f2e; --line:#3a3fb0; --gold:#ffc93c; --ink:#eef; --dim:#9aa3c7; font-family: system-ui, sans-serif; }
+  .tk .desk, .tk .por, .tk .lan { color:var(--ink); }
+  .tk .scene { position:relative; background:radial-gradient(circle at 85% 18%, #2a2d55 0 3%, transparent 9%), linear-gradient(#05060f 0 72%, #7a4a20 72%); border-radius:8px; overflow:hidden; }
+  .tk .scene::after { content:""; position:absolute; left:0; right:0; top:71%; height:3px; background:#2c2; }
+  .tk .unit { position:absolute; z-index:1; font-size:9px; font-weight:800; text-align:center; }
+  .tk .unit::after { content:""; display:block; margin:2px auto 0; width:16px; height:9px; border-radius:6px 6px 2px 2px; background:currentColor; }
+  .tk .status { display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:6px 8px; font-size:11.5px; white-space:nowrap; overflow:hidden; }
+  .tk .status .k { color:var(--dim); font-size:10px; letter-spacing:.06em; }
+  .tk .menu { display:inline-flex; align-items:center; gap:6px; height:26px; box-sizing:border-box; background:var(--gold); color:#111; font-weight:800; border-radius:6px; padding:0 9px; line-height:1; }
+  .tk .menu kbd { margin:0; }
+  .tk .pill.ammo { display:inline-flex; align-items:center; gap:4px; background:#11163a; border:1px solid #ffb13c; border-radius:999px; padding:2px 8px; }
+  .tk .pill.ammo b { color:#ffb13c; }
+  .tk .wind { display:inline-flex; align-items:center; gap:4px; background:#11163a; border:1px solid #5a63e0; border-radius:999px; padding:2px 8px; }
+  .tk .wind .arrow { color:var(--gold); font-weight:900; letter-spacing:-2px; }
+  .tk .grow { flex:1; }
+  .tk .hearts { color:#f47; letter-spacing:1px; }
+  .tk .toast { position:absolute; z-index:2; top:8px; left:50%; transform:translateX(-50%); font-size:10px; background:rgba(12,15,46,.88); border:1px solid var(--line); border-radius:7px; padding:3px 9px; white-space:nowrap; }
+  .tk .toast b { color:#ff0; }
+
+  .tk .deck { display:flex; align-items:stretch; justify-content:space-between; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px; }
+  .tk .grp { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .tk .grp .gl { font-size:9px; letter-spacing:.12em; color:var(--dim); text-transform:uppercase; }
+  .tk .row { display:flex; gap:4px; align-items:center; }
+  .tk .btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; min-width:44px; min-height:40px; padding:3px 6px; border-radius:8px; border:1.5px solid var(--c,#667); background:#0a0d26; color:var(--ink); font-size:10px; font-weight:700; }
+  .tk .btn .ic { font-size:14px; line-height:1; color:var(--c); }
+  .tk .btn.gold { background:var(--gold); border-color:var(--gold); color:#111; }
+  .tk .btn.gold .ic { color:#111; }
+  .tk .aim { display:grid; grid-template-columns:repeat(3,auto); gap:3px; }
+  .tk .aim .btn { min-width:44px; min-height:30px; font-size:9px; }
+  .tk .fire { display:flex; flex-direction:column; align-items:center; justify-content:center; width:78px; border-radius:14px; background:#e33; color:#fff; font-weight:900; font-size:14px; box-shadow:0 0 0 4px rgba(238,51,51,.3); }
+  .tk .fire small { font-size:9px; font-weight:700; opacity:.9; }
+  .tk .weap { border:1.5px solid #ffb13c; border-radius:8px; padding:3px 8px; font-size:10px; font-weight:700; background:#0a0d26; color:var(--ink); white-space:nowrap; }
+  .tk .weap b { color:#ffb13c; }
+
+  .tk .desk { width:100%; max-width:820px; display:flex; flex-direction:column; gap:6px; background:var(--bg); padding:8px; border-radius:12px; }
+  .tk .desk .scene { aspect-ratio: 16/7; }
+  .tk .por { width:230px; height:470px; border-radius:24px; border:3px solid #333; background:var(--bg); padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .tk .lan { width:470px; height:230px; border-radius:24px; border:3px solid #333; background:var(--bg); padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .tk .por .scene, .tk .lan .scene { flex:1; }
+  .tk .por .status, .tk .lan .status { font-size:9px; gap:5px; padding:4px 5px; }
+  .tk .por .status { flex-wrap:wrap; row-gap:3px; }
+  .tk .por .status .k, .tk .lan .status .k { font-size:8px; }
+  .tk .por .menu, .tk .lan .menu { padding:3px 6px; }
+  .tk .por .deck { flex-wrap:wrap; gap:6px; padding:6px; align-items:stretch; }
+  .tk .por .btn, .tk .lan .btn { min-width:38px; min-height:34px; font-size:8.5px; padding:2px 4px; }
+  .tk .lan .btn { font-size:9.5px; }
+  .tk .lan .scene .btn.gold { background:rgba(255,201,60,.55); border-color:rgba(255,201,60,.9); color:#fff; text-shadow:0 0 2px #000, 0 1px 2px #000; }
+  .tk .lan .scene .btn.gold .ic { color:#fff; }
+  .tk .lan .aim .btn { font-size:9.5px !important; min-width:40px; min-height:30px; }
+  .tk .por .aim .btn, .tk .lan .aim .btn { min-width:36px; min-height:26px; font-size:8px; }
+  .tk .por .fire { width:64px; font-size:12px; border-radius:12px; }
+  .tk .ov { position:absolute; z-index:2; }
+  .tk .lan .fire { width:64px; height:44px; border-radius:12px; font-size:11px; }
+  .tk kbd { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; height:15px; padding:1px 5px 0; font:700 9px/1 system-ui, sans-serif; letter-spacing:.02em; color:#eef0ff; background:#14183a; border:1px solid #3a3f78; border-bottom:2px solid #000; border-radius:4px; margin-top:2px; box-shadow:0 1px 0 rgba(255,255,255,.15); }
+      .tk .phones { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-top:14px; }
+  .tk .cap { font-size:11px; color:var(--dim); margin:4px 0 0; }
+  .tk table.legend { border-collapse:collapse; font-size:12px; margin-top:12px; }
+  .tk table.legend td, .tk table.legend th { border-bottom:1px solid #ddd; padding:4px 10px 4px 0; text-align:left; vertical-align:top; }
+</style>
+
+<h2>The whole game, every button (v10: dark keycaps)</h2>
+<p class="subtitle">Key chips are one light keycap style on every button (gold, dark or red), centred with their label. Menu has its chip inline (A); deck buttons stack it under the word. Ammo lives in the status bar; the Weapon button shows damage and blast size. Phones have no key chips.</p>
+<p class="subtitle">Every control shows an icon and a word, so nothing depends on hover tooltips (which phones never show). Aim, Drive and Fire are separate groups, so the two pairs of left/right arrows can't be confused. Radio, Next song and Help stay one tap away; less-used ones move into the Menu.</p>
+
+<div class="tk">
+  <div class="desk">
+    <div class="status">
+      <span class="menu"><svg width="14" height="14" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 7h18M4 13h18M4 19h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>Menu<kbd>Esc</kbd></span>
+      <span><span class="k">ANGLE</span> <b>62°</b></span>
+      <span><span class="k">POWER</span> <b>34</b></span>
+      <span><span class="k">FUEL</span> <b>80</b></span>
+      <span class="pill ammo"><span class="k">AMMO</span> <b>∞</b></span>
+      <span><span class="k">ARMOR</span> <b>100</b> <span class="hearts">♥♥♥</span></span>
+      <span class="wind"><span class="k">WIND</span> <span class="arrow">➜➜➜</span> <b>7</b></span>
+      <span class="grow"></span>
+      <span style="color:var(--dim)">$600 · round 1 · 0 pts</span>
+    </div>
+    <div class="scene">
+      <span class="toast"><b>TANK</b> Must be the wind. Definitely the wind.</span>
+      <span class="unit" style="left:10%;top:60%;color:#fc3">TANK</span>
+      <span class="unit" style="left:28%;top:60%;color:#f33">REAPER</span>
+      <span class="unit" style="left:58%;top:48%;color:#3dd">WRAITH</span>
+      <span class="unit" style="left:84%;top:60%;color:#e3e">SPOTTER</span>
+    </div>
+    <div class="deck">
+      <div class="grp"><span class="gl">Aim</span>
+        <div class="aim">
+          <span></span><span class="btn gold"><span class="ic">▲</span>power<kbd>↑</kbd></span><span></span>
+          <span class="btn gold"><span class="ic">◀</span>barrel<kbd>←</kbd></span><span class="btn gold"><span class="ic">▼</span>power<kbd>↓</kbd></span><span class="btn gold"><span class="ic">▶</span>barrel<kbd>→</kbd></span>
+        </div>
+      </div>
+      <div class="grp"><span class="gl">Drive (uses fuel)</span>
+        <div class="row"><span class="btn" style="--c:#7ddf64"><span class="ic">⇠</span>Left<kbd>Shift ←</kbd></span><span class="btn" style="--c:#7ddf64"><span class="ic">⇢</span>Right<kbd>Shift →</kbd></span></div>
+      </div>
+      <div class="grp"><span class="gl">More</span>
+        <div class="row"><span class="btn" style="--c:#6fe4ff"><span class="ic">📻</span>Radio<kbd>L</kbd></span><span class="btn" style="--c:#ff7ad9"><span class="ic">♫</span>Next song<kbd>]</kbd></span><span class="btn" style="--c:#8f8fff"><span class="ic">?</span>Help<kbd>H</kbd></span></div>
+      </div>
+      <div class="grp"><span class="gl">Weapon</span>
+        <span class="btn" style="--c:#ffb13c"><span class="ic" style="font-size:11px;line-height:14px;font-weight:800">🔘 Shell</span>34 dmg · M<kbd>G</kbd></span>
+      </div>
+      <div class="grp" style="margin-left:14px"><span class="gl">&nbsp;</span>
+        <span class="fire" style="height:58px;width:110px;border-radius:12px">FIRE<kbd>Space</kbd></span>
+      </div>
+    </div>
+  </div>
+  <p class="cap">desktop: every control shows its key. Chips appear wherever the device has a mouse or trackpad (CSS <code>(hover: hover) and (pointer: fine)</code>) and are read from the game's key table, so a rebinding in game.yaml shows up on screen. Help (H) lists every key, including the ones without a button (Q next weapon, V preview).</p>
+
+  <div class="phones">
+    <div>
+      <div class="por">
+        <div class="status">
+          <span class="menu">☰ Menu</span><span><span class="k">ANGLE</span><b>62°</b></span><span><span class="k">PWR</span><b>34</b></span><span><span class="k">FUEL</span><b>80</b></span><span class="pill ammo"><span class="k">AMMO</span><b>∞</b></span>
+          <span class="wind"><span class="arrow">➜➜</span><b>7</b></span><span class="hearts">♥♥♥</span><span style="color:var(--dim)">$600 · r1</span>
+        </div>
+        <div class="scene"><span class="toast" style="font-size:8px"><b>TANK</b> Must be the wind.</span>
+          <span class="unit" style="left:8%;top:60%;color:#fc3;font-size:7px">TANK</span><span class="unit" style="left:70%;top:60%;color:#e3e;font-size:7px">SPOTTER</span></div>
+        <div class="deck">
+          <div class="aim" style="align-self:flex-start">
+            <span></span><span class="btn gold"><span class="ic">▲</span>pwr</span><span></span>
+            <span class="btn gold"><span class="ic">◀</span>barrel</span><span class="btn gold"><span class="ic">▼</span>pwr</span><span class="btn gold"><span class="ic">▶</span>barrel</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;align-self:stretch;flex:1;max-width:76px">
+            <span class="weap" style="font-size:8.5px;min-height:26px;display:flex;align-items:center;justify-content:center;box-sizing:border-box">🔘&nbsp;<b>Shell</b></span>
+            <span class="fire" style="flex:1;width:auto">FIRE</span>
+          </div>
+          <div class="grp" style="width:100%"><div class="row" style="width:100%;justify-content:space-between">
+            <span class="btn" style="--c:#7ddf64"><span class="ic">⇠</span>Drive</span><span class="btn" style="--c:#7ddf64"><span class="ic">⇢</span>Drive</span><span class="btn" style="--c:#6fe4ff"><span class="ic">📻</span>Radio</span><span class="btn" style="--c:#8f8fff"><span class="ic">?</span>Help</span>
+          </div></div>
+        </div>
+      </div>
+      <p class="cap">phone, portrait (Next song moves into the Menu)</p>
+    </div>
+    <div>
+      <div class="lan">
+        <div class="status">
+          <span class="menu">☰ Menu</span><span><span class="k">ANGLE</span> <b>62°</b></span><span><span class="k">POWER</span> <b>34</b></span><span><span class="k">FUEL</span> <b>80</b></span><span class="pill ammo"><span class="k">AMMO</span> <b>∞</b></span><span class="hearts">♥♥♥</span>
+          <span class="wind"><span class="k">WIND</span> <span class="arrow">➜➜➜</span><b>7</b></span><span class="grow"></span><span style="color:var(--dim)">$600 · r1</span>
+        </div>
+        <div class="scene">
+          <span class="toast" style="font-size:8px"><b>TANK</b> Must be the wind.</span>
+          <span class="unit" style="left:30%;top:60%;color:#fc3;font-size:7px">TANK</span><span class="unit" style="left:60%;top:48%;color:#3dd;font-size:7px">WRAITH</span>
+          <div class="aim ov" style="left:6px;bottom:6px">
+            <span></span><span class="btn gold"><span class="ic">▲</span>pwr</span><span></span>
+            <span class="btn gold"><span class="ic">◀</span>barrel</span><span class="btn gold"><span class="ic">▼</span>pwr</span><span class="btn gold"><span class="ic">▶</span>barrel</span>
+          </div>
+          <div class="row ov" style="left:50%;transform:translateX(-50%);bottom:6px">
+            <span class="btn" style="--c:#7ddf64"><span class="ic">⇠</span>Drive</span><span class="btn" style="--c:#7ddf64"><span class="ic">⇢</span>Drive</span>
+          </div>
+          <div class="ov" style="right:6px;bottom:6px;display:flex;flex-direction:column;align-items:stretch;gap:8px;width:72px">
+            <span class="weap" style="font-size:9.5px;text-align:center">🔘 <b>Shell</b></span>
+            <span class="fire" style="width:auto;height:40px">FIRE</span>
+          </div>
+        </div>
+      </div>
+      <p class="cap">phone, landscape (Radio, Help, Next song in the Menu)</p>
+    </div>
+  </div>
+
+  <table class="legend">
+    <tr><th>Today</th><th>Becomes</th></tr>
+    <tr><td>Yellow d-pad, unlabelled (“◀▶ barrel · ▲▼ power” under it on desktop only)</td><td><b>Aim</b> group; every arrow says barrel or power</td></tr>
+    <tr><td>Green ↶ ↷ icons</td><td><b>Drive</b> group: “⇠ Left / ⇢ Right”, titled “uses fuel”</td></tr>
+    <tr><td>Red crosshair icon (Fire) + orange gun icon (Weapons)</td><td>One <b>Weapon</b> group: the loaded gun's name (tap to change) above a big <b>FIRE</b></td></tr>
+    <tr><td>Cyan radio, pink note, purple ? icons</td><td>Labelled <b>Radio</b>, <b>Next song</b>, <b>Help</b></td></tr>
+    <tr><td>Wind badge floating in the sky</td><td>In the status bar</td></tr>
+  </table>
+</div>

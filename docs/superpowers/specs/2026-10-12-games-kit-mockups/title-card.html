@@ -1,0 +1,100 @@
+<style>
+  .tk { --bg:#05060f; --panel:#0c0f2e; --line:#3a3fb0; --gold:#ffc93c; --ink:#eef; --dim:#9aa3c7; font-family: system-ui, sans-serif; }
+  .tk .scene { position:relative; background:linear-gradient(#05060f 0 62%, #7a4a20 62%); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .tk .scene::after { content:""; position:absolute; left:0; right:0; top:60%; height:3px; background:#2c2; }
+  .tk .desk { width:100%; aspect-ratio: 16/9; }
+  .tk .phone { width:200px; height:400px; border-radius:22px; border:3px solid #333; background:var(--bg); padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .tk .phone .scene { flex:1; }
+  .tk .veil { position:absolute; inset:0; background:rgba(5,6,15,.55); display:flex; align-items:center; justify-content:center; z-index:2; }
+  .tk .card { background:var(--panel); border:1px solid var(--gold); border-radius:12px; padding:14px; color:var(--ink); text-align:center; width:min(78%, 300px); }
+  .tk .card h4 { margin:0 0 4px; font-size:18px; letter-spacing:.04em; color:var(--gold); }
+  .tk .card p { margin:0 0 10px; font-size:11px; color:var(--dim); }
+  .tk .big { display:block; width:100%; background:var(--gold); color:#111; font-weight:800; border-radius:9px; padding:10px; font-size:15px; margin-bottom:7px; }
+  .tk .sec { display:block; width:100%; border:1px solid var(--line); color:var(--ink); border-radius:9px; padding:7px; font-size:12px; margin-bottom:6px; background:#11163a; }
+  .tk .row { display:flex; gap:6px; } .tk .row .sec { flex:1; }
+  .tk .tiny { font-size:10px; color:var(--dim); }
+  .tk .bar { display:flex; gap:5px; align-items:center; padding:5px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  .tk .tool { width:24px; height:24px; border-radius:6px; border:1px solid #556; background:#11163a; }
+  .tk .menubtn { background:var(--gold); color:#111; font-weight:800; font-size:11px; border-radius:6px; padding:4px 8px; white-space:nowrap; }
+  .tk .badge { position:absolute; top:8px; left:8px; z-index:2; background:#c22; color:#fff; font-weight:800; font-size:10px; padding:3px 7px; border-radius:5px; letter-spacing:.08em; }
+  .tk .playbar { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); z-index:2; background:var(--gold); color:#111; font-weight:800; border-radius:999px; padding:8px 18px; font-size:14px; box-shadow:0 0 0 4px rgba(255,201,60,.25); white-space:nowrap; }
+  .tk .pair { display:flex; gap:14px; align-items:flex-start; }
+  .tk .pair > .deskwrap { flex:1; min-width:0; }
+  .tk .note { font-size:12px; color:var(--dim); margin-top:6px; }
+</style>
+
+<h2>Tankity: how a player starts a game</h2>
+<p class="subtitle">Today a demo match plays on load and looks like a real game; New Game hides in the ☰ (C) menu next to an optional seed box. Each option shows desktop (left) and phone (right). Click the one you prefer, then reply in the terminal.</p>
+
+<div class="options tk">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Title card over the demo (recommended)</h3>
+      <p>The demo keeps running dimmed behind a start card. One huge <b>Play</b>; Rooms and Tutorial beside it; settings tucked behind a link. On a phone the card fills the screen with thumb-sized buttons, and the site's title block collapses.</p>
+      <div class="pair">
+        <div class="deskwrap">
+          <div class="bar"><span class="menubtn">☰ Menu</span><span class="tool"></span><span class="tool"></span><span class="tool"></span><span class="tool"></span><span class="tool"></span></div>
+          <div class="scene desk" style="margin-top:6px">
+            <div class="veil"><div class="card">
+              <h4>OPERATION TANKITY</h4><p>Mind the wind. Flatten the drone battery.</p>
+              <span class="big">▶ Play</span>
+              <div class="row"><span class="sec">👥 Play with friends</span><span class="sec">🎓 Tutorial</span></div>
+              <span class="tiny">Unit · seed · sound &amp; text size → Settings</span>
+            </div></div>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="scene">
+            <div class="veil" style="background:rgba(5,6,15,.75)"><div class="card" style="width:86%">
+              <h4>OPERATION<br>TANKITY</h4><p>Mind the wind.</p>
+              <span class="big" style="padding:14px">▶ Play</span>
+              <span class="sec">👥 Play with friends</span><span class="sec">🎓 Tutorial</span>
+              <span class="tiny">Settings</span>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Labelled demo with a floating Play button</h3>
+      <p>The demo stays fully visible with a DEMO badge and a pulsing <b>Play</b> pill over the hills. Lighter touch, but Rooms and Tutorial stay inside the menu.</p>
+      <div class="pair">
+        <div class="deskwrap">
+          <div class="bar"><span class="menubtn">☰ Menu</span><span class="tool"></span><span class="tool"></span><span class="tool"></span><span class="tool"></span><span class="tool"></span></div>
+          <div class="scene desk" style="margin-top:6px"><span class="badge">DEMO</span><span class="playbar">▶ Play now</span></div>
+        </div>
+        <div class="phone">
+          <div class="scene"><span class="badge">DEMO</span><span class="playbar" style="padding:12px 22px">▶ Play now</span></div>
+          <div class="bar"><span class="menubtn">☰ Menu</span><span class="tool"></span><span class="tool"></span><span class="tool"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>No demo: straight into your match</h3>
+      <p>Loading drops you into a real solo match, with a one-line "your turn: ◀▶ aim, ▲▼ power, fire" coach on first visit. Fastest to play; the attract demo goes away, and Rooms/Tutorial live in the menu.</p>
+      <div class="pair">
+        <div class="deskwrap">
+          <div class="bar"><span class="menubtn">☰ Menu</span><span class="tool"></span><span class="tool"></span><span class="tool"></span><span class="tool"></span><span class="tool"></span></div>
+          <div class="scene desk" style="margin-top:6px"><span class="playbar" style="background:#11163a;color:#eef;box-shadow:none;border:1px solid var(--gold)">Your turn: ◀▶ aim · ▲▼ power · 🎯 fire</span></div>
+        </div>
+        <div class="phone">
+          <div class="scene"><span class="playbar" style="background:#11163a;color:#eef;box-shadow:none;border:1px solid var(--gold);font-size:10px;white-space:normal;width:80%;text-align:center">Your turn: ◀▶ aim · ▲▼ power · 🎯 fire</span></div>
+          <div class="bar"><span class="menubtn">☰ Menu</span><span class="tool"></span><span class="tool"></span><span class="tool"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="note">All three replace the "(C)" key hint with a labelled <b>☰ Menu</b> button that opens on <b>Esc</b> (and closes on Esc again), the convention most games use. The menu itself becomes settings only: unit, seed, text size, sound, music, fullscreen.</p>

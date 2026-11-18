@@ -55,7 +55,8 @@ storage, scoreboards, music, long games, the Scorched Earth arsenal with fall da
 limits. Nothing in the design is unbuilt. What is left is small tidying, for one pull request:
 
 1. **Dead code** — the server's one-human match branch (`startHumans < 2`, `filedLocal`, and the browser's
-   `roomLocalSaver`), which a one-human Start can no longer reach; Tankity's unused guard run and rate settings
+   `roomLocalSaver`), which a one-human Start can no longer reach (a room started with one human before that rule keeps the branch
+   alive for as long as its player keeps taking turns, so check that none is live before removing it); Tankity's unused guard run and rate settings
    (`TANKITY_GUARD_RUNS` in `server/guard.php`); the `closed` table, which nothing writes (a schema step 9 drops it);
    and the kit's `Panel`, which no game uses.
 2. **One YAML reader** — `games/hub.php` and the kit's `install-core.php` each read the same YAML subset.

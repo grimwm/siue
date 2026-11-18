@@ -296,6 +296,12 @@ test('Next Level draws the new level at once under its start card, in both looks
     await page.locator('#start-begin').click();
     for (const s of await line(page)) await page.keyboard.press(KEY[s]!);
     await expect(page.locator('#end-next')).toBeVisible();
+    // Every class the board wears from the press on, in order.
+    await page.evaluate(() => {
+      const el = document.getElementById('board')!;
+      const seen: string[] = ((window as unknown as { __boardSeen: string[] }).__boardSeen = [el.className]);
+      new MutationObserver(() => seen.push(el.className)).observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
     await page.locator('#end-next').click();
     await expect(page.locator('#start-veil')).toBeVisible();
     // The board keeps the frame's middle row under the card, and fades in to full there while the card is up.
@@ -305,6 +311,17 @@ test('Next Level draws the new level at once under its start card, in both looks
     await expect.poll(() => page.locator(surface).evaluate(el => Number(getComputedStyle(el).opacity)), { message: `${look}: the board fades in` }).toBe(1);
     const shown = (await page.locator(surface).boundingBox())!;
     expect(shown.height, `${look}: drawn in the board, under the card`).toBeGreaterThan(300);
+    // The modern board builds the level before it can draw it: the board waits hidden till then, so the level
+    // before never shows under the new card. The classic board draws at once and never waits.
+    const seen = await page.evaluate(() => (window as unknown as { __boardSeen: string[] }).__boardSeen);
+    expect(seen.some(c => c.includes('board-wait')), `${look}: the board waited hidden for its level (${seen.join(' | ')})`).toBe(look === 'modern');
+    // The loading sign stands in the board's place only while it waits.
+    const sign = page.locator('#board .board-loader');
+    await expect(sign).toBeHidden();
+    expect(await sign.textContent()).toBe('Loading Level…');
+    await page.evaluate(() => document.getElementById('board')!.classList.add('board-wait'));
+    await expect(sign).toBeVisible();
+    await page.evaluate(() => document.getElementById('board')!.classList.remove('board-wait'));
     await expect(page.locator('#start-veil')).toBeVisible();
     expect(await page.evaluate(() => window.__creteTest.game.run.now.moves)).toBe(0);
     expect(errors).toEqual([]);

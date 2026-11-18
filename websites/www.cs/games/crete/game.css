@@ -133,6 +133,24 @@ button:disabled { opacity: 0.45; cursor: default; }
 .board.board-in-b > .stage-view, .board.board-in-b > .modern-area { animation: board-in-b 400ms ease-out both; }
 @keyframes board-in-a { from { opacity: 0; } }
 @keyframes board-in-b { from { opacity: 0; } }
+/* While the board waits for its level, a ring turns in its place with "Loading Level…" under it. It comes only
+   after 300ms, so a level that is ready at once never shows it. The ring turns by transform alone, which the
+   browser keeps moving while the page is busy building the level. */
+.board-loader { display: none; }
+.board.board-wait > .board-loader {
+  grid-area: 1 / 1; place-self: center; z-index: 1; display: grid; justify-items: center; gap: 12px;
+  color: var(--dim); font-size: 0.95rem; pointer-events: none; animation: board-loader-in 200ms ease-out 300ms both;
+}
+.board-loader-ring {
+  width: 40px; height: 40px; border-radius: 50%; border: 4px solid rgba(240, 180, 41, 0.22); border-top-color: var(--accent);
+  animation: board-loader-turn 900ms linear infinite; will-change: transform;
+}
+@keyframes board-loader-in { from { opacity: 0; } }
+@keyframes board-loader-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .board.board-wait > .board-loader { animation-duration: 1ms; }
+  .board-loader-ring { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .board.board-in-a > .stage-view, .board.board-in-a > .modern-area,
   .board.board-in-b > .stage-view, .board.board-in-b > .modern-area { animation: none; }

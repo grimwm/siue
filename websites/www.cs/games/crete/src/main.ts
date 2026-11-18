@@ -883,6 +883,7 @@ async function createModern(): Promise<void> {
         covered: () => ui.layersOpen() || demo.active(),
         gesture: () => ui.closeStart(),
         reducedMotion: () => reduced,
+        levelDrawn: () => ui.boardReady(),
       })
       : null;
   } catch (e) {
@@ -921,6 +922,8 @@ function noModern(why: string): void {
   modernFailed = true;
   modernFailure = why;
   setModernOn(false);
+  // The classic board shows what the modern one was to draw.
+  ui.boardReady();
   if (!modernWarned && settings.look.get() === 'modern') {
     modernWarned = true;
     ui.say(why, 'info');

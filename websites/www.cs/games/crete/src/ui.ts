@@ -177,6 +177,9 @@ export interface Ui {
   /** Whether the modern board shows: it fills the board's space, so the classic canvas is not fitted and nothing
    *  scrolls. */
   setModernBoard(on: boolean): void;
+  /** The modern board has drawn the level it was building: the board, hidden under its loading sign since the
+   *  level opened, fades in. */
+  boardReady(): void;
   /** Turns a move key or pad press, a direction on the screen, into the direction on the grid it moves. */
   setMoveDir(fn: (dir: MoveAction) => MoveAction): void;
   /** The classic board's heading and tilt as it shows them now. */
@@ -1091,6 +1094,25 @@ export function createUi(deps: UiDeps): Ui {
     el.className = [...rest, cls].filter(Boolean).join(" ");
   }
 
+  /** The modern board builds a level before it can draw it, and the level before must not show in its place:
+   *  the board waits hidden, its loading sign showing if the wait runs long (game.css), until the level is drawn.
+   *  A board that never says so shows after HOLD_MAX_MS all the same. */
+  const HOLD_MAX_MS = 8000;
+  let held = false;
+  let holdTimer = 0;
+  function holdBoard(): void {
+    held = true;
+    boardFade("wait");
+    timers.clearTimeout(holdTimer);
+    holdTimer = timers.setTimeout(boardReady, HOLD_MAX_MS);
+  }
+  function boardReady(): void {
+    if (!held) return;
+    held = false;
+    timers.clearTimeout(holdTimer);
+    boardFade("in");
+  }
+
   function render(g: Game): void {
     game = g;
     const run = g.run;
@@ -1120,8 +1142,10 @@ export function createUi(deps: UiDeps): Ui {
     // A level opened: the start card shows (a restart does not); the story log keeps its words.
     if (g.opens !== shownOpen) {
       shownOpen = g.opens;
-      // The new level fades in at once, under its start card (which waits for input as before), never a blank board.
-      boardFade("in");
+      // The new level fades in under its start card (which waits for input as before): at once on the classic
+      // board, and on the modern one once it has drawn the level, with the loading sign in its place until then.
+      if (modernBoard) holdBoard();
+      else boardFade("in");
       announced = [];
       pending = [];
       const name = out ? out.name : s.level.title;
@@ -2122,7 +2146,11 @@ export function createUi(deps: UiDeps): Ui {
       modernBoard = on;
       sized = "";
       fit();
+      // The modern board builds its level anew when it comes to show; the classic one draws at once.
+      if (on && (controls?.game ?? game)?.run) holdBoard();
+      else boardReady();
     },
+    boardReady,
     setMoveDir: (fn) => {
       moveDir = fn;
     },

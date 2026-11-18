@@ -71,6 +71,8 @@ export interface ModernHost {
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
   reducedMotion(): boolean;
+  /** The level built last has had its first frame drawn. */
+  levelDrawn?(): void;
   /** The level editor's brush: when given, one finger or the left button paints the cell under it (a ray through the
    *  pointer meets the floor) rather than moving the camera (paint-route.ts), and the cell under the mouse is framed.
    *  `first` marks the press that starts a stroke; `drop` undoes a stroke a second finger turned into a camera move. */
@@ -186,6 +188,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   let active = true;
   let drawn = 0;
+  /** Levels built so far; `warming` while the last one's programs compile; `announced` once its first frame is drawn. */
+  let built = 0;
+  let warming = false;
+  let announced = true;
   let raf = 0;
   let lastNow = -1e9;
   let chained = false;
@@ -322,7 +328,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   function frame(now: number): void {
     raf = 0;
-    if (!active) { chained = false; return; }
+    if (!active || warming) { chained = false; return; }
     const gap = now - lastNow;
     lastNow = now;
     // Only a frame the one before it asked for is part of an animation: its gap is a frame time.
@@ -390,6 +396,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       mini?.view(cur, aspect());
     }
     drawn++;
+    if (!announced) {
+      announced = true;
+      host.levelDrawn?.();
+    }
     chained = busy;
     if (busy) invalidate();
   }
@@ -594,6 +604,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   function level(s: State): void {
     teardown();
+    const mine = ++built;
     last = s;
     const { rows: nr, cols: nc } = s.level;
     filled = new Set(filledWater(s.level.terrain, s.terrain));
@@ -619,7 +630,17 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     Object.assign(cur, goal);
     aimWalls = loopsDirty = shadowsDirty = true;
     mini?.paint(s, { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) }, null);
-    invalidate();
+    // A level with another count of lights needs every material's program compiled again, which stalls the page
+    // when a draw has to wait for it. So the programs compile off the page's thread where the browser can, and
+    // no frame is drawn until they are ready; the page shows that the level is loading meanwhile (src/ui.ts).
+    warming = true;
+    announced = false;
+    const ready = (): void => {
+      if (mine !== built) return;
+      warming = false;
+      invalidate();
+    };
+    renderer.compileAsync(scene, camera).then(ready, ready);
     if (!loopTimer) scheduleLoops();
   }
 

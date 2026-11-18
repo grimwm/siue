@@ -1731,3 +1731,29 @@ test('Music in the background sits under Music, says whether it is on, and asks 
   flow.setBackground(true);
   assert.equal(hidden().getAttribute('aria-checked'), 'true');
 });
+
+test('on the modern board a new level waits hidden until the board says it is drawn; the classic board shows it at once', () => {
+  reset();
+  makeEl('board');
+  const waits = () => String(document.getElementById('board')!.className).includes('board-wait');
+  flow.setModernBoard(false);
+  game.open(0);
+  assert.ok(!waits(), 'the classic board shows the level at once');
+  // The modern board comes to show a level already open: it builds it first.
+  flow.setModernBoard(true);
+  assert.ok(waits(), 'hidden while the modern board builds the level');
+  flow.boardReady();
+  assert.ok(!waits(), 'shown once the level is drawn');
+  game.open(1);
+  assert.ok(waits(), 'the next level waits hidden too, so the level before never shows under its card');
+  flow.boardReady();
+  assert.ok(!waits());
+  // A second word from the board changes nothing, and going back to the classic board never leaves it hidden.
+  flow.boardReady();
+  assert.ok(!waits());
+  game.open(2);
+  assert.ok(waits());
+  flow.setModernBoard(false);
+  assert.ok(!waits(), 'the classic board shows at once');
+  flow.closeLayers();
+});

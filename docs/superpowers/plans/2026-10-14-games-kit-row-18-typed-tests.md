@@ -1,5 +1,11 @@
 # Games kit row 18: Typed Tests Implementation Plan
 
+> **Status: Built** (#110, #112, #113, #114, #115, #116, #118). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - PRs 6 to 10 here (all of Tankity) landed as one, #116.
+> - The conversion tools were deleted once the work was done, as planned; `_kit/test/typed-tests.test.ts` keeps the result.
+> - Row 18b, the browser specs in TypeScript, landed as #139.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every unit test in the games is TypeScript and type-checked by the build, and no test runs through a bridge. Every `*.test.mjs` under `games/` becomes `*.test.ts` on `node:test` directly. Every PHP check script becomes a real PHPUnit `TestCase`. Each game's `tsconfig.test.json` (with `@types/node`) joins its `build.json` programs. The `check()` and `LegacyCheckCase` bridges are deleted. `make test` stays within budget: static ≤ 15 s, unit ≤ 45 s.

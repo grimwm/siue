@@ -1,5 +1,10 @@
 # Tankity: Room Cap Redesign Implementation Plan
 
+> **Status: Partly replaced.** Tasks 1, 2 and 6 to 14 are built (#135, #136, #137). Tasks 3 to 5 (the lobby pool, taking and reclaiming slots, "closed to make space") were built, then removed by #142 for a disk guard (`room_db_max_mb`, 256). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - There is no `max_rooms` or `max_lobbies`; `lobbies_per_address` stays.
+> - The puzzle's difficulty at rest is 11 bits, one more to create and one more in a surge.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Real players are never starved out of Tankity's rooms by a handful of cooperating addresses, on one shared PHP 8.4 host with SQLite. Only a match with two or more humans at Start holds one of the `max_rooms` server slots. A one-human game plays in the browser, like solo. Lobbies wait in a cheap pool of their own. When every slot is taken, a new match reclaims the stalest room instead of being refused. Creating and joining cost a small proof of work, which gets harder under load. Room codes are long enough that guessing them is impractical.

@@ -1,5 +1,14 @@
 # Games Kit, Plan A: Foundation Implementation Plan
 
+> **Status: Built** (#70, #71, #73, #74, #75). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - Every unit test is `*.test.ts` and every browser spec `*.spec.ts`; `select.mjs` is `select.ts` (#110 to #118, #139).
+> - `LegacyCheckCase` and `check()` are gone: every PHP check is a plain PHPUnit `TestCase`.
+> - `build.json` also takes `versions`, `css`, `kitCss` and `inlined`, and the build writes stylesheets and `THIRD_PARTY_LICENSES.txt`.
+> - The unit tests run once for all games, from `games/units.sh`, not from each game's `test.sh`.
+> - Crete's old engine and `window.__mazeTest` went with the redesign (#156): `crete-play` drives the puzzle game through `window.__creteTest`.
+> - Tankity's `tankity-local` and `tankity-callsign` prefs became `src/local-board.ts` and `tankity-initials`. Old local scores move onto the new board; an old callsign is not carried over, so that browser gets fresh initials.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Pin today's Crete and Cylon behaviour with browser specs, add PHPUnit and a nightly full run, create the shared `games/_kit/` core, and move all three games onto it: bundled by esbuild into `dist/`, type-checked by TypeScript 7, and unit-tested with `node:test` and PHPUnit.

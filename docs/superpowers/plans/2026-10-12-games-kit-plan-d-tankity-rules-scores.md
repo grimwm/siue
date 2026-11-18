@@ -1,5 +1,16 @@
 # Games Kit, Plan D: Tankity's Rules and Scores Implementation Plan
 
+> **Status: Built** (#93, #94, #97, #100). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - Tasks S5 and 25 to 33 (old score files imported, solo runs refereed by the server) were replaced by Tasks R1 to R7: solo scores stay in the browser and `scores.php` answers every POST with 410.
+> - The schema is at step 8 (steps 6 to 8 came with long games and the room limits). The directory rules are the kit's `Kit\StoreDir`.
+> - There is no room cap: a disk guard (`room_db_max_mb`) replaced it (#142).
+> - A one-human Start makes no server match; the browser plays it as solo (#136).
+> - TypeScript has no `winnerBonus`: the snapshot carries `winBonus`. `endCardBack` and Q replace `endCardEscape` and Esc.
+> - Shop rules are in `src/buy.ts`; no gun is locked by round (#141). Rail and Lance are retired (#128).
+> - Buttons are in Title Case ("Play Again (Same Room)", "Leave Room", "Watch the Finish").
+> - The load test's p95 ceiling is 1000 ms; its hard check is no 503s.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** One SQLite database that holds everything Tankity keeps (rooms off shared memory, the online boards, per-address rate counts) in one private directory, cleaned up by the server itself; armor that carries between rounds; a room match that ends on the last human standing; per-match scoreboards; and scores that file themselves: room matches that two or more humans started go on one online board per difficulty, and solo matches and one-human rooms save on a board in the player's own browser.

@@ -1,5 +1,13 @@
 # Tankity: Long Games Implementation Plan
 
+> **Status: Built** (#106). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - Ruling 4's room cap of 50 is gone: a disk guard replaced it (#142).
+> - The last-act stamp is `acted`, and only turn-moving acts set it.
+> - A started room closes after max(600 s, humans × turn time); a lobby and a finished match after 600 s.
+> - The stand-in drone checks no unlock round (#141).
+> - The slider's first label is "Lightning · 1 min".
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rooms that play over minutes, hours or a week. The host picks the turn time on a 7-stop slider (Lightning 1 min, 2 min default, 10 min, 30 min, 8 h, 24 h, 1 week) and can change it mid-game; a turn that runs out is fired by a drone for that player, who keeps the seat; closing the tab keeps every seat, and a "Your games" list or the room link brings the player back; a toast (and, opted in, a browser notification) names the game that needs your turn; a room closes after (humans × turn time) with nobody acting, with no total-age cap.

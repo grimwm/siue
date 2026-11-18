@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes next for Crete, the music workroom, the site's visitor statistics and the games' own repository, in order, with the document
+What comes next for Crete, the games kit and Tankity, the music workroom, the site's visitor statistics and the games' own repository, in order, with the document
 each step starts from. A step with a design but no plan gets its plan written
 (`docs/superpowers/plans/`) when work on it begins.
 
@@ -45,6 +45,27 @@ tips) and Classic, chosen when a new game starts.
 4. **The campaign to Endless's rules** — redraw the campaign levels that a habit player wins or that are over the
    open-space ceiling (the report in `test/difficulty.test.ts` lists them), then hold the campaign to both rules.
    Chapter 1 stays as it is. Needs a plan.
+
+## The games kit and Tankity
+
+Design `specs/2026-10-12-games-kit-design.md`, which describes what stands today; its section 10 lists the pull
+request each part landed in, and each of its plans opens with its status. Live: the shared kit (`games/_kit/`) under
+every game, typed tests throughout, installable games with Install and Share, and Tankity's interface, rules,
+storage, scoreboards, music, long games, the Scorched Earth arsenal with fall damage and parachutes, and its room
+limits. Nothing in the design is unbuilt. What is left is small tidying, for one pull request:
+
+1. **Dead code** — the server's one-human match branch (`startHumans < 2`, `filedLocal`, and the browser's
+   `roomLocalSaver`), which a one-human Start can no longer reach; Tankity's unused guard run and rate settings
+   (`TANKITY_GUARD_RUNS` in `server/guard.php`); the `closed` table, which nothing writes (a schema step 9 drops it);
+   and the kit's `Panel`, which no game uses.
+2. **One YAML reader** — `games/hub.php` and the kit's `install-core.php` each read the same YAML subset.
+   `hub.php` runs on the host, where the kit is not deployed, so the shared reader would ship as a copied kit file.
+3. **Stale names** — the `.mjs` probe name in `tests/php/DeploySetTest.php`, the `.mjs` alternatives in
+   `tests/e2e/select.ts`, and the converter's `' :: '` tails on PHP assertion messages.
+4. **The budgets** — measure `make test` against the design's budgets (static ≤ 15 s, unit ≤ 45 s) and act on
+   what it shows.
+
+Tankity's weapons getting distinct arcs is a later design of its own.
 
 ## Music workroom
 

@@ -1,5 +1,10 @@
 # Games Kit, Plan E: Tankity Music Implementation Plan
 
+> **Status: Built** (#107). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - The one loudness target is −14 LUFS.
+> - The button reads "Next Song", and tests and specs are `.ts`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Tankity's soundtrack grows from four to sixteen CC0 tracks in the same 16-bit action/chiptune style, all built by one script that pins each source by SHA-256 and normalizes loudness to one target, with a "♫ Title · Author" toast on Next song and a unit test that keeps `game.yaml`, `CREDITS.md` and `audio/music/` in agreement.

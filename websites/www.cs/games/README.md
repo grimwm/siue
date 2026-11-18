@@ -6,7 +6,9 @@ Pluggable mini-games for the SIUE personal site.
 ```
 games/
   README.md
-  _kit/            # shared build, test and PHP tooling
+  units.sh         # every game's unit tests, in one node --test run
+  _kit/            # the shared kit: build, install and score-guard PHP, ports, prefs, audio core,
+                   # Preact components, Install and Share, test helpers (never deployed; see _kit/README.md)
   crete/           # The Island of Crete
     build.json     # entries and type programs for _kit/build/build.mjs
     src/           # TypeScript; main.ts is the entry
@@ -30,6 +32,9 @@ games/
     data/config.json
     LICENSE        # GPL-3.0
     README.md
+  workroom/        # the music workroom's page code (the site's music pages load its dist/)
+    build.json     # entries, type programs and the stylesheet for _kit/build/build.mjs
+    src/, dist/, test/, fonts/
 ```
 
 ## Games page catalog

@@ -1,5 +1,12 @@
 # Tankity: Scorched Earth Arsenal Implementation Plan
 
+> **Status: Built** (fall damage and parachutes #102, then #105, #108, #109, #111). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - `game.yaml` holds every weapon's numbers. Several were tuned after this plan: Funky Bomb, Death's Head, Heavy Sandhog, Plasma Blast, Baby Roller, Leapfrog, Heavy Roller and NUKE.
+> - `minRound`, `aiRound` and `aiRack` no longer exist: every gun sells from round one (#141) and drones buy on a budget (#146).
+> - Rail and Lance are retired (#128). The picker's families also include Splitters and Nukes.
+> - On the wire, Plasma's event is `ring` and fire's is `burn`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move Tankity's arsenal toward the original Scorched Earth. The SE classics arrive in four families (Blast, Beams and tracers, Earth, Fire), and every current weapon stays: Shell, Buckshot, Mortar, Rail, Cluster, Flak, Seeker, Lance, Heavy, Needle, EMP, Roller, NUKE. Each new weapon has its own flight and effect parameters in `game.yaml`. The room server (PHP) and the browser (TS) compute identical outcomes. Drones use the new guns sensibly, and prices and unlock rounds keep the economy balanced.

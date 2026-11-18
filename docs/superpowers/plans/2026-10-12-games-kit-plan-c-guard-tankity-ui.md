@@ -1,5 +1,16 @@
 # Games Kit, Plan C: the Score Guard and Tankity's Interface Implementation Plan
 
+> **Status: Built** (#81, #83, #85, #86, #90). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - Esc is bound nowhere and `game.yaml` refuses it; Q opens the menu and closes whatever is open (#98). Every step here that presses Escape or shows an `Esc` chip now means Q.
+> - More keys exist than this plan lists: X, R, T, O, N, U, V, I and the shop's keys.
+> - `FIELD_AIM` at 1080 is 0.75 and 0.55 (#134), in `src/ai.ts` and `server/ai.php`.
+> - The landscape arrow keys are tinted with the player's theme colour, `rgba(var(--accent-rgb), .55)`, not a fixed gold.
+> - Key chips are the kit's `kit-key-tab` (`_kit/kit.css`); the blocked-initials list is the kit's `blocked-initials.json`.
+> - Tankity uses the guard for the origin check, the address key and initials only; its rate counts are its own `rate` table (`server/rate.php`).
+> - The title card also has Share and Your Games; the menu also has Theme, Walls, the turn time, Flashes and Quit.
+> - `G.w` is set in `src/solo.ts` and `src/room.ts`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Put every score endpoint's integrity rules in one kit file that Cylon uses unchanged, then give Tankity its new keys and key chips, a title card with initials and a settings-only menu, a status bar plus control deck that fit every screen from a 360 px phone to a desktop, and a battlefield that fills the screen between them, with no black bars and a solo field as wide as the landscape screen.

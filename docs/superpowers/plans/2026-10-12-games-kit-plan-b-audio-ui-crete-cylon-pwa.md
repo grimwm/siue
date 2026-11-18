@@ -1,5 +1,14 @@
 # Games Kit, Plan B: Shared Audio and UI, Crete and Cylon Overlays, Crete's Maze Rule, Installable Apps
 
+> **Status: Built** (#79, #80, #82, #84, #89), except what the Crete redesign replaced. Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
+>
+> - Tasks 13 to 18 (the maze rule, the dasher and the strategist) and Task 8 (the inventory on `Panel`) were built, then deleted with the old Crete (#156). Crete is a puzzle game proved by a solver.
+> - Esc does nothing in any game; Q is the back key (#98).
+> - Crete's Quit is the menu's **Quit This Run** button and has no key of its own.
+> - The test helpers are `_kit/test/dom-stub.ts` and `_kit/test/tsx.ts`, and tests are `*.test.ts`.
+> - `app.ts` also exports `toggleFullscreen`, `holdEscape`, `topKeyLock`, `withWebkitFullscreen` and `browserAppEnv`; the audio core also has `hold`, `release`, `wake`, `setAway` and `close`.
+> - Task 26's probe is settled: Chromium prompts on `/play/<id>/` (`OUT_OF_SCOPE_PROMPTS` in `_kit/install.ts`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the games kit a shared Web Audio core and Preact UI components, move Crete's and Cylon's hand-built overlays onto them, make every Crete maze one that the creature reaches and a good player still wins, and make each game an installable full-screen app with its own icons, a way to quit, and Install and Share buttons on its site page.

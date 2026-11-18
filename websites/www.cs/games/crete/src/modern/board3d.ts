@@ -640,7 +640,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       warming = false;
       invalidate();
     };
-    renderer.compileAsync(scene, camera).then(ready, ready);
+    finish.compile(scene, camera).then(ready, ready);
     if (!loopTimer) scheduleLoops();
   }
 

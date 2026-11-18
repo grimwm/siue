@@ -24,6 +24,9 @@ export interface Finish {
   /** The drawing buffer's size in device pixels. */
   setSize(pw: number, ph: number): void;
   render(scene: Scene, camera: Camera, aa: boolean): void;
+  /** Has the scene's programs compiled as `render` will use them, off the page's thread where the browser can;
+   *  settles when they are ready. A program is keyed on the target it draws to, so they compile for this one. */
+  compile(scene: Scene, camera: Camera): Promise<unknown>;
   dispose(): void;
 }
 
@@ -63,6 +66,15 @@ export function createFinish(renderer: WebGLRenderer): Finish {
       fxaa.uniforms.tDiffuse!.value = ldr.texture;
       renderer.setRenderTarget(null);
       renderer.render(quadScene, quadCam);
+    },
+    compile(scene, camera) {
+      const was = renderer.getRenderTarget();
+      renderer.setRenderTarget(hdr);
+      try {
+        return renderer.compileAsync(scene, camera);
+      } finally {
+        renderer.setRenderTarget(was);
+      }
     },
     dispose() {
       hdr.dispose();

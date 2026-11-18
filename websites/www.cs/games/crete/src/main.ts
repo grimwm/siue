@@ -883,7 +883,8 @@ async function createModern(): Promise<void> {
         covered: () => ui.layersOpen() || demo.active(),
         gesture: () => ui.closeStart(),
         reducedMotion: () => reduced,
-        levelDrawn: () => ui.boardReady(),
+        // Only the level the game has open: a board that comes back to show an older build draws that first.
+        levelDrawn: () => { if (modernOpens === game.opens) ui.boardReady(); },
       })
       : null;
   } catch (e) {

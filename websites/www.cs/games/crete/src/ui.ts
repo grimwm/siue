@@ -521,6 +521,9 @@ export function createUi(deps: UiDeps): Ui {
     demo = view;
     if (starting) {
       // The level played before stays hidden while Demo finds its own, which then fades in: one map, never two.
+      // A level the modern board was still building is Demo's to wait out now, with no time limit of its own.
+      held = false;
+      timers.clearTimeout(holdTimer);
       boardFade("wait");
       // Whatever stood over the board before (a banner, a toast; a rule tip hides while Demo plays) goes.
       bannerEntries = [];

@@ -65,6 +65,11 @@ limits. Nothing in the design is unbuilt. What is left is small tidying, for one
 4. **The budgets** — measure `make test` against the design's budgets (static ≤ 15 s, unit ≤ 45 s) and act on
    what it shows.
 
+5. **A named data directory is not shielded from the web** — Tankity writes its `.htaccess` (`Require all denied`)
+   only into the default `games/tankity/data/`. A `data_dir` set to a folder under the web root gets none, so
+   `tankity.sqlite` there could be served. The checked-in settings leave `data_dir` unset. Either write the deny file there too, or
+   refuse a `data_dir` inside the web root.
+
 Tankity's weapons getting distinct arcs is a later design of its own.
 
 ## Music workroom

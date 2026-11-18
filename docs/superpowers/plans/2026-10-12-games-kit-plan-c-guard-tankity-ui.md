@@ -2,7 +2,7 @@
 
 > **Status: Built** (#81, #83, #85, #86, #90). Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
 >
-> - Esc is bound nowhere and `game.yaml` refuses it; Q opens the menu and closes whatever is open (#98). Every step here that presses Escape or shows an `Esc` chip now means Q.
+> - In Tankity, Esc is bound nowhere and `game.yaml` refuses it; Q opens the menu and closes whatever is open (#98). Every step here that presses Escape or shows an `Esc` chip now means Q.
 > - More keys exist than this plan lists: X, R, T, O, N, U, V, I and the shop's keys.
 > - `FIELD_AIM` at 1080 is 0.75 and 0.55 (#134), in `src/ai.ts` and `server/ai.php`.
 > - The landscape arrow keys are tinted with the player's theme colour, `rgba(var(--accent-rgb), .55)`, not a fixed gold.

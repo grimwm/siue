@@ -3,7 +3,7 @@
 > **Status: Built** (#79, #80, #82, #84, #89), except what the Crete redesign replaced. Nothing here is left to do. The body below is the plan as it was written; where it and the code differ, the code is right:
 >
 > - Tasks 13 to 18 (the maze rule, the dasher and the strategist) and Task 8 (the inventory on `Panel`) were built, then deleted with the old Crete (#156). Crete is a puzzle game proved by a solver.
-> - Esc does nothing in any game; Q is the back key (#98).
+> - Q is the back key in every game (#98). Esc does nothing in Tankity and Cylon; in Crete it only puts away a rule tip and backs out of a card opened from the title card.
 > - Crete's Quit is the menu's **Quit This Run** button and has no key of its own.
 > - The test helpers are `_kit/test/dom-stub.ts` and `_kit/test/tsx.ts`, and tests are `*.test.ts`.
 > - `app.ts` also exports `toggleFullscreen`, `holdEscape`, `topKeyLock`, `withWebkitFullscreen` and `browserAppEnv`; the audio core also has `hold`, `release`, `wake`, `setAway` and `close`.

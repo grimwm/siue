@@ -7,7 +7,7 @@
 > - `build.json` also takes `versions`, `css`, `kitCss` and `inlined`, and the build writes stylesheets and `THIRD_PARTY_LICENSES.txt`.
 > - The unit tests run once for all games, from `games/units.sh`, not from each game's `test.sh`.
 > - Crete's old engine and `window.__mazeTest` went with the redesign (#156): `crete-play` drives the puzzle game through `window.__creteTest`.
-> - Tankity's `tankity-local` and `tankity-callsign` prefs became `src/local-board.ts` and `tankity-initials`.
+> - Tankity's `tankity-local` and `tankity-callsign` prefs became `src/local-board.ts` and `tankity-initials`. Old local scores move onto the new board; an old callsign is not carried over, so that browser gets fresh initials.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

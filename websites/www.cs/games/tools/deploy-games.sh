@@ -257,8 +257,8 @@ if manifest_flag:
 else:
     print(hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest())
 PYEOF
-hash=$(python3 -I "$work/hash.py" "$stage" "$0")
-python3 -I "$work/hash.py" "$stage" --manifest "$0" >"$work/manifest"
+hash=$(python3 -I "$work/hash.py" "$stage" "$SCRIPT_DIR/deploy-games.sh")
+python3 -I "$work/hash.py" "$stage" --manifest "$SCRIPT_DIR/deploy-games.sh" >"$work/manifest"
 
 # 2a. The one login. -f returns once authentication succeeded and the master
 # is in the background; ControlPersist=no ends it with -O exit (cleanup).

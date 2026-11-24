@@ -139,6 +139,9 @@ while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
   case "$f" in
     "$SCORES") continue ;;
+    # Crete's shared bank runs on happystl.com (games/crete/tools/deploy-bank.sh),
+    # never here: its endpoint, library, settings and a local checkout's data/.
+    games/crete/endless-bank.php | games/crete/bank/* | games/crete/server/* | games/crete/data/*) continue ;;
     # Server data: Tankity's database and the admin login's database belong
     # to the server: never staged, so never uploaded, never chmodded, and
     # never in the manifest a PRUNE reads.

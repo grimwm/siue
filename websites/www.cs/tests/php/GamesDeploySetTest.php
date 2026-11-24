@@ -223,4 +223,14 @@ final class GamesDeploySetTest extends TestCase
             self::assertTrue(!in_array($f, $out, true), "never-ships-$f" . ' :: ' . '');
         }
     }
+
+    /** Crete's shared bank has its own deploy (deploy-bank.sh) and is never part of the games deploy */
+    public function testBankDoesNotShip(): void
+    {
+        $out = self::deploy()[1];
+        self::assertTrue(!in_array('games/crete/endless-bank.php', $out, true), 'bank-endpoint-stays-home' . ' :: ' . '');
+        self::assertTrue(!array_filter($out, fn($f) => str_starts_with($f, 'games/crete/bank/')), 'bank-library-stays-home' . ' :: ' . '');
+        self::assertTrue(!array_filter($out, fn($f) => str_starts_with($f, 'games/crete/server/')), 'bank-server-stays-home' . ' :: ' . '');
+        self::assertTrue(!array_filter($out, fn($f) => str_starts_with($f, 'games/crete/data/')), 'bank-data-stays-home' . ' :: ' . '');
+    }
 }

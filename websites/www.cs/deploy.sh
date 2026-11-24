@@ -149,8 +149,9 @@ while IFS= read -r -d '' f; do
     # never here: its endpoint, library, settings and a local checkout's data/.
     games/crete/endless-bank.php | games/crete/bank/* | games/crete/server/* | games/crete/data/*) continue ;;
     # Development files that ride along with games: tests, maintainer notes
-    # (README.md), each game's tools/ folder (generators for files that do
-    # ship; nothing at runtime runs them), the room protocol fixtures
+    # (README.md), each game's tools/ folder and the shared games/tools/
+    # folder (the games' deploy script lives there; nothing at runtime runs
+    # them), the room protocol fixtures
     # (games/*/protocol/, only the tests read them), games/tankity/game.yaml,
     # whose runtime form is the generated game.json (nothing fetches the
     # YAML), the sound-effect build script (the .mp3 files it builds do ship;
@@ -162,7 +163,7 @@ while IFS= read -r -d '' f; do
     # not). The workroom's font sources (games/workroom/fonts/: the build copies
     # them into dist/fonts/, which ships) are named exactly, because a pattern's *
     # crosses slashes and games/*/fonts/* would also match dist/fonts/.
-    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/tankity/audio/music/build_music.sh | games/*/fx-editor.* | games/*/fx/blender/* | games/*/dist/pow-bench.* | games/workroom/fonts/*) continue ;;
+    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/tankity/audio/music/build_music.sh | games/*/fx-editor.* | games/*/fx/blender/* | games/*/dist/pow-bench.* | games/workroom/fonts/*) continue ;;
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/tsconfig.test.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.

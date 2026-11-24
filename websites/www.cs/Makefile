@@ -1,4 +1,4 @@
-.PHONY: help deploy up down live-url url parity test protocol sim-vectors e2e e2e-changed screenshots admin-smoke music-e2e stats-e2e
+.PHONY: help deploy deploy-games up down live-url url parity test protocol sim-vectors e2e e2e-changed screenshots admin-smoke music-e2e stats-e2e
 
 .DEFAULT_GOAL := help
 
@@ -30,6 +30,16 @@ help: ## Show this list
 ##@ Site
 deploy: ## Upload what changed to www.cs.siue.edu (options: see README)
 	@HOST="$(HOST)" SSHPASS_FILE="$(SSHPASS_FILE)" ./deploy.sh
+
+# The games' DreamHost login is a key, never the SIUE password file: the
+# target passes no SSHPASS_FILE. GAMES_HOST defaults to the operator's dh
+# alias; SSH_KEY to a key file (CI writes it from the 'Dreamhost Deploys'
+# 1Password item). With neither, ssh uses the agent or the alias's own key.
+GAMES_HOST ?= dh
+SSH_KEY ?=
+
+deploy-games: ## Upload the games to happystl.com (GAMES_HOST=user@host, SSH_KEY=key file)
+	@HOST="$(GAMES_HOST)" SSH_KEY="$(SSH_KEY)" ./games/tools/deploy-games.sh
 
 up: ## Run the site locally in docker
 	$(COMPOSE) up -d --build $(SERVICES)

@@ -35,6 +35,21 @@ name: deploy
 #   item "Crete Config", field bank-verifier: the trusted runner's token
 #     (crete-verify.yml reads the same item); deploy-bank.sh stages only its
 #     sha256, as bank/verifier.json
+#
+# The deploy-games job does the same for the games on happystl.com, with
+# games/tools/deploy-games.sh and the same `make deploy-games` a person
+# runs: the three games, the stats collector and the admin library it loads,
+# under happystl.com/games/, happystl.com/stats/ and happystl.com/admin/lib/.
+# It runs on the same gate as deploy (a green ci run on main, or by hand).
+# It logs into DreamHost the way the bank job does: the same 1Password
+# service account, the same "Dreamhost Deploys" item, the host keys in
+# .github/ssh_known_hosts, no new secret.
+#
+# The transfer-game-data job is dispatch only: a one-time, one-way copy of
+# the live stats and scores from the SIUE server to DreamHost (the stats
+# database, the CIC board and Tankity's database). It validates each file on
+# the runner before it sends it, and never retries: a failed transfer stops
+# and is re-run by hand.
 # ssh only accepts the host keys in .github/ssh_known_hosts.
 
 on:
@@ -254,3 +269,253 @@ jobs:
           curl -s -o "$body" --max-time 20 -X POST -H @"$headers" -d '{"op":"trusted-where"}' "$BANK_URL"
           jq -r '"the bank'"'"'s folder: \(.kind) \(.dir)" + (if .refused then "; refused: \(.refused)" else "" end)' "$body"
           jq -e '.kind == "host"' "$body" >/dev/null
+
+  deploy-games:
+    # The games on happystl.com, on the same gate as deploy: only a green ci
+    # run from a push to this repository's main; a fork's pull request from a
+    # branch named main must never get here.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: deploy-games
+      cancel-in-progress: false
+    env:
+      GAMES_HOST: happystl@iad1-shared-b7-41.dreamhost.com
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      # Runs finish out of order; deploying an older commit after a newer one
+      # would roll the games back. Only main's current tip ships.
+      - name: Check this is main's tip
+        id: tip
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          tip=$(git rev-parse HEAD)
+          if [ -n "$RUN_SHA" ] && [ "$RUN_SHA" != "$tip" ]; then
+            echo "ci passed for $RUN_SHA, but main is now $tip; its own run deploys it"
+            echo "skip=1" >>"$GITHUB_OUTPUT"
+          else
+            echo "deploying $tip"
+          fi
+
+      # deploy-games.sh checks the games' install files with PHP, their
+      # compiled modules with Node, and hashes with python3.
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        if: steps.tip.outputs.skip != '1'
+        with:
+          php-version: "8.4"
+          coverage: none
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        if: steps.tip.outputs.skip != '1'
+        with:
+          node-version: "24"
+
+      - name: Install the host keys
+        if: steps.tip.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          grep -v '^#' .github/ssh_known_hosts >~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Load the deploy key
+        if: steps.tip.outputs.skip != '1'
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          DREAMHOST_KEY: op://khvwk3iogv3mhhjui4se7xqyni/Dreamhost Deploys/private key?ssh-format=openssh
+
+      - name: Deploy the games
+        if: steps.tip.outputs.skip != '1'
+        env:
+          FORCE: ${{ inputs.force && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/dreamhost.key"
+          printf '%s\n' "$DREAMHOST_KEY" >"$key"
+          trap 'rm -f "$key"' EXIT
+          # One login: deploy-games.sh reads the host's stamp back on the
+          # same connection and fails unless it holds this commit's content.
+          HOST="$GAMES_HOST" SSH_KEY="$key" WEB_ROOT="/home/happystl/happystl.com" PRUNE=1 FORCE="$FORCE" ./websites/www.cs/games/tools/deploy-games.sh
+
+      - name: Check the live games
+        if: steps.tip.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          # Each game and each server endpoint a player depends on: a broken
+          # endpoint fails the deploy instead of failing players.
+          for path in "games/tankity/" "games/crete/" "games/cylon/" "games/tankity/scores.php" "games/cylon/scores.php"; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.happystl.com/$path")
+            echo "$code /$path"
+            [ "$code" = 200 ]
+          done
+          # The stats beacon answers 204 to a POST and 405 to a GET; either
+          # proves the endpoint runs.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.happystl.com/stats/collect.php")
+          echo "$code /stats/collect.php"
+          [ "$code" = 204 ] || [ "$code" = 405 ]
+
+  transfer-game-data:
+    # Dispatch only: a one-time, one-way copy of the live stats and scores
+    # from the SIUE server to DreamHost. The stats history moves only this
+    # way; it is not seedable over HTTP. Run it once, after the games deploy
+    # has put the endpoints on happystl.com, and before the play pages are
+    # repointed. No retry loop: a failed transfer stops and is re-run by hand.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: transfer-game-data
+      cancel-in-progress: false
+    env:
+      GAMES_HOST: happystl@iad1-shared-b7-41.dreamhost.com
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Install sshpass
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+
+      - name: Load the SIUE login
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          SIUE_USER: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/username
+          SIUE_PASSWORD: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/password
+
+      - name: Load the deploy key
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          DREAMHOST_KEY: op://khvwk3iogv3mhhjui4se7xqyni/Dreamhost Deploys/private key?ssh-format=openssh
+
+      - name: Set up ssh
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/dreamhost.key"
+          printf '%s\n' "$DREAMHOST_KEY" >"$key"
+          chmod 600 "$key"
+          install -d -m 700 ~/.ssh
+          # One known-hosts file covers both hosts now: the SIUE host and the
+          # DreamHost host are both in .github/ssh_known_hosts.
+          grep -v '^#' .github/ssh_known_hosts >~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          printf 'Host www.cs.siue.edu\n  StrictHostKeyChecking yes\nHost iad1-shared-b7-41.dreamhost.com\n  StrictHostKeyChecking yes\n  IdentityFile %s\n' "$key" >~/.ssh/config
+          echo "DREAMHOST_KEY_FILE=$key" >>"$GITHUB_ENV"
+
+      - name: Copy the data files
+        run: |
+          set -euo pipefail
+          umask 077
+          siue_host="${SIUE_USER%@*}@www.cs.siue.edu"
+          passfile="$RUNNER_TEMP/siue.pass"
+          printf '%s\n' "$SIUE_PASSWORD" >"$passfile"
+          trap 'rm -f "$passfile"' EXIT
+          tmp="$RUNNER_TEMP/game-data"
+          mkdir -p "$tmp"
+          # The DreamHost site root is /home/happystl/happystl.com (the bank
+          # job's WEB_ROOT); the SIUE site root is the login's home.
+          dh_root="/home/happystl/happystl.com"
+          # 1. Fetch the three files from SIUE in one sftp session. The -wal
+          # files ride with their databases when they exist; a missing one is
+          # not an error (the '-' prefix lets that get pass), and step 2
+          # proves nothing that existed was left behind. The -shm files hold
+          # no durable data and are left.
+          {
+            echo "get admin/data/stats.sqlite $tmp/stats.sqlite"
+            echo "-get admin/data/stats.sqlite-wal $tmp/stats.sqlite-wal"
+            echo "get games/cylon/data/scores.json $tmp/scores.json"
+            echo "get games/tankity/data/tankity.sqlite $tmp/tankity.sqlite"
+            echo "-get games/tankity/data/tankity.sqlite-wal $tmp/tankity.sqlite-wal"
+          } >"$tmp/fetch.batch"
+          sshpass -f "$passfile" sftp -oBatchMode=no -b "$tmp/fetch.batch" "$siue_host"
+          # 2. Prove the fetch is complete: list the three SIUE data dirs and
+          # require each -wal file they hold to be in $tmp. (The required
+          # files already failed loudly above if they were missing.)
+          {
+            echo "ls -1 admin/data"
+            echo "ls -1 games/cylon/data"
+            echo "ls -1 games/tankity/data"
+          } >"$tmp/list.batch"
+          sshpass -f "$passfile" sftp -oBatchMode=no -b "$tmp/list.batch" "$siue_host" >"$tmp/list.log" 2>&1
+          python3 - "$tmp" "$tmp/list.log" <<'PYEOF'
+          import os, sys
+          tmp, log = sys.argv[1], open(sys.argv[2]).read()
+          listed = set(log.split())
+          for wal in ("stats.sqlite-wal", "tankity.sqlite-wal"):
+              if wal in listed and not os.path.exists(os.path.join(tmp, wal)):
+                  raise SystemExit(f"transfer: {wal} exists on SIUE but was not fetched")
+          print("fetch complete: every -wal the server holds is in the transfer")
+          PYEOF
+          # 3. Validate on the runner before anything is sent: both databases
+          # must pass integrity_check (the -wal rides along, so a database
+          # opened here sees its uncheckpointed writes), and the board must
+          # be valid JSON with the week's and all-time lists. This runs on
+          # the runner's copies, never the live files.
+          python3 - "$tmp" <<'PYEOF'
+          import json, sqlite3, sys
+          tmp = sys.argv[1]
+          for db in ("stats.sqlite", "tankity.sqlite"):
+              con = sqlite3.connect(f"{tmp}/{db}")
+              row = con.execute("PRAGMA integrity_check").fetchone()
+              con.close()
+              if not row or row[0] != "ok":
+                  raise SystemExit(f"transfer: {db} failed integrity_check: {row}")
+          with open(f"{tmp}/scores.json") as f:
+              scores = json.load(f)
+          if not isinstance(scores, dict) or not isinstance(scores.get("week"), list) or not isinstance(scores.get("alltime"), list):
+              raise SystemExit("transfer: scores.json is not a CIC board (week/alltime lists)")
+          print("validated: stats.sqlite, tankity.sqlite, scores.json")
+          PYEOF
+          # 4. Send to DreamHost in one sftp session: make the data dirs, put
+          # the files, and list them back. The files are 666, like the CIC
+          # board deploy-games.sh creates: PHP runs as a different user from
+          # the site account, and must be able to write them in place. The
+          # stats database holds aggregate counts and hashed addresses; the
+          # game databases hold rooms and scores; none holds a credential.
+          {
+            echo "-mkdir $dh_root/admin"
+            echo "-mkdir $dh_root/admin/data"
+            echo "-mkdir $dh_root/games"
+            echo "-mkdir $dh_root/games/cylon"
+            echo "-mkdir $dh_root/games/cylon/data"
+            echo "-mkdir $dh_root/games/tankity"
+            echo "-mkdir $dh_root/games/tankity/data"
+            echo "put $tmp/stats.sqlite $dh_root/admin/data/stats.sqlite"
+            echo "put $tmp/scores.json $dh_root/games/cylon/data/scores.json"
+            echo "put $tmp/tankity.sqlite $dh_root/games/tankity/data/tankity.sqlite"
+            [ -f "$tmp/stats.sqlite-wal" ] && echo "put $tmp/stats.sqlite-wal $dh_root/admin/data/stats.sqlite-wal"
+            [ -f "$tmp/tankity.sqlite-wal" ] && echo "put $tmp/tankity.sqlite-wal $dh_root/games/tankity/data/tankity.sqlite-wal"
+            echo "chmod 666 $dh_root/admin/data/stats.sqlite"
+            echo "chmod 666 $dh_root/games/cylon/data/scores.json"
+            echo "chmod 666 $dh_root/games/tankity/data/tankity.sqlite"
+            echo "ls -l $dh_root/admin/data"
+            echo "ls -l $dh_root/games/cylon/data"
+            echo "ls -l $dh_root/games/tankity/data"
+          } >"$tmp/put.batch"
+          sftp -oBatchMode=no -b "$tmp/put.batch" "$GAMES_HOST"

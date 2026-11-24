@@ -24,7 +24,7 @@ const TANKITY_GUARD_RUNS = 'guard-runs.json';
 function tankity_guard_config(array $override = []): array
 {
     $hosts = array_values(array_filter(array_map('trim',
-        explode(',', (string) tankity_setting('TANKITY_ALLOWED_HOSTS', 'allowed_hosts', 'www.cs.siue.edu,cs.siue.edu')))));
+        explode(',', (string) tankity_setting('TANKITY_ALLOWED_HOSTS', 'allowed_hosts', 'www.cs.siue.edu,cs.siue.edu,www.happystl.com')))));
     return ScoreGuard::validateConfig($override + [
         'runTtlSec' => 86400,
         'startsPerHour' => 120,

@@ -124,7 +124,20 @@ mux=(-o "ControlPath=$sock" -o ControlMaster=no)
 # '-mkdir' on a directory that exists reports a Failure it then ignores;
 # drop that line so real errors stand out. sftp ends its messages with CRLF.
 sftp_batch() {
-  sftp -q -oBatchMode=no "${mux[@]}" -b "$1" "$HOST" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
+  # Every path in a batch is relative to the login directory, but the
+  # games live under WEB_ROOT: on DreamHost the login directory is the
+  # account home, not the site root, so a batch without this step
+  # uploads beside the site instead of into it (the first deploy did
+  # exactly that: files landed in /home/happystl/games, the seed scp to
+  # $WEB_ROOT/... then failed, and the games 404'd). Step into WEB_ROOT
+  # first; the absolute scp paths already point there.
+  local tmp rc
+  tmp=$(mktemp)
+  { printf 'cd %s\n' "$WEB_ROOT"; cat "$1"; } >"$tmp"
+  sftp -q -oBatchMode=no "${mux[@]}" -b "$tmp" "$HOST" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
+  rc=$?
+  rm -f "$tmp"
+  return $rc
 }
 
 # The admin login's database lives in admin/data/, the server's like the scores
@@ -350,7 +363,7 @@ fi
 # write it in place. A failed listing stops here, before the stamp, so a
 # network error can never replace live scores with an empty board.
 scores_dir=$(dirname "$SCORES")
-if ! listing=$(printf 'ls -1 %s\n' "$scores_dir" | sftp -q -oBatchMode=no "${mux[@]}" -b - "$HOST" 2>&1); then
+if ! listing=$(printf 'cd %s\nls -1 %s\n' "$WEB_ROOT" "$scores_dir" | sftp -q -oBatchMode=no "${mux[@]}" -b - "$HOST" 2>&1); then
   echo "deploy-games: cannot list $scores_dir on $HOST; scores left untouched, rerun the deploy" >&2
   exit 1
 fi

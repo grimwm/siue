@@ -12,5 +12,5 @@
   "scoresPerHour": 30,
   "csrfCookie": "cylon_csrf",
   "storageKey": "cylon",
-  "allowedHosts": ["www.cs.siue.edu", "cs.siue.edu"]
+  "allowedHosts": ["www.cs.siue.edu", "cs.siue.edu", "www.happystl.com"]
 }

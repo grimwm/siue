@@ -72,11 +72,20 @@ if ! php games/tankity/tools/game-json.php --check; then
 fi
 
 # A game built with the shared kit ships its dist/: refuse a stale build or a
-# failing type check.
-if ! (cd games && npm ci --silent && npm run --silent check); then
-  echo "deploy-games: run (cd games && npm run build) and commit dist/" >&2
+# failing type check. Only the three games this deploy ships are checked:
+# `npm run check` would also check the music workroom, which this deploy
+# does not ship and no CI job checks, so a stale workroom build would block
+# the games deploy for no reason.
+if ! (cd games && npm ci --silent); then
+  echo "deploy-games: npm ci in games/ failed" >&2
   exit 1
 fi
+for game in crete tankity cylon; do
+  if ! (cd games && node _kit/build/build.mjs "$game" --check && node _kit/build/icons.mjs "$game" --check); then
+    echo "deploy-games: run (cd games && npm run build) and commit dist/" >&2
+    exit 1
+  fi
+done
 
 # deploy-set.php plants probe files under games/zz-probe while it lists the set;
 # a killed test could leave them behind, so a real deploy refuses to ship them.

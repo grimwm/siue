@@ -1,0 +1,86 @@
+name: tmp-remote-inspect
+
+# TEMPORARY diagnostic/cleanup workflow for the games migration.
+# Created because deploy-games run 45515970588 uploaded the games fine
+# (stamp verified, games live) but the web server 404s stats/collect.php,
+# games/cylon/data/scores.json and admin/lib/* even though the deploy log
+# shows them sent to /home/happystl/happystl.com/ — the cause needs a look
+# at the remote filesystem. It also removes the stray /home/happystl/games/
+# copy from the first failed deploy, once the deploy and data transfer
+# have succeeded.
+# Runs only from main: the production environment's branch policy admits
+# main alone, so this must be merged to run. REMOVE THIS FILE with a
+# follow-up PR once the inspection and the cleanup are both done.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (list remote paths) or cleanup (remove the stray /home/happystl/games/)"
+        type: choice
+        options: [inspect, cleanup]
+        default: inspect
+
+permissions:
+  contents: read
+
+jobs:
+  remote-inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      GAMES_HOST: happystl@iad1-shared-b7-41.dreamhost.com
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Install the host keys
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          grep -v '^#' .github/ssh_known_hosts >~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Load the deploy key
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          DREAMHOST_KEY: op://khvwk3iogv3mhhjui4se7xqyni/Dreamhost Deploys/private key?ssh-format=openssh
+
+      - name: Inspect (or clean up) the remote account
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/dreamhost.key"
+          printf '%s\n' "$DREAMHOST_KEY" >"$key"
+          trap 'rm -f "$key"' EXIT
+          ssh -oBatchMode=yes -o StrictHostKeyChecking=yes -i "$key" "$GAMES_HOST" "MODE=$MODE bash -s" <<'EOS'
+          set -e
+          if [ "$MODE" = cleanup ]; then
+            echo "== removing stray /home/happystl/games/ (site-root games/ untouched) =="
+            rm -rf /home/happystl/games
+            if [ -e /home/happystl/games ]; then echo "stray games/ STILL THERE"; exit 1; fi
+            echo "stray games/ gone"
+            echo "== site-root games/ still there =="; ls happystl.com/games/
+            exit 0
+          fi
+          echo "== pwd =="; pwd
+          echo "== home =="; ls -la
+          echo "== happystl.com top =="; ls -la happystl.com/
+          echo "== happystl.com/stats =="; ls -la happystl.com/stats/ || echo "stats/ MISSING"
+          echo "== collect.php =="; ls -l happystl.com/stats/collect.php || echo "collect.php MISSING"
+          echo "== stats/lib =="; ls happystl.com/stats/lib/ || echo "stats/lib MISSING"
+          echo "== admin/lib =="; ls -la happystl.com/admin/lib/ || echo "admin/lib MISSING"
+          echo "== games/cylon/data =="; ls -la happystl.com/games/cylon/data/ || echo "cylon/data MISSING"
+          echo "== stamp =="; head -3 happystl.com/games/.deploy-hash || echo "stamp MISSING"
+          echo "== stray home games =="; ls games/ || echo "no stray games/ dir"
+          echo "== file types =="; file happystl.com/stats/collect.php happystl.com/games/cylon/data/scores.json 2>&1 || true
+          echo "== stats/collect.php head =="; head -c 200 happystl.com/stats/collect.php || echo "cannot read collect.php"
+          EOS

@@ -357,18 +357,28 @@ jobs:
         if: steps.tip.outputs.skip != '1'
         run: |
           set -euo pipefail
+          # A GitHub runner's bare curl is rate-limited by Cloudflare bot
+          # management (a 429 failed this step once), so every check sends
+          # a browser User-Agent and retries transient codes before failing.
+          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+          check() {
+            local url=$1 want=$2 code attempt
+            for attempt in 1 2 3; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -A "$UA" "$url") || code=000
+              echo "$code $url (attempt $attempt)"
+              case " $want " in *" $code "*) return 0 ;; esac
+              case "$code" in 429|500|502|503|504) sleep 10 ;; *) return 1 ;; esac
+            done
+            return 1
+          }
           # Each game and each server endpoint a player depends on: a broken
           # endpoint fails the deploy instead of failing players.
           for path in "games/tankity/" "games/crete/" "games/cylon/" "games/tankity/scores.php" "games/cylon/scores.php"; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.happystl.com/$path")
-            echo "$code /$path"
-            [ "$code" = 200 ]
+            check "https://www.happystl.com/$path" "200"
           done
           # The stats beacon answers 204 to a POST and 405 to a GET; either
           # proves the endpoint runs.
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.happystl.com/stats/collect.php")
-          echo "$code /stats/collect.php"
-          [ "$code" = 204 ] || [ "$code" = 405 ]
+          check "https://www.happystl.com/stats/collect.php" "204 405"
 
   transfer-game-data:
     # Dispatch only: a one-time, one-way copy of the live stats and scores

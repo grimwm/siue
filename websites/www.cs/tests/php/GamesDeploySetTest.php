@@ -149,15 +149,15 @@ final class GamesDeploySetTest extends TestCase
         self::assertTrue(isset($set['games/.htaccess']), 'ships games/.htaccess');
     }
 
-    /** the stats endpoint and its library, and the admin library the collector loads */
-    public function testShipsStatsAndAdminLib(): void
+    /** the stats endpoint and its library, and the admin library the collector loaded, stay on SIUE: the games' beacon posts to the WordPress endpoint, so none of them ships */
+    public function testStatsAndAdminLibDoNotShip(): void
     {
         $set = self::set();
         foreach (['stats/collect.php', 'stats/.htaccess', 'stats/lib/bootstrap.php', 'stats/lib/Classify.php', 'stats/lib/Collector.php', 'stats/lib/Dashboard.php', 'stats/lib/Days.php', 'stats/lib/Db.php', 'stats/lib/Report.php', 'stats/lib/Rollup.php', 'stats/lib/.htaccess'] as $f) {
-            self::assertTrue(isset($set[$f]), "ships $f");
+            self::assertTrue(!isset($set[$f]), "never-ships $f");
         }
         foreach (['admin/lib/bootstrap.php', 'admin/lib/Address.php', 'admin/lib/Auth.php', 'admin/lib/Clock.php', 'admin/lib/Db.php', 'admin/lib/Headers.php', 'admin/lib/Html.php', 'admin/lib/Keys.php', 'admin/lib/MailTemplate.php', 'admin/lib/Mailer.php', 'admin/lib/Pages.php', 'admin/lib/People.php', 'admin/lib/Realm.php', 'admin/lib/Request.php', 'admin/lib/Sessions.php', 'admin/lib/SignIn.php', 'admin/lib/store-dir.php', 'admin/lib/store-modes.php', 'admin/lib/.htaccess'] as $f) {
-            self::assertTrue(isset($set[$f]), "ships $f");
+            self::assertTrue(!isset($set[$f]), "never-ships $f");
         }
     }
 

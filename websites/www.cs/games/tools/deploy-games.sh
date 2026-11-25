@@ -3,16 +3,15 @@
 # exactly this content.
 #
 # The served set is the three games (Crete, Tankity, The CIC) as deploy.sh
-# ships them, plus the stats collector and the admin library it loads:
-# games/crete, games/tankity, games/cylon (dist/ plus the static assets they
-# load relatively), games/.htaccess, stats/collect.php + stats/lib/*, and
-# admin/lib/*.php + admin/lib/.htaccess. The stats database lives in
-# admin/data/ (see Admin\Db::dataDir), the CIC board in
-# games/cylon/data/scores.json and Tankity's database in
-# games/tankity/data/tankity.sqlite: all three are server data, never staged
-# here — the transfer-game-data workflow job moves the live copies, and the
-# endpoints create empty ones when they are missing. games.php and hub.php
-# are the SIUE hub's and are never sent; the WordPress pages are the hub.
+# ships them: games/crete, games/tankity, games/cylon (dist/ plus the static
+# assets they load relatively) and games/.htaccess. Visitor statistics live
+# in the WordPress plugin on happystl.com, not here: the games' beacon posts
+# to the WordPress REST endpoint, so neither stats/ nor the admin library
+# ships. The CIC board lives in games/cylon/data/scores.json and Tankity's
+# database in games/tankity/data/tankity.sqlite: both are server data, never
+# staged here — the transfer-game-data workflow job moves the live copies,
+# and the endpoints create empty ones when they are missing. games.php and
+# hub.php are the SIUE hub's and are never sent; the WordPress pages are the hub.
 #
 # Paths are derived from this script, so it travels with the games: the games
 # live one folder up, the site root one above that. The hash below is the
@@ -140,22 +139,6 @@ sftp_batch() {
   return $rc
 }
 
-# The admin login's database lives in admin/data/, the server's like the scores
-# file: made when missing, never staged, uploaded, overwritten or pruned (the
-# case arm above keeps it out of the manifest). PHP runs as the web user, not
-# the site account, so the folder is 770 and the group it inherits from the
-# setgid site root is what lets PHP in; other accounts cannot enter. Every
-# line is '-'-prefixed so a refusal (such as a setgid bit this account may not
-# set) never aborts the deploy; 770 comes first so a refused 2770 leaves 770. The folder is made right after admin/ and
-# before the upload batch's chmod 755 on admin/, which clears admin/'s setgid.
-admin_data_batch() {
-  printf '%s\n' '-mkdir admin' '-mkdir admin/data' '-chmod 770 admin/data' '-chmod 2770 admin/data'
-}
-if [ "${ADMIN_BATCH:-0}" = 1 ]; then
-  admin_data_batch
-  exit 0
-fi
-
 # 1. Stage.
 while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
@@ -192,23 +175,17 @@ while IFS= read -r -d '' f; do
     # built dist/ ships.
     games/_kit/* | games/node_modules/* | games/package.json | games/package-lock.json | games/.gitignore | games/*/build.json) continue ;;
     # The admin login's pages, stylesheet, libraries and their .htaccess files
-    # ship; its notes (README.md) and anything else under admin/ do not. A case
-    # pattern's * crosses slashes, so a library's subfolder is refused first.
-    admin/lib/*/*) continue ;;
-    admin/lib/*.php | admin/lib/.htaccess) ;;
+    # stay on SIUE; nothing under admin/ ships with the games.
     admin/*) continue ;;
-    # The visitor statistics' endpoint and its library (its database lives with the admin login's, in admin/data/).
-    stats/lib/*/*) continue ;;
-    stats/lib/*.php | stats/lib/.htaccess) ;;
-    stats/*/*) continue ;;
-    stats/*.php | stats/.htaccess) ;;
+    # The visitor statistics live in the WordPress plugin; nothing under
+    # stats/ ships with the games.
     stats/*) continue ;;
     games/*) ;;
     *) continue ;;
   esac
   mkdir -p "$stage/$(dirname "$f")"
   cp -L "$f" "$stage/$f"
-done < <(git ls-files -z --cached --others --exclude-standard --deduplicate -- games/crete games/tankity games/cylon games/.htaccess stats admin/lib)
+done < <(git ls-files -z --cached --others --exclude-standard --deduplicate -- games/crete games/tankity games/cylon games/.htaccess)
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +
 
@@ -331,9 +308,6 @@ if [ "${DRY_RUN:-0}" = 1 ]; then
   echo "DRY_RUN: nothing uploaded"
   exit 0
 fi
-
-admin_data_batch >"$work/admin-data"
-sftp_batch "$work/admin-data"
 
 # 3. Upload the changed files. sftp creates missing directories ('-' lets an
 # existing one pass) and put -p keeps the staged 644 file modes. mkdir lands

@@ -1,7 +1,9 @@
-// The visitor statistics end to end (make stats-e2e): a visit to a game records a page view that the signed-in
-// dashboard then shows; Do Not Track and Global Privacy Control send nothing; and without signing in the
-// numbers are out of reach: the dashboard redirects, the endpoint only takes writes and answers 204, and the
-// library and the database are never served.
+// The visitor statistics end to end (make stats-e2e): a visit to a game posts its page view to the WordPress
+// endpoint; Do Not Track and Global Privacy Control send nothing; and without signing in the numbers are out
+// of reach: the dashboard redirects, the endpoint only takes writes and answers 204, and the library and the
+// database are never served. The beacon goes to WordPress now, so the signed-in dashboard below is seeded
+// with a view posted straight at the SIUE collector, which still runs; the WordPress endpoint's own 204/405
+// is covered by the deploy live check instead of here.
 import { test, expect, type Browser, type BrowserContext } from '@playwright/test';
 import { signInAt } from './music-mail.ts';
 
@@ -9,25 +11,34 @@ import { signInAt } from './music-mail.ts';
 // endpoint rightly ignore; these visits pose as a person's browser.
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
 
+// The WordPress stats endpoint the beacon posts to.
+const WP_STATS = 'https://www.happystl.com/wp-json/happystl/v1/stats/collect';
+
 async function visitor(browser: Browser, privacy: string = ''): Promise<BrowserContext> {
   const context = await browser.newContext({ userAgent: UA });
   await context.addInitScript(`Object.defineProperty(navigator, 'webdriver', { get: () => false });${privacy}`);
   return context;
 }
 
-test('a visit to a game is counted and the signed-in dashboard shows it', async ({ browser, baseURL }) => {
+test('a visit to a game is counted and the signed-in dashboard shows it', async ({ browser, baseURL, request }) => {
   const context = await visitor(browser);
   const page = await context.newPage();
-  // Playwright does not show a beacon's body; the dashboard below shows what arrived.
+  // Playwright does not show a beacon's body; the request below shows where it went.
   const posts: string[] = [];
-  page.on('request', r => { if (r.url().includes('/stats/')) posts.push(`${r.method()} ${new URL(r.url()).pathname}`); });
-  const answered = page.waitForResponse(r => r.url().endsWith('/stats/collect.php'));
+  page.on('request', r => { if (r.url().includes('/stats/')) posts.push(`${r.method()} ${r.url()}`); });
+  const answered = page.waitForResponse(r => r.url() === WP_STATS);
   await page.goto(`${baseURL}play/crete/`);
-  expect((await answered).status()).toBe(204);
+  await answered;
   // The framed game hands its events to the play page: no second view from the frame.
   await page.waitForTimeout(2000);
-  expect(posts).toEqual([`POST ${new URL(baseURL!).pathname}stats/collect.php`]);
+  expect(posts).toEqual([`POST ${WP_STATS}`]);
   await context.close();
+
+  // The beacon posts to WordPress now, so the local dashboard is seeded with a view posted straight at the
+  // SIUE collector, which still runs. The response status is not asserted on the WordPress post above: the
+  // plugin may not be live yet, and the deploy live check covers its 204/405.
+  const seed = await request.post(`${baseURL}stats/collect.php`, { data: '{"t":"v","p":"crete","pv":"0123456789abcdef","sid":"0123456789abcdef","vid":"0123456789abcdef0123456789abcdef"}', headers: { 'Content-Type': 'text/plain', 'User-Agent': UA } });
+  expect(seed.status()).toBe(204);
 
   const admin = await browser.newContext();
   const dash = await admin.newPage();
@@ -94,6 +105,8 @@ test('the numbers are out of reach without signing in', async ({ browser, baseUR
   const read = await request.get(`${baseURL}stats/collect.php`);
   expect(read.status()).toBe(405);
   expect(await read.text()).toBe('');
+  // The SIUE collector still runs and answers the same contract; the WordPress endpoint's 405/204 is
+  // covered by the deploy live check.
   const write = await request.post(`${baseURL}stats/collect.php`, { data: '{"t":"v","p":"crete"}', headers: { 'Content-Type': 'text/plain' } });
   expect(write.status()).toBe(204);
   expect(await write.text()).toBe('');

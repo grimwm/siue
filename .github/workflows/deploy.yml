@@ -38,8 +38,9 @@ name: deploy
 #
 # The deploy-games job does the same for the games on happystl.com, with
 # games/tools/deploy-games.sh and the same `make deploy-games` a person
-# runs: the three games, the stats collector and the admin library it loads,
-# under happystl.com/games/, happystl.com/stats/ and happystl.com/admin/lib/.
+# runs: the three games under happystl.com/games/. Visitor statistics live
+# in the WordPress plugin; the games' beacon posts to its REST endpoint,
+# which the live check below verifies alongside the games.
 # It runs on the same gate as deploy (a green ci run on main, or by hand).
 # It logs into DreamHost the way the bank job does: the same 1Password
 # service account, the same "Dreamhost Deploys" item, the host keys in
@@ -363,8 +364,9 @@ jobs:
           UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
           check() {
             local url=$1 want=$2 code attempt
+            shift 2
             for attempt in 1 2 3; do
-              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -A "$UA" "$url") || code=000
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -A "$UA" "$@" "$url") || code=000
               echo "$code $url (attempt $attempt)"
               case " $want " in *" $code "*) return 0 ;; esac
               case "$code" in 429|500|502|503|504) sleep 10 ;; *) return 1 ;; esac
@@ -376,9 +378,11 @@ jobs:
           for path in "games/tankity/" "games/crete/" "games/cylon/" "games/tankity/scores.php" "games/cylon/scores.php"; do
             check "https://www.happystl.com/$path" "200"
           done
-          # The stats beacon answers 204 to a POST and 405 to a GET; either
-          # proves the endpoint runs.
-          check "https://www.happystl.com/stats/collect.php" "204 405"
+          # The stats beacon's WordPress endpoint answers 204 to a POST and
+          # 405 to a GET; either proves the endpoint runs. The POST body is
+          # deliberately not a view, so the check counts nothing.
+          check "https://www.happystl.com/wp-json/happystl/v1/stats/collect" "405"
+          check "https://www.happystl.com/wp-json/happystl/v1/stats/collect" "204" -X POST -H 'Content-Type: text/plain' --data '{}'
 
   transfer-game-data:
     # Dispatch only: a one-time, one-way copy of the live stats and scores

@@ -252,7 +252,7 @@ function site_pages_wrapper(array $card, string $site, array $versions, string $
             . '; --game-accent: ' . $card['accent_color'] . '; }</style>'],
         // The visitor beacon runs before the frame is parsed, so the game inside finds it and hands it its events.
         isset($versions['stats.js'])
-            ? ['<script src="../../games/' . $id . '/dist/stats.js?v=' . $versions['stats.js'] . '" data-page="' . $id . '" data-endpoint="../../stats/collect.php"></script>']
+            ? ['<script src="../../games/' . $id . '/dist/stats.js?v=' . $versions['stats.js'] . '" data-page="' . $id . '" data-endpoint="https://www.happystl.com/wp-json/happystl/v1/stats/collect"></script>']
             : [],
         ['<script src="../play.js?v=' . $versions['play.js'] . '" defer></script>',
          '<script src="../../games/' . $id . '/dist/install.js?v=' . $versions['install.js'] . '" defer></script>']);

@@ -14,6 +14,10 @@ name: tmp-remote-inspect
 # purge returned MISS + 404), while the games serve fine. The extra checks
 # dump the root/games/stats .htaccess files, the home-level stats/admin
 # dirs, a localhost curl that bypasses Cloudflare, and the error log tail.
+# Extended again Nov 25: the root .htaccess is stock WP + WPSuperCache,
+# which should NOT rewrite an existing file -- yet origin 404s. This round
+# finds the real Apache error log and the game/stats/admin dir perms, to
+# see the exact reason Apache refuses these paths.
 # Runs only from main: the production environment's branch policy admits
 # main alone, so this must be merged to run. REMOVE THIS FILE with a
 # follow-up PR once the inspection and the cleanup are both done.
@@ -97,5 +101,9 @@ jobs:
           echo "== localhost bypass (Apache direct, no Cloudflare) =="
           curl -s -o /dev/null -w 'GET collect.php via localhost: %{http_code}\n' -H 'Host: www.happystl.com' --max-time 10 http://127.0.0.1/stats/collect.php || echo "localhost collect.php curl failed"
           curl -s -o /dev/null -w 'GET tankity main.js via localhost: %{http_code}\n' -H 'Host: www.happystl.com' --max-time 10 http://127.0.0.1/games/tankity/dist/main.js || echo "localhost main.js curl failed"
-          echo "== error log =="; ls logs/ 2>/dev/null | head -20; tail -40 logs/happystl.com/http/error.log 2>/dev/null || tail -40 logs/error.log 2>/dev/null || echo "no error log readable"
+          echo "== error log =="; find logs -maxdepth 4 -type f 2>/dev/null | head -30 || echo "no log files found"
+          echo "== happystl.com log dir =="; ls -la logs/happystl.com/ 2>/dev/null || true; ls -la logs/happystl.com/http/ 2>/dev/null || true
+          echo "== error log tail =="; for f in logs/happystl.com/http/error.log logs/happystl.com/https/error.log logs/happystl.com/error.log; do if [ -f "$f" ]; then echo "-- $f"; tail -30 "$f"; fi; done; echo "log tail done"
+          echo "== error log grep stats =="; grep -h "stats/collect" logs/happystl.com/http/error.log logs/happystl.com/https/error.log logs/happystl.com/error.log 2>/dev/null | tail -10 || echo "no stats/collect lines in error log"
+          echo "== game dir perms =="; ls -lad happystl.com/games happystl.com/games/*/ happystl.com/games/*/dist 2>/dev/null || true; ls -lad happystl.com/stats happystl.com/admin happystl.com/admin/lib happystl.com/games/cylon/data 2>/dev/null || true
           EOS

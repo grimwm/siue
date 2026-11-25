@@ -376,6 +376,19 @@ fi
 printf 'chmod 666 %s\n' "$SCORES" >"$work/chmod"
 sftp_batch "$work/chmod"
 
+# The game data folders are created by sftp mkdir at the host umask
+# (0700 on DreamHost), and the upload batch's chmod pass only covers
+# staged directories — games/tankity/data is server data and never
+# staged, so it is never chmodded. Apache then cannot read the
+# .htaccess inside and logs AH00529 on every data access. Set them
+# 755 explicitly ('-' so a missing folder never stops the deploy).
+{
+  echo '-chmod 755 games/cylon/data'
+  echo '-chmod 755 games/tankity/data'
+  echo '-chmod 755 games/crete/data'
+} >"$work/chmod-data"
+sftp_batch "$work/chmod-data"
+
 # 4. Stamp last.
 {
   echo "sha256 $hash"

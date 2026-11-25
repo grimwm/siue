@@ -8,6 +8,12 @@ name: tmp-remote-inspect
 # at the remote filesystem. It also removes the stray /home/happystl/games/
 # copy from the first failed deploy, once the deploy and data transfer
 # have succeeded.
+# Extended Nov 24: the first inspect proved every 404'd file IS on disk
+# (stats/collect.php, stats/lib/*, admin/lib/*, games/cylon/data/*) yet
+# origin still 404s them with a WordPress page (confirmed after a Cloudflare
+# purge returned MISS + 404), while the games serve fine. The extra checks
+# dump the root/games/stats .htaccess files, the home-level stats/admin
+# dirs, a localhost curl that bypasses Cloudflare, and the error log tail.
 # Runs only from main: the production environment's branch policy admits
 # main alone, so this must be merged to run. REMOVE THIS FILE with a
 # follow-up PR once the inspection and the cleanup are both done.
@@ -83,4 +89,13 @@ jobs:
           echo "== stray home games =="; ls games/ || echo "no stray games/ dir"
           echo "== file types =="; file happystl.com/stats/collect.php happystl.com/games/cylon/data/scores.json 2>&1 || true
           echo "== stats/collect.php head =="; head -c 200 happystl.com/stats/collect.php || echo "cannot read collect.php"
+          echo "== root .htaccess =="; cat happystl.com/.htaccess || echo "root .htaccess MISSING"
+          echo "== games .htaccess =="; cat happystl.com/games/.htaccess || echo "games/.htaccess MISSING"
+          echo "== stats .htaccess (deployed) =="; cat happystl.com/stats/.htaccess || echo "stats/.htaccess MISSING"
+          echo "== home stats =="; ls -la stats/ || echo "no home stats/"
+          echo "== home admin =="; ls -la admin/ || echo "no home admin/"
+          echo "== localhost bypass (Apache direct, no Cloudflare) =="
+          curl -s -o /dev/null -w 'GET collect.php via localhost: %{http_code}\n' -H 'Host: www.happystl.com' --max-time 10 http://127.0.0.1/stats/collect.php || echo "localhost collect.php curl failed"
+          curl -s -o /dev/null -w 'GET tankity main.js via localhost: %{http_code}\n' -H 'Host: www.happystl.com' --max-time 10 http://127.0.0.1/games/tankity/dist/main.js || echo "localhost main.js curl failed"
+          echo "== error log =="; ls logs/ 2>/dev/null | head -20; tail -40 logs/happystl.com/http/error.log 2>/dev/null || tail -40 logs/error.log 2>/dev/null || echo "no error log readable"
           EOS

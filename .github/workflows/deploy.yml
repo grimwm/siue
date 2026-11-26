@@ -475,15 +475,20 @@ jobs:
           # the first fetch — remote open "/wgrim/admin/data/stats.sqlite":
           # Permission denied. List the modes/owners of the data dirs and
           # their parents BEFORE the fetch, so the log shows whether the
-          # file or a parent directory blocks the wgrim sftp login. Each
-          # listing is failure-tolerant (|| true): an unreadable dir must
-          # print its error, not abort the step. Remove this block once the
-          # permissions are understood and fixed.
+          # file or a parent directory blocks the wgrim sftp login. The
+          # sftp client here has no -d flag (run 45680080657 aborted the
+          # batch on "ls: Invalid flag -d" before any listing ran), so use
+          # plain ls -l on the parents to see the data dirs' own modes.
+          # Every command is prefixed with '-' so one bad line cannot abort
+          # the rest of the batch. Remove this block once the permissions
+          # are understood and fixed.
           {
-            echo "ls -lad admin admin/data games/cylon games/cylon/data games/tankity games/tankity/data"
-            echo "ls -la admin/data"
-            echo "ls -la games/cylon/data"
-            echo "ls -la games/tankity/data"
+            echo "-ls -l admin"
+            echo "-ls -l admin/data"
+            echo "-ls -l games/cylon"
+            echo "-ls -l games/cylon/data"
+            echo "-ls -l games/tankity"
+            echo "-ls -l games/tankity/data"
           } >"$tmp/diag.batch"
           echo "== SIUE data dir modes/owners (diagnostic) =="
           sshpass -f "$passfile" sftp -oBatchMode=no -b "$tmp/diag.batch" "$siue_host" || true

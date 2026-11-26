@@ -9,7 +9,7 @@
 # to the WordPress REST endpoint, so neither stats/ nor the admin library
 # ships. The CIC board lives in games/cylon/data/scores.json and Tankity's
 # database in games/tankity/data/tankity.sqlite: both are server data, never
-# staged here — the transfer-game-data workflow job moves the live copies,
+# staged here — the one-time migration moved the live copies to DreamHost,
 # and the endpoints create empty ones when they are missing. games.php and
 # hub.php are the SIUE hub's and are never sent; the WordPress pages are the hub.
 #

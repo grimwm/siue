@@ -502,17 +502,24 @@ jobs:
             echo "get admin/data/stats.sqlite $tmp/stats.sqlite"
             echo "-get admin/data/stats.sqlite-wal $tmp/stats.sqlite-wal"
             echo "get games/cylon/data/scores.json $tmp/scores.json"
-            echo "get games/tankity/data/tankity.sqlite $tmp/tankity.sqlite"
-            echo "-get games/tankity/data/tankity.sqlite-wal $tmp/tankity.sqlite-wal"
+            # Tankity's database is staged by admin/fix-data-perms.php as
+            # admin/data/tankity.sqlite: the game keeps it in
+            # /var/tmp/<username>-tankity on SIUE (games/tankity/data/ cannot
+            # be created there), which sftp cannot reach. Optional: a host
+            # with no Tankity history has nothing staged.
+            echo "-get admin/data/tankity.sqlite $tmp/tankity.sqlite"
+            echo "-get admin/data/tankity.sqlite-wal $tmp/tankity.sqlite-wal"
           } >"$tmp/fetch.batch"
           sshpass -f "$passfile" sftp -oBatchMode=no -b "$tmp/fetch.batch" "$siue_host"
           # 2. Prove the fetch is complete: list the three SIUE data dirs and
           # require each -wal file they hold to be in $tmp. (The required
           # files already failed loudly above if they were missing.)
+          # The '-' prefix lets a missing dir pass: games/tankity/data/
+          # does not exist on SIUE (the game keeps its database in /var/tmp).
           {
-            echo "ls -1 admin/data"
-            echo "ls -1 games/cylon/data"
-            echo "ls -1 games/tankity/data"
+            echo "-ls -1 admin/data"
+            echo "-ls -1 games/cylon/data"
+            echo "-ls -1 games/tankity/data"
           } >"$tmp/list.batch"
           sshpass -f "$passfile" sftp -oBatchMode=no -b "$tmp/list.batch" "$siue_host" >"$tmp/list.log" 2>&1
           python3 - "$tmp" "$tmp/list.log" <<'PYEOF'
@@ -530,19 +537,25 @@ jobs:
           # be valid JSON with the week's and all-time lists. This runs on
           # the runner's copies, never the live files.
           python3 - "$tmp" <<'PYEOF'
-          import json, sqlite3, sys
+          import json, os, sqlite3, sys
           tmp = sys.argv[1]
+          validated = []
           for db in ("stats.sqlite", "tankity.sqlite"):
-              con = sqlite3.connect(f"{tmp}/{db}")
+              path = f"{tmp}/{db}"
+              if db == "tankity.sqlite" and not os.path.exists(path):
+                  print("tankity.sqlite: none staged, nothing to validate")
+                  continue
+              con = sqlite3.connect(path)
               row = con.execute("PRAGMA integrity_check").fetchone()
               con.close()
               if not row or row[0] != "ok":
                   raise SystemExit(f"transfer: {db} failed integrity_check: {row}")
+              validated.append(db)
           with open(f"{tmp}/scores.json") as f:
               scores = json.load(f)
           if not isinstance(scores, dict) or not isinstance(scores.get("week"), list) or not isinstance(scores.get("alltime"), list):
               raise SystemExit("transfer: scores.json is not a CIC board (week/alltime lists)")
-          print("validated: stats.sqlite, tankity.sqlite, scores.json")
+          print("validated: " + ", ".join(validated + ["scores.json"]))
           PYEOF
       - name: Checkpoint the stats WAL
         run: |
@@ -587,10 +600,10 @@ jobs:
             echo "-mkdir $dh_root/games/tankity"
             echo "-mkdir $dh_root/games/tankity/data"
             echo "put $tmp/scores.json $dh_root/games/cylon/data/scores.json"
-            echo "put $tmp/tankity.sqlite $dh_root/games/tankity/data/tankity.sqlite"
+            [ -f "$tmp/tankity.sqlite" ] && echo "put $tmp/tankity.sqlite $dh_root/games/tankity/data/tankity.sqlite"
             [ -f "$tmp/tankity.sqlite-wal" ] && echo "put $tmp/tankity.sqlite-wal $dh_root/games/tankity/data/tankity.sqlite-wal"
             echo "chmod 666 $dh_root/games/cylon/data/scores.json"
-            echo "chmod 666 $dh_root/games/tankity/data/tankity.sqlite"
+            [ -f "$tmp/tankity.sqlite" ] && echo "chmod 666 $dh_root/games/tankity/data/tankity.sqlite"
             echo "ls -l $dh_root/games/cylon/data"
             echo "ls -l $dh_root/games/tankity/data"
           } >"$tmp/put-scores.batch"
